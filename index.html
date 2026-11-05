@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="vi" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <script>
+      (function () {
+        try {
+          var currentFetch =
+            typeof window.fetch === 'function' ? window.fetch.bind(window) : undefined;
+          var desc =
+            Object.getOwnPropertyDescriptor(window, 'fetch') ||
+            Object.getOwnPropertyDescriptor(Window.prototype, 'fetch');
+          if (!desc || desc.configurable !== false) {
+            Object.defineProperty(window, 'fetch', {
+              configurable: true,
+              enumerable: true,
+              get: function () {
+                return currentFetch;
+              },
+              set: function (fn) {
+                if (typeof fn === 'function') {
+                  currentFetch = fn;
+                }
+              },
+            });
+          }
+        } catch (_err) {
+          // Ignore if host environment locks fetch descriptor
+        }
+
+        window.addEventListener(
+          'error',
+          function (event) {
+            var msg = String((event && event.message) || '');
+            var file = String((event && event.filename) || '');
+            if (
+              msg.indexOf('Cannot set property fetch') !== -1 ||
+              file.indexOf('chrome-extension://') === 0
+            ) {
+              event.stopImmediatePropagation();
+              event.preventDefault();
+            }
+          },
+          true
+        );
+
+        window.addEventListener(
+          'unhandledrejection',
+          function (event) {
+            var reason = String((event && event.reason) || '');
+            if (
+              reason.indexOf('Cannot set property fetch') !== -1 ||
+              reason.indexOf('chrome-extension://') !== -1
+            ) {
+              event.stopImmediatePropagation();
+              event.preventDefault();
+            }
+          },
+          true
+        );
+      })();
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TDO CUT — Phần mềm dựng phim chuyên nghiệp &amp; PyQt6 Engine</title>
+    <meta name="description" content="TDO CUT — Phần mềm dựng phim chuyên nghiệp đa tầng (Home Launcher, 9 Tab Tài nguyên, Keyframes, Speed Curve, HSL, Multi-Track Timeline) kèm mã nguồn PyQt6." />
+    <meta property="og:title" content="TDO CUT — Phần mềm dựng phim chuyên nghiệp &amp; PyQt6 Engine" />
+    <meta property="og:description" content="TDO CUT — Phần mềm dựng phim chuyên nghiệp đa tầng (Home Launcher, 9 Tab Tài nguyên, Keyframes, Speed Curve, HSL, Multi-Track Timeline) kèm mã nguồn PyQt6." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body class="bg-[#0E1015] text-[#E6E8EE] antialiased selection:bg-[#00D2B4]/30 selection:text-[#00F5D4] overflow-x-hidden">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

@@ -1,0 +1,1241 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  createDefaultClip,
+  naturalSortByName,
+  formatTimecode,
+  parseTimecodeInput,
+  splitClipAtPlayhead,
+  shuffleVideoClipsInRange,
+  batchTrimClips,
+  parseSrtToTextClips,
+  exportSubtitlesToSrt,
+  exportTimelineToXml,
+  extractAudioFromVideoClip,
+  copyClipAttributes,
+  pasteClipAttributes,
+  addOrToggleKeyframeAtTime,
+  interpolateClipAtPlayhead,
+  generateCapCutDraftJson,
+  getClipsInMarqueeBox,
+  moveSelectedClipsByDelta,
+  closeGapAtTimeOnTrack,
+  closeAllGapsOnTrack,
+  computeObjectFitContainRect,
+  snapPreviewScaleToFrame,
+  findClosestTimelineSnapPoint,
+  generateAutoBeatsForAudioClip,
+  getResourceItemsInMarqueeRect,
+  MIN_TIMELINE_ZOOM_PPS,
+  MAX_TIMELINE_ZOOM_PPS,
+  clampTimelineZoom,
+  stepTimelineZoom,
+  computeExtendedTimelineDuration,
+  computeAdaptiveTimelineRuler,
+  resolveZoneSelectAll,
+  computeHighQualityExportSpec,
+  buildFfmpegMatrixCommand,
+  shouldCoalesceUndoCommit,
+  rippleTrimTimelineRange,
+  removeTimelineDeadAirAndSilence,
+  syncVideoClipsToBeats,
+  serializeTdoCutProject,
+  parseTdoCutProject,
+  getStudioTranslations,
+  translateViToEnText,
+  resolveMediaClipDuration,
+  canUseDirectStreamCopyForExport,
+  patchMediaRecorderBufferDuration,
+  WORLD_FLAG_STICKERS,
+  FACE_ICON_STICKERS,
+  TREND_EMOJI_STICKERS,
+  GRAPHIC_BADGE_STICKERS,
+  extractFlagIsoCode,
+  getFlagGraphicDataUrl,
+  findGraphicBadgeByIconOrText,
+  detectAspectRatioFromDimensions,
+  deleteMediaCardsAndLinkedClips,
+  resolveDefaultProjectTitle,
+  computeRealisticExportEstimate,
+  TimelineClip,
+} from './timelineEngine';
+
+test('resolveDefaultProjectTitle replaces 0421-sao chép / empty / Chưa có dự án with Nhập tên dự án (VI) and Enter project name (EN)', () => {
+  assert.equal(resolveDefaultProjectTitle('', 'vi'), 'Nhập tên dự án');
+  assert.equal(resolveDefaultProjectTitle('0421-sao chép', 'vi'), 'Nhập tên dự án');
+  assert.equal(resolveDefaultProjectTitle('Chưa có dự án', 'vi'), 'Nhập tên dự án');
+  assert.equal(resolveDefaultProjectTitle('Enter project name', 'vi'), 'Nhập tên dự án');
+
+  assert.equal(resolveDefaultProjectTitle('', 'en'), 'Enter project name');
+  assert.equal(resolveDefaultProjectTitle('0421-sao chép', 'en'), 'Enter project name');
+  assert.equal(resolveDefaultProjectTitle('Nhập tên dự án', 'en'), 'Enter project name');
+  assert.equal(resolveDefaultProjectTitle('Chưa có dự án', 'en'), 'Enter project name');
+
+  // Custom user project names are preserved
+  assert.equal(resolveDefaultProjectTitle('Golpo AI Demo', 'vi'), 'Golpo AI Demo');
+  assert.equal(resolveDefaultProjectTitle('Golpo AI Demo', 'en'), 'Golpo AI Demo');
+});
+
+test('computeRealisticExportEstimate calculates realistic MB size from source fileSizeBytes instead of inflated 731.2 MB', () => {
+  const golpoClip = createDefaultClip({
+    id: 'clip-golpo',
+    name: 'Golpo AI - Whiteboard Video Generator.mp4',
+    trackIndex: 0,
+    startTime: 0,
+    duration: 133.5,
+    sourceDuration: 133.5,
+    sourceIn: 0,
+    mediaUrl: 'blob:http://localhost:3000/golpo-video-123',
+    fileSizeBytes: Math.round(5.07 * 1024 * 1024), // 5.07 MB
+  });
+
+  // Direct stream copy -> exact 5.1 MB
+  const directEst = computeRealisticExportEstimate(
+    [golpoClip],
+    '1080p',
+    '16:9',
+    '60',
+    'recommended',
+    'h264',
+    133.5,
+    {},
+    true
+  );
+  assert.ok(directEst.estimatedSizeMb >= 5.0 && directEst.estimatedSizeMb <= 5.2);
+
+  // With sticker overlay on Track 3 -> still realistic (~5.3 - 12 MB, NOT 731.2 MB!)
+  const stickerOverlay = createDefaultClip({
+    id: 'stk-sub',
+    name: 'SUBSCRIBE',
+    trackIndex: 3,
+    startTime: 0,
+    duration: 5,
+    stickerType: 'subscribe_bell',
+    stickerEmoji: '🔔',
+    stickerText: 'SUBSCRIBE',
+  });
+  const overlayEst = computeRealisticExportEstimate(
+    [golpoClip, stickerOverlay],
+    '1080p',
+    '16:9',
+    '60',
+    'recommended',
+    'h264',
+    133.5,
+    {},
+    true
+  );
+  assert.ok(
+    overlayEst.estimatedSizeMb >= 50.0 && overlayEst.estimatedSizeMb <= 200.0,
+    `Expected studio HD MB size (< 200 MB, not 731.2 MB), got ${overlayEst.estimatedSizeMb} MB`
+  );
+  assert.ok(
+    overlayEst.effectiveBitrateMbps >= 8.5,
+    `Expected studio 1080p bitrate >= 8.5 Mbps (never 0.5 Mbps), got ${overlayEst.effectiveBitrateMbps} Mbps`
+  );
+});
+
+test('naturalSortByName sorts clip_1, clip_2, clip_10, clip_100 in natural numerical order', () => {
+  const input = [
+    { name: 'clip_100.mp4' },
+    { name: 'clip_2.mp4' },
+    { name: 'clip_10.mp4' },
+    { name: 'clip_1.mp4' },
+  ];
+  const sorted = naturalSortByName(input);
+  assert.deepEqual(
+    sorted.map((x) => x.name),
+    ['clip_1.mp4', 'clip_2.mp4', 'clip_10.mp4', 'clip_100.mp4']
+  );
+});
+
+test('formatTimecode and parseTimecodeInput handle SMPTE HH:MM:SS:FF accurately at 30fps', () => {
+  assert.equal(formatTimecode(0, 30), '00:00:00:00');
+  assert.equal(formatTimecode(1.5, 30), '00:00:01:15');
+  assert.equal(formatTimecode(65.0, 30), '00:01:05:00');
+  assert.equal(parseTimecodeInput('00:01:30:00', 30), 90);
+  assert.equal(parseTimecodeInput('013000', 30), 90);
+});
+
+test('splitClipAtPlayhead splits clip under playhead into two contiguous clips', () => {
+  const clips: TimelineClip[] = [
+    createDefaultClip({
+      id: 'v1',
+      name: 'Scene_01.mp4',
+      trackIndex: 0,
+      startTime: 0,
+      duration: 5.0,
+      sourceIn: 1.0,
+      speed: 1.0,
+    }),
+  ];
+
+  const { clips: afterSplit, splitCount } = splitClipAtPlayhead(clips, 2.0, ['v1']);
+  assert.equal(splitCount, 1);
+  assert.equal(afterSplit.length, 2);
+  assert.equal(afterSplit[0].duration, 2.0);
+  assert.equal(afterSplit[1].startTime, 2.0);
+  assert.equal(afterSplit[1].duration, 3.0);
+  assert.equal(afterSplit[1].sourceIn, 3.0);
+});
+
+test('shuffleVideoClipsInRange shuffles clips and fits exact targetDurationSec when provided', () => {
+  const clips: TimelineClip[] = [
+    createDefaultClip({ id: 'c1', name: '1.mp4', trackIndex: 0, startTime: 0, duration: 3 }),
+    createDefaultClip({ id: 'c2', name: '2.mp4', trackIndex: 0, startTime: 3, duration: 3 }),
+    createDefaultClip({ id: 'c3', name: '3.mp4', trackIndex: 0, startTime: 6, duration: 3 }),
+  ];
+
+  const fitted = shuffleVideoClipsInRange(clips, [], 1, 3, () => 0.1, 7.5);
+  const v1 = fitted.filter((c) => c.trackIndex === 0);
+  const totalDur = v1.reduce((acc, c) => acc + c.duration, 0);
+  assert.equal(Number(totalDur.toFixed(2)), 7.5);
+});
+
+test('batchTrimClips extracts middle portion and caps clip durations', () => {
+  const clips: TimelineClip[] = [
+    createDefaultClip({
+      id: 'c1',
+      name: 'Long.mp4',
+      trackIndex: 0,
+      startTime: 0,
+      duration: 10.0,
+      sourceIn: 0,
+    }),
+  ];
+
+  const trimmed = batchTrimClips(clips, [], 4.0, 1, 1);
+  assert.equal(trimmed[0].duration, 4.0);
+  assert.equal(trimmed[0].sourceIn, 3.0);
+});
+
+test('parseSrtToTextClips and exportSubtitlesToSrt round-trip SRT blocks cleanly', () => {
+  const srt = `1
+00:00:01,000 --> 00:00:03,500
+Xin chào TrendOpsis Cut
+
+2
+00:00:04,000 --> 00:00:06,000
+Phụ đề tự động tốc độ cao`;
+
+  const parsed = parseSrtToTextClips(srt);
+  assert.equal(parsed.length, 2);
+  const exported = exportSubtitlesToSrt(parsed);
+  assert.ok(exported.includes('Xin chào TrendOpsis Cut'));
+  assert.ok(exported.includes('00:00:01,000 --> 00:00:03,500'));
+});
+
+test('extractAudioFromVideoClip, copy/paste attributes, keyframes, and XML export work accurately', () => {
+  const vClip = createDefaultClip({
+    id: 'v1',
+    name: 'Hero.mp4',
+    trackIndex: 0,
+    startTime: 0,
+    duration: 4.0,
+    scale: 120,
+    filterPreset: 'teal_orange',
+  });
+  const vClip2 = createDefaultClip({
+    id: 'v2',
+    name: 'Second.mp4',
+    trackIndex: 0,
+    startTime: 4,
+    duration: 4.0,
+  });
+
+  // Extract Audio (Ctrl+Shift+S)
+  const withAudio = extractAudioFromVideoClip([vClip, vClip2], 'v1');
+  assert.equal(withAudio.length, 3);
+  assert.equal(withAudio[0].muted, true);
+  assert.equal(withAudio[2].trackIndex, 1);
+
+  // Copy / Paste Attributes (Ctrl+Shift+C / Ctrl+Shift+V)
+  const attrs = copyClipAttributes(vClip);
+  const pasted = pasteClipAttributes([vClip, vClip2], 'v2', attrs);
+  assert.equal(pasted[1].scale, 120);
+  assert.equal(pasted[1].filterPreset, 'teal_orange');
+
+  // Keyframe interpolation (◇)
+  let kfClip = addOrToggleKeyframeAtTime({ ...vClip, scale: 100 }, 0.0, 'linear');
+  kfClip = addOrToggleKeyframeAtTime({ ...kfClip, scale: 200 }, 4.0, 'linear');
+  const mid = interpolateClipAtPlayhead(kfClip, 2.0);
+  assert.equal(mid.scale, 150);
+
+  // XML Export
+  const xml = exportTimelineToXml([vClip], 'TrendOpsis_Demo', 30);
+  assert.ok(xml.includes('<xmeml version="5">'));
+  assert.ok(xml.includes('<name>TrendOpsis_Demo</name>'));
+});
+
+test('generateCapCutDraftJson converts seconds to microseconds and preserves scale 140%', () => {
+  const clips: TimelineClip[] = [
+    createDefaultClip({
+      id: 'v1',
+      name: 'Clip01.mp4',
+      trackIndex: 0,
+      startTime: 0,
+      duration: 4.0,
+      scale: 140,
+    }),
+  ];
+  const draft = generateCapCutDraftJson(clips, '16:9', 'TrendOpsis_Project') as {
+    duration: number;
+    tracks: Array<{ segments: Array<{ clip: { scale: { x: number } } }> }>;
+  };
+  assert.equal(draft.duration, 4_000_000);
+  assert.equal(draft.tracks[0].segments[0].clip.scale.x, 1.4);
+});
+
+test('getClipsInMarqueeBox, closeGapAtTimeOnTrack, closeAllGapsOnTrack, and moveSelectedClipsByDelta work accurately', () => {
+  const clips: TimelineClip[] = [
+    createDefaultClip({ id: 'v1', name: 'A.mp4', trackIndex: 0, startTime: 0, duration: 4, groupId: 'g1' }),
+    createDefaultClip({ id: 'v2', name: 'B.mp4', trackIndex: 0, startTime: 6, duration: 4 }),
+    createDefaultClip({ id: 't1', name: 'Sub', trackIndex: 2, startTime: 1, duration: 6, groupId: 'g1' }),
+    createDefaultClip({ id: 'a1', name: 'BGM', trackIndex: 1, startTime: 0, duration: 10 }),
+  ];
+
+  // Marquee from 0.5s to 7.0s covering tracks 0 and 2
+  const selected = getClipsInMarqueeBox(clips, 0.5, 7.0, [0, 2]);
+  assert.deepEqual(selected, ['v1', 'v2', 't1']);
+
+  // Close gap at 5.0s on track 0 shifts v2 from 6.0s to 4.0s
+  const closedSingle = closeGapAtTimeOnTrack(clips, 0, 5.0);
+  assert.equal(closedSingle.find((c) => c.id === 'v2')!.startTime, 4);
+
+  // Close all gaps on track 0
+  const closedAll = closeAllGapsOnTrack(clips, 0);
+  assert.equal(closedAll.find((c) => c.id === 'v2')!.startTime, 4);
+
+  // Moving v1 also moves t1 because they share groupId 'g1'
+  const movedGroup = moveSelectedClipsByDelta(clips, ['v1'], 2.0, 0, [0, 1, 2, 3]);
+  assert.equal(movedGroup.find((c) => c.id === 'v1')!.startTime, 2);
+  assert.equal(movedGroup.find((c) => c.id === 't1')!.startTime, 3);
+});
+
+test('computeObjectFitContainRect preserves exact aspect ratio across wide, tall, and fullscreen containers', () => {
+  // 16:9 content (1920x1080) inside a wider container (1000x450) -> height-bound: 800x450
+  const wideBox = computeObjectFitContainRect(1000, 450, 1920, 1080);
+  assert.equal(wideBox.width, 800);
+  assert.equal(wideBox.height, 450);
+  assert.equal(wideBox.x, 100);
+  assert.equal(wideBox.y, 0);
+
+  // 16:9 content (1920x1080) inside a taller container (640x600) -> width-bound: 640x360
+  const tallBox = computeObjectFitContainRect(640, 600, 1920, 1080);
+  assert.equal(tallBox.width, 640);
+  assert.equal(tallBox.height, 360);
+  assert.equal(tallBox.x, 0);
+  assert.equal(tallBox.y, 120);
+
+  // 9:16 vertical content (1080x1920) inside a 16:9 canvas (1920x1080) -> 608x1080
+  const verticalInWidescreen = computeObjectFitContainRect(1920, 1080, 1080, 1920);
+  assert.equal(verticalInWidescreen.width, 608);
+  assert.equal(verticalInWidescreen.height, 1080);
+});
+
+test('snapPreviewScaleToFrame and findClosestTimelineSnapPoint magnetically snap to 100% frame and timeline edges', () => {
+  // Zooming near 100% (e.g. 96% or 104%) snaps to 100% and centers position
+  const snappedZoom = snapPreviewScaleToFrame(96, 15, -12);
+  assert.equal(snappedZoom.scale, 100);
+  assert.equal(snappedZoom.posX, 0);
+  assert.equal(snappedZoom.posY, 0);
+  assert.equal(snappedZoom.snappedScale, true);
+
+  // Zooming far from 100% (e.g. 140%) keeps 140%
+  const freeZoom = snapPreviewScaleToFrame(140, 50, -30);
+  assert.equal(freeZoom.scale, 140);
+  assert.equal(freeZoom.posX, 50);
+  assert.equal(freeZoom.snappedScale, false);
+
+  // Timeline magnetic edge snap finds closest clip end edge within threshold
+  const snapRes = findClosestTimelineSnapPoint(
+    [14.2, 18.2],
+    [
+      { timeSec: 0, label: 'Đầu Timeline (00:00)' },
+      { timeSec: 18.5, label: 'Cuối Timeline (18.50s)' },
+    ],
+    0.6
+  );
+  assert.equal(snapRes.snapped, true);
+  assert.equal(snapRes.snapTimeSec, 18.5);
+  assert.equal(snapRes.deltaSec, 0.3);
+  assert.equal(snapRes.snapLabel, 'Cuối Timeline (18.50s)');
+});
+
+test('generateAutoBeatsForAudioClip supports beat1, beat2, clear, and BPM marker overloads', () => {
+  const audioClip = createDefaultClip({
+    id: 'aud-1',
+    name: 'Remix.mp3',
+    trackIndex: 1,
+    startTime: 1.0,
+    duration: 5.0,
+  });
+
+  const beat1Clip = generateAutoBeatsForAudioClip(audioClip, 'beat1');
+  assert.deepEqual(beat1Clip.beatMarkers, [1.5, 3, 4.5]);
+
+  const beat2Clip = generateAutoBeatsForAudioClip(audioClip, 'beat2');
+  assert.equal(beat2Clip.beatMarkers?.length, 6);
+
+  const clearedClip = generateAutoBeatsForAudioClip(beat2Clip, 'clear');
+  assert.deepEqual(clearedClip.beatMarkers, []);
+
+  const bpmMarkers = generateAutoBeatsForAudioClip(audioClip, 120);
+  assert.equal(bpmMarkers.length, 4);
+  assert.equal(bpmMarkers[0].color, '#F59E0B');
+});
+
+test('getResourceItemsInMarqueeRect selects all intersecting media/resource cards in 2D grid and ignores micro-jitter', () => {
+  const gridCards = [
+    { id: 'm1', left: 10, top: 40, right: 110, bottom: 110 },
+    { id: 'm2', left: 120, top: 40, right: 220, bottom: 110 },
+    { id: 'm3', left: 230, top: 40, right: 330, bottom: 110 },
+    { id: 'm4', left: 10, top: 120, right: 110, bottom: 190 },
+    { id: 'm5', left: 120, top: 120, right: 220, bottom: 190 },
+  ];
+
+  // Dragging from bottom-right empty space (340, 200) to top-left (5, 35) selects all 5 cards
+  const allSelected = getResourceItemsInMarqueeRect(gridCards, {
+    startX: 340,
+    startY: 200,
+    currX: 5,
+    currY: 35,
+  });
+  assert.deepEqual(allSelected, ['m1', 'm2', 'm3', 'm4', 'm5']);
+
+  // Dragging across only the top row selects m1, m2, m3
+  const topRow = getResourceItemsInMarqueeRect(gridCards, {
+    startX: 15,
+    startY: 50,
+    currX: 300,
+    currY: 90,
+  });
+  assert.deepEqual(topRow, ['m1', 'm2', 'm3']);
+
+  // Tiny jitter (< 5px) returns empty array
+  const jitter = getResourceItemsInMarqueeRect(gridCards, {
+    startX: 50,
+    startY: 50,
+    currX: 52,
+    currY: 51,
+  });
+  assert.deepEqual(jitter, []);
+});
+
+test('CapCut extreme timeline zoom (1..600 px/s), extended timeline runway, and adaptive virtualized ruler work accurately', () => {
+  assert.equal(MIN_TIMELINE_ZOOM_PPS, 1);
+  assert.equal(MAX_TIMELINE_ZOOM_PPS, 600);
+  assert.equal(clampTimelineZoom(999), 600);
+  assert.equal(clampTimelineZoom(-10), 1);
+
+  const zoomedIn = stepTimelineZoom(28, 'in');
+  const zoomedOut = stepTimelineZoom(28, 'out');
+  assert.ok(zoomedIn > 28);
+  assert.ok(zoomedOut < 28);
+
+  const clips: TimelineClip[] = [
+    createDefaultClip({ id: 'v1', name: 'Scene.mp4', trackIndex: 0, startTime: 0, duration: 22 }),
+  ];
+
+  // Extended runway is at least 1800s (30 minutes) and stretches further when zoomed out to 1 px/s
+  const normalDuration = computeExtendedTimelineDuration(clips, 28, 1440);
+  assert.ok(normalDuration >= 1800);
+  const macroDuration = computeExtendedTimelineDuration(clips, 1, 1440);
+  assert.ok(macroDuration >= 5760);
+
+  // At maximum zoom-in (600 px/s), ruler switches to sub-second frame intervals (0.2s = 6f) and caps virtualized DOM ticks
+  const maxZoomRuler = computeAdaptiveTimelineRuler(normalDuration, 600, 0, 1440, 30);
+  assert.equal(maxZoomRuler.majorStepSec, 0.2);
+  assert.ok(maxZoomRuler.ticks.length > 5 && maxZoomRuler.ticks.length <= 220);
+  assert.equal(maxZoomRuler.ticks[0].label, '00:00');
+  assert.equal(maxZoomRuler.ticks[1].label, '00:00:06f');
+
+  // At minimum zoom-out (1 px/s), ruler switches to 300s (5-minute) intervals
+  const minZoomRuler = computeAdaptiveTimelineRuler(macroDuration, 1, 0, 1440, 30);
+  assert.equal(minZoomRuler.majorStepSec, 300);
+  assert.equal(minZoomRuler.ticks[1].label, '05:00');
+});
+
+test('resolveZoneSelectAll selects only items in the focused zone (resource_pool vs timeline) when Ctrl+A is pressed', () => {
+  const clips: TimelineClip[] = [
+    createDefaultClip({ id: 'v1', name: 'A.mp4', trackIndex: 0, startTime: 0, duration: 4 }),
+    createDefaultClip({ id: 'v2', name: 'B.mp4', trackIndex: 0, startTime: 4, duration: 4 }),
+    createDefaultClip({ id: 'a1', name: 'BGM.wav', trackIndex: 1, startTime: 0, duration: 8 }),
+  ];
+  const resourceDomIds = ['m1', 'm2', 'm3', 'm4', 'm5'];
+
+  // When resource_pool is focused, Ctrl+A selects all resource items and does NOT select timeline clips
+  const resFocus = resolveZoneSelectAll('resource_pool', resourceDomIds, clips, { 0: false, 1: false }, false);
+  assert.deepEqual(resFocus.selectedResourceIds, ['m1', 'm2', 'm3', 'm4', 'm5']);
+  assert.deepEqual(resFocus.selectedClipIds, []);
+  assert.equal(resFocus.selectedClipId, null);
+
+  // When timeline is focused, Ctrl+A selects all unlocked timeline clips and clears resource selection
+  const tlFocus = resolveZoneSelectAll('timeline', resourceDomIds, clips, { 0: false, 1: true }, false);
+  assert.deepEqual(tlFocus.selectedResourceIds, []);
+  assert.deepEqual(tlFocus.selectedClipIds, ['v1', 'v2']);
+  assert.equal(tlFocus.selectedClipId, 'v1');
+});
+
+test('computeHighQualityExportSpec calculates exact even resolution, high bitrate, and smooth FPS frame stepping', () => {
+  const spec4k60 = computeHighQualityExportSpec('4K', '16:9', '60fps', 'higher', 10);
+  assert.equal(spec4k60.width, 3840);
+  assert.equal(spec4k60.height, 2160);
+  assert.equal(spec4k60.fps, 60);
+  assert.equal(spec4k60.totalFrames, 600);
+  assert.ok(spec4k60.videoBitsPerSecond > 100_000_000);
+  assert.equal(spec4k60.audioBitsPerSecond, 320_000);
+
+  const spec1080pVertical = computeHighQualityExportSpec('1080p', '9:16', '30fps', 'recommended', 18);
+  assert.equal(spec1080pVertical.width, 1080);
+  assert.equal(spec1080pVertical.height, 1920);
+  assert.equal(spec1080pVertical.fps, 30);
+  assert.equal(spec1080pVertical.totalFrames, 540);
+  assert.equal(spec1080pVertical.videoBitsPerSecond, 24_000_000);
+});
+
+test('buildFfmpegMatrixCommand supports hevc_nvenc and prores encoders with -crf (18-20) and -preset slow', () => {
+  const clips: TimelineClip[] = [
+    createDefaultClip({ id: 'v1', name: 'Scene01.mp4', trackIndex: 0, startTime: 0, duration: 5 }),
+  ];
+
+  const hevcCmd = buildFfmpegMatrixCommand(
+    clips,
+    {
+      spoofIphoneMeta: true,
+      injectMicroNoise: true,
+      audioPitchShift: true,
+      variantCount: 1,
+      gpuEncoder: 'hevc_nvenc',
+      crf: 18,
+      preset: 'slow',
+    },
+    '16:9',
+    false
+  );
+  assert.ok(hevcCmd.includes('-c:v hevc_nvenc'));
+  assert.ok(hevcCmd.includes('-crf 18'));
+  assert.ok(hevcCmd.includes('-preset slow'));
+
+  const proresCmd = buildFfmpegMatrixCommand(
+    clips,
+    {
+      spoofIphoneMeta: false,
+      injectMicroNoise: false,
+      audioPitchShift: false,
+      variantCount: 1,
+      gpuEncoder: 'prores',
+      crf: 19,
+      preset: 'slow',
+    },
+    '16:9',
+    false
+  );
+  assert.ok(proresCmd.includes('-c:v prores'));
+  assert.ok(proresCmd.includes('-profile:v 3'));
+  assert.ok(proresCmd.includes('-pix_fmt yuv422p10le'));
+  assert.ok(proresCmd.includes('-crf 19'));
+  assert.ok(proresCmd.includes('-preset slow'));
+});
+
+test('shouldCoalesceUndoCommit coalesces continuous slider/drag ticks on the same property key into a single Undo snapshot', () => {
+  // First change on 'clip:v1:scale' should NOT coalesce (pushes initial snapshot)
+  assert.equal(shouldCoalesceUndoCommit(null, 0, 'clip:v1:scale', 1000, 700), false);
+  // Subsequent slider ticks within 700ms on the same property key SHOULD coalesce
+  assert.equal(shouldCoalesceUndoCommit('clip:v1:scale', 1000, 'clip:v1:scale', 1050, 700), true);
+  assert.equal(shouldCoalesceUndoCommit('clip:v1:scale', 1050, 'clip:v1:scale', 1300, 700), true);
+  // Changing a different property ('clip:v1:brightness') immediately pushes a new Undo snapshot
+  assert.equal(shouldCoalesceUndoCommit('clip:v1:scale', 1300, 'clip:v1:brightness', 1350, 700), false);
+  // After pause > 700ms on the same property, a new adjustment session pushes a fresh Undo snapshot
+  assert.equal(shouldCoalesceUndoCommit('clip:v1:scale', 1000, 'clip:v1:scale', 1800, 700), false);
+});
+
+test('TDO CUT rippleTrimTimelineRange supports ripple_delete_inside and keep_inside for In/Out markers', () => {
+  const clips: TimelineClip[] = [
+    createDefaultClip({ id: 'v1', name: 'A.mp4', trackIndex: 0, startTime: 0, duration: 4 }),
+    createDefaultClip({ id: 'v2', name: 'B.mp4', trackIndex: 0, startTime: 4, duration: 4 }),
+    createDefaultClip({ id: 'v3', name: 'C.mp4', trackIndex: 0, startTime: 8, duration: 4 }),
+  ];
+
+  // Ripple delete [2.0s, 6.0s] removes 2s of v1, 2s of v2, and shifts v3 left by 4.0s
+  const rippled = rippleTrimTimelineRange(clips, 2.0, 6.0, 'ripple_delete_inside');
+  assert.equal(rippled.length, 3);
+  assert.equal(rippled[0].duration, 2.0);
+  assert.equal(rippled[1].startTime, 2.0);
+  assert.equal(rippled[1].duration, 2.0);
+  assert.equal(rippled[1].sourceIn, 2.0);
+  assert.equal(rippled[2].startTime, 4.0);
+  assert.equal(rippled[2].duration, 4.0);
+
+  // Keep inside [2.0s, 6.0s] keeps only the 4.0s span and normalizes start to 0.0s
+  const kept = rippleTrimTimelineRange(clips, 2.0, 6.0, 'keep_inside');
+  assert.equal(kept.length, 2);
+  assert.equal(kept[0].startTime, 0);
+  assert.equal(kept[0].duration, 2.0);
+  assert.equal(kept[1].startTime, 2.0);
+  assert.equal(kept[1].duration, 2.0);
+});
+
+test('TDO CUT removeTimelineDeadAirAndSilence, syncVideoClipsToBeats, project JSON, and VI/EN translations work accurately', () => {
+  const clips: TimelineClip[] = [
+    createDefaultClip({ id: 'v1', name: '1.mp4', trackIndex: 0, startTime: 0, duration: 4.0 }),
+    createDefaultClip({ id: 'v2', name: '2.mp4', trackIndex: 0, startTime: 5.5, duration: 4.0 }),
+    createDefaultClip({
+      id: 'a1',
+      name: 'Beat.mp3',
+      trackIndex: 1,
+      startTime: 0,
+      duration: 10,
+      beatMarkers: [1.5, 3.0, 4.5, 6.0],
+    }),
+  ];
+
+  const silenceRes = removeTimelineDeadAirAndSilence(clips, 0.15);
+  assert.ok(silenceRes.removedSec > 1.5);
+  assert.equal(silenceRes.trimmedClipsCount, 2);
+
+  const beatRes = syncVideoClipsToBeats(clips);
+  assert.equal(beatRes.beatStepSec, 1.5);
+  assert.ok(beatRes.syncedCount >= 1);
+
+  const json = serializeTdoCutProject('TDO_Demo', '9:16', clips, 1.0, 5.0);
+  const parsed = parseTdoCutProject(json);
+  assert.ok(parsed);
+  assert.equal(parsed.projectName, 'TDO_Demo');
+  assert.equal(parsed.aspectRatio, '9:16');
+  assert.equal(parsed.markInSec, 1.0);
+  assert.equal(parsed.markOutSec, 5.0);
+  assert.equal(parsed.clips.length, 3);
+
+  const vi = getStudioTranslations('vi');
+  const en = getStudioTranslations('en');
+  assert.equal(vi.exportVideo, 'Xuất bản');
+  assert.equal(en.exportVideo, 'Export');
+  assert.equal(vi.resourceTabs.media, 'Phương tiện');
+  assert.equal(en.resourceTabs.media, 'Media');
+  assert.equal(translateViToEnText('Trình phát-Dòng thời gian 01'), 'Player - Timeline 01');
+  assert.equal(translateViToEnText('Đầy đủ'), 'Full');
+});
+
+test('patchMediaRecorderBufferDuration injects EBML Duration (0x4489) into WebM Info header and patches MP4 mvhd duration', () => {
+  // Construct a synthetic WebM buffer with Info (0x1549A966), 1-byte size (0x87 = 7 bytes), TimestampScale, and Tracks (0x1654AE6B)
+  const webmRaw = new Uint8Array([
+    0x1a, 0x45, 0xdf, 0xa3, // EBML Header
+    0x18, 0x53, 0x80, 0x67, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, // Segment (unknown size)
+    0x15, 0x49, 0xa9, 0x66, // Info ID
+    0x87, // Info size = 7 bytes (1-byte VINT -> upgraded to 4-byte VINT +3 bytes)
+    0x2a, 0xd7, 0xb1, 0x83, 0x0f, 0x42, 0x40, // TimecodeScale = 1,000,000
+    0x16, 0x54, 0xae, 0x6b, // Tracks ID
+  ]);
+
+  const patchedWebm = patchMediaRecorderBufferDuration(webmRaw, 12.5);
+  // 11 bytes Duration element + 3 bytes VINT expansion (1->4 bytes) = +14 bytes
+  assert.equal(patchedWebm.length, webmRaw.length + 14);
+  // Info size upgraded to 4-byte VINT [0x10, 0x00, 0x00, 18]
+  assert.equal(patchedWebm[20], 0x10);
+  assert.equal(patchedWebm[23], 18);
+  // Duration element [0x44, 0x89, 0x88, ...float64(12500)] placed after the 7-byte TimecodeScale (at index 24 + 7 = 31)
+  assert.equal(patchedWebm[31], 0x44);
+  assert.equal(patchedWebm[32], 0x89);
+  assert.equal(patchedWebm[33], 0x88);
+  const dv = new DataView(patchedWebm.buffer, patchedWebm.byteOffset + 34, 8);
+  assert.equal(dv.getFloat64(0, false), 12500);
+});
+
+test('WORLD_FLAG_STICKERS, FACE_ICON_STICKERS, TREND_EMOJI_STICKERS, Chức năng -> Functions translation, and 18.0s WebM duration', () => {
+  assert.ok(WORLD_FLAG_STICKERS.length >= 195, `Expected >= 195 world flags, got ${WORLD_FLAG_STICKERS.length}`);
+  assert.ok(FACE_ICON_STICKERS.length >= 60, `Expected >= 60 face icons, got ${FACE_ICON_STICKERS.length}`);
+  assert.ok(TREND_EMOJI_STICKERS.length >= 35, `Expected >= 35 trend emojis, got ${TREND_EMOJI_STICKERS.length}`);
+
+  const vnFlag = WORLD_FLAG_STICKERS.find((f) => f.icon === '🇻🇳');
+  assert.ok(vnFlag);
+  assert.ok(vnFlag.label.includes('Việt Nam'));
+  assert.equal(vnFlag.cat, 'flags');
+
+  assert.equal(translateViToEnText('Chức năng'), 'Functions');
+  assert.equal(
+    translateViToEnText('Chức năng — Tự động hóa Timeline'),
+    'Functions — Timeline Automation'
+  );
+
+  // Verify 18.0s full timeline WebM duration patching (18000ms)
+  const webmRaw = new Uint8Array([
+    0x1a, 0x45, 0xdf, 0xa3,
+    0x18, 0x53, 0x80, 0x67, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0x15, 0x49, 0xa9, 0x66,
+    0x87,
+    0x2a, 0xd7, 0xb1, 0x83, 0x0f, 0x42, 0x40,
+    0x16, 0x54, 0xae, 0x6b,
+  ]);
+  const patched18s = patchMediaRecorderBufferDuration(webmRaw, 18.0);
+  const dv18 = new DataView(patched18s.buffer, patched18s.byteOffset + 34, 8);
+  assert.equal(dv18.getFloat64(0, false), 18000);
+});
+
+test('getFlagGraphicDataUrl generates full-color SVG graphics for all 205 world flags without 2-letter text codes, and GRAPHIC_BADGE_STICKERS resolve cleanly', () => {
+  assert.equal(extractFlagIsoCode('🇻🇳'), 'VN');
+  assert.equal(extractFlagIsoCode('🇺🇸 Quốc kỳ Mỹ'), 'US');
+  assert.equal(extractFlagIsoCode('🇯🇵'), 'JP');
+
+  for (const flagItem of WORLD_FLAG_STICKERS) {
+    const iso = extractFlagIsoCode(flagItem.icon);
+    assert.ok(iso && iso.length === 2, `Expected 2-letter ISO from flag emoji ${flagItem.icon}`);
+    const dataUrl = getFlagGraphicDataUrl(flagItem.icon);
+    assert.ok(dataUrl && dataUrl.startsWith('data:image/svg+xml;utf8,'), `Missing SVG dataUrl for ${flagItem.label}`);
+    const decodedSvg = decodeURIComponent(dataUrl.replace('data:image/svg+xml;utf8,', ''));
+    assert.ok(decodedSvg.includes('<svg'), `Invalid SVG for ${flagItem.label}`);
+    assert.ok(!decodedSvg.includes(`<text`), `Flag SVG for ${flagItem.label} (${iso}) must not contain text abbreviation!`);
+  }
+
+  assert.ok(GRAPHIC_BADGE_STICKERS.length >= 24, `Expected >= 24 graphic badge stickers, got ${GRAPHIC_BADGE_STICKERS.length}`);
+  const subBadge = findGraphicBadgeByIconOrText('▶️ SUBSCRIBE', '▶️ SUBSCRIBE (Nút Đăng Ký Đỏ)');
+  assert.ok(subBadge);
+  assert.equal(subBadge.badgeText, 'SUBSCRIBE');
+
+  const thanksBadge = findGraphicBadgeByIconOrText('🎬 THANK YOU', 'THANK YOU FOR WATCHING!!!');
+  assert.ok(thanksBadge);
+  assert.equal(thanksBadge.badgeText, 'THANK YOU FOR WATCHING!!!');
+});
+
+test('detectAspectRatioFromDimensions accurately detects vertical 9:16, square 1:1, portrait 3:4, and widescreen 16:9', () => {
+  assert.equal(detectAspectRatioFromDimensions(1080, 1920), '9:16');
+  assert.equal(detectAspectRatioFromDimensions(720, 1280), '9:16');
+  assert.equal(detectAspectRatioFromDimensions(576, 1024), '9:16');
+  assert.equal(detectAspectRatioFromDimensions(1080, 1080), '1:1');
+  assert.equal(detectAspectRatioFromDimensions(1080, 1440), '3:4');
+  assert.equal(detectAspectRatioFromDimensions(1440, 1080), '4:3');
+  assert.equal(detectAspectRatioFromDimensions(1920, 1080), '16:9');
+  assert.equal(detectAspectRatioFromDimensions(2560, 1080), '2.35:1');
+});
+
+test('deleteMediaCardsAndLinkedClips deletes both Media Pool cards and linked core Timeline clips when deleting by card ID or clip ID', () => {
+  const mediaCards = [
+    { id: 'media-1', name: 'tiktok_vertical.mp4', mediaUrl: 'blob:http://localhost/v1', added: true },
+    { id: 'media-2', name: 'intro.mp4', mediaUrl: 'blob:http://localhost/v2', added: true },
+  ];
+  const clips: TimelineClip[] = [
+    createDefaultClip({
+      id: 'clip-1',
+      name: 'tiktok_vertical.mp4',
+      mediaUrl: 'blob:http://localhost/v1',
+      trackIndex: 0,
+      startTime: 0,
+      duration: 8,
+    }),
+    createDefaultClip({
+      id: 'clip-2',
+      name: 'intro.mp4',
+      mediaUrl: 'blob:http://localhost/v2',
+      trackIndex: 0,
+      startTime: 8,
+      duration: 5,
+    }),
+  ];
+
+  // Deleting media-1 from Media Pool also deletes clip-1 from Timeline and packs clip-2 to 0s
+  const res1 = deleteMediaCardsAndLinkedClips(mediaCards, clips, ['media-1'], true, true);
+  assert.equal(res1.deletedCardCount, 1);
+  assert.equal(res1.deletedClipCount, 1);
+  assert.equal(res1.remainingMediaCards.length, 1);
+  assert.equal(res1.remainingMediaCards[0].id, 'media-2');
+  assert.equal(res1.remainingClips.length, 1);
+  assert.equal(res1.remainingClips[0].id, 'clip-2');
+  assert.equal(res1.remainingClips[0].startTime, 0);
+
+  // Deleting clip-1 by clip ID when removeCardWhenClipDeleted=true also removes media-1 when no clips remain for it
+  const res2 = deleteMediaCardsAndLinkedClips(mediaCards, clips, ['clip-1'], true, true);
+  assert.equal(res2.remainingMediaCards.length, 1);
+  assert.equal(res2.remainingMediaCards[0].id, 'media-2');
+  assert.equal(res2.remainingClips.length, 1);
+  assert.equal(res2.remainingClips[0].id, 'clip-2');
+});
+
+test('resolveMediaClipDuration preserves full duration for long videos (>30s) and falls back safely', () => {
+  // Long 2m13.5s video (133.5s) must NOT be truncated to 6.0s
+  assert.equal(resolveMediaClipDuration(133.5, 5.0), 133.5);
+  assert.equal(resolveMediaClipDuration(360.25, 5.0), 360.25);
+  assert.equal(resolveMediaClipDuration(undefined, 4.0), 4.0);
+  assert.equal(resolveMediaClipDuration(-5, 5.0), 5.0);
+});
+
+test('canUseDirectStreamCopyForExport identifies unmodified single-video timeline for lossless stream export', () => {
+  const realClip = createDefaultClip({
+    id: 'clip-golpo',
+    name: 'Golpo AI - Whiteboard Video Generator.mp4',
+    trackIndex: 0,
+    startTime: 0,
+    duration: 133.5,
+    sourceDuration: 133.5,
+    sourceIn: 0,
+    mediaUrl: 'blob:http://localhost:3000/golpo-video-123',
+  });
+
+  // Single unmodified video clip is eligible
+  const check1 = canUseDirectStreamCopyForExport([realClip], true);
+  assert.equal(check1.eligible, true);
+  assert.equal(check1.primaryClip?.id, 'clip-golpo');
+
+  // If trimmed or has filter/overlay, requires canvas re-encode
+  const trimmedClip = { ...realClip, duration: 40.0, sourceDuration: 133.5 };
+  assert.equal(canUseDirectStreamCopyForExport([trimmedClip], true).eligible, false);
+
+  const filteredClip = { ...realClip, filterPreset: 'cyberpunk' as const };
+  assert.equal(canUseDirectStreamCopyForExport([filteredClip], true).eligible, false);
+
+  const subOverlay = createDefaultClip({
+    id: 'sub-1',
+    name: 'Sub',
+    trackIndex: 2,
+    startTime: 1,
+    duration: 3,
+    subtitleText: 'Hello',
+  });
+  assert.equal(canUseDirectStreamCopyForExport([realClip, subOverlay], true).eligible, false);
+});
+
+test('buildFfmpegMatrixCommand preserves real-time 1.0x duration, audio sync (-map 0:a:0?, aresample), and native resolution without PTS/1.05 distortion', () => {
+  const clips: TimelineClip[] = [
+    createDefaultClip({
+      id: 'v1',
+      name: 'Input_720p.mp4',
+      trackIndex: 0,
+      startTime: 0,
+      duration: 14.5,
+      sourceIn: 0,
+      mediaWidth: 1280,
+      mediaHeight: 720,
+    }),
+  ];
+
+  const cmd = buildFfmpegMatrixCommand(
+    clips,
+    {
+      spoofIphoneMeta: true,
+      injectMicroNoise: true,
+      microSpeedZoom: true,
+      audioPitchShift: false,
+      variantCount: 1,
+      gpuEncoder: 'hevc_nvenc',
+      crf: 18,
+      preset: 'slow',
+    },
+    '16:9',
+    false
+  );
+
+  // Must NOT speed up video by 1.05x
+  assert.ok(!cmd.includes('PTS/1.05'), 'Must not distort video speed with PTS/1.05');
+  assert.ok(cmd.includes('setpts=PTS-STARTPTS'), 'Must preserve 1.0x real-time PTS');
+  assert.ok(cmd.includes('-map 0:v:0 -map 0:a:0?'), 'Must map both video and audio streams');
+  assert.ok(cmd.includes('aresample=async=1:first_pts=0'), 'Must maintain audio sync');
+  assert.ok(cmd.includes('-c:a aac -b:a 192k'), 'Must encode audio with high compatibility AAC');
+  assert.ok(cmd.includes('-vsync cfr'), 'Must enforce constant frame rate for smooth playback');
+  assert.ok(cmd.includes('-t 14.50'), 'Must preserve exact 14.50s real-time duration');
+
+  const fastCmd = buildFfmpegMatrixCommand(
+    clips,
+    {
+      spoofIphoneMeta: false,
+      injectMicroNoise: false,
+      audioPitchShift: false,
+      variantCount: 1,
+      gpuEncoder: 'hevc_nvenc',
+    },
+    '16:9',
+    true
+  );
+  assert.ok(fastCmd.includes('1280x720'), 'Fast copy header should reflect native 1280x720 resolution');
+  assert.ok(fastCmd.includes('-map 0:v:0 -map 0:a:0? -c copy'), 'Fast copy must preserve audio stream');
+});
+
+test('World flags have zero white outer border in SVG and animate smoothly via computeWavingFlagSlices & computeStickerMotionTransform', async () => {
+  const { computeWavingFlagSlices, computeStickerMotionTransform, resolveExportTargetDimensions } =
+    await import('./timelineEngine');
+
+  // 1. Verify NO white border stroke exists in any generated flag SVG
+  for (const code of ['VN', 'US', 'JP', 'KR', 'FR', 'BR']) {
+    const url = getFlagGraphicDataUrl(code);
+    const svg = decodeURIComponent(url.replace('data:image/svg+xml;utf8,', ''));
+    assert.ok(
+      !svg.includes('stroke="rgba(255,255,255'),
+      `Flag ${code} must NOT contain an outer white stroke border`
+    );
+    assert.ok(
+      !svg.includes('x="1.5"'),
+      `Flag ${code} must NOT contain an outer border rect`
+    );
+  }
+
+  // 2. Verify waving flag slices displace dynamically over time
+  const slicesT0 = computeWavingFlagSlices(120, 80, 0, 20);
+  const slicesTQuarter = computeWavingFlagSlices(120, 80, 0.25, 20);
+  assert.equal(slicesT0.length, 20);
+  assert.notEqual(
+    slicesT0[15].dstYOffsetPx.toFixed(3),
+    slicesTQuarter[15].dstYOffsetPx.toFixed(3),
+    'Flag slices must wave dynamically across frames'
+  );
+
+  // 3. Verify sticker motion transform animates pulse, rotation, and vertical bounce across frames
+  const m0 = computeStickerMotionTransform(0, 64, false);
+  const m1 = computeStickerMotionTransform(0.125, 64, false);
+  assert.notEqual(m0.scalePulse.toFixed(4), m1.scalePulse.toFixed(4));
+  assert.notEqual(m0.rotateRad.toFixed(4), m1.rotateRad.toFixed(4));
+
+  // 4. Verify resolveExportTargetDimensions respects original video resolution
+  const clip720 = createDefaultClip({
+    id: 'c720',
+    name: 'v.mp4',
+    trackIndex: 0,
+    mediaWidth: 1280,
+    mediaHeight: 720,
+  });
+  assert.deepEqual(resolveExportTargetDimensions([clip720], 1920, 1080), {
+    width: 1280,
+    height: 720,
+  });
+});
+
+test('moveSelectedClipsByDelta parts two clips ("né chỗ") when dragging a clip between them, supports moving before a long first clip, and supports cross-track movement', () => {
+  const clipA = createDefaultClip({
+    id: 'v1',
+    name: 'Golpo_133s.mp4',
+    trackIndex: 0,
+    startTime: 0,
+    duration: 133.5,
+  });
+  const clipB = createDefaultClip({
+    id: 'v2',
+    name: 'TikTok_28s.mp4',
+    trackIndex: 0,
+    startTime: 133.5,
+    duration: 28,
+  });
+  const clipC = createDefaultClip({
+    id: 'v3',
+    name: 'Insert_10s.mp4',
+    trackIndex: 3, // Starts on PIP track 3
+    startTime: 20,
+    duration: 10,
+  });
+
+  // 1. Drag clipC from Track 3 down to Track 0 (deltaTrack = -3) into the seam between clipA (0..133.5) and clipB (133.5..161.5)
+  const parted = moveSelectedClipsByDelta(
+    [clipA, clipB, clipC],
+    ['v3'],
+    110, // tentative startTime = 20 + 110 = 130s (right at the junction 133.5s)
+    -3,  // move from track 3 -> track 0
+    [0, 1, 2, 3]
+  );
+
+  const afterA = parted.find((c) => c.id === 'v1')!;
+  const afterC = parted.find((c) => c.id === 'v3')!;
+  const afterB = parted.find((c) => c.id === 'v2')!;
+
+  assert.equal(afterC.trackIndex, 0, 'Clip C should move onto Track 0');
+  assert.equal(afterA.startTime, 0, 'Clip A stays on the left at 0s');
+  assert.equal(afterC.startTime, 133.5, 'Clip C slots cleanly right after Clip A at 133.5s');
+  assert.equal(
+    afterB.startTime,
+    143.5,
+    'Clip B parts to the right ("né chỗ") by Clip C duration (133.5 + 10 = 143.5s)'
+  );
+
+  // 2. Drag clipB (133.5..161.5s) left onto long clipA (0..133.5s) so clipA parts to the right
+  const swapped = moveSelectedClipsByDelta(
+    [clipA, clipB],
+    ['v2'],
+    -133.5, // drag to 0s
+    0,
+    [0, 1, 2, 3]
+  );
+  const sA = swapped.find((c) => c.id === 'v1')!;
+  const sB = swapped.find((c) => c.id === 'v2')!;
+  assert.equal(sB.startTime, 0, 'Dragged Clip B moves to 0.0s');
+  assert.equal(sA.startTime, 28, 'Clip A parts to the right to start at 28.0s');
+
+  // 3. Drag clipB to open timeline space (e.g. 200s) — stays freely at 200s
+  const freeMoved = moveSelectedClipsByDelta(
+    [clipA, clipB],
+    ['v2'],
+    66.5, // 133.5 + 66.5 = 200s
+    0,
+    [0, 1, 2, 3]
+  );
+  assert.equal(freeMoved.find((c) => c.id === 'v2')!.startTime, 200);
+});
+
+test('computeClipWaveformBars generates fixed dense amplitude bars that scale proportionally with clip volume and mute state', async () => {
+  const { computeClipWaveformBars } = await import('./timelineEngine');
+  const baseClip = createDefaultClip({
+    id: 'w1',
+    name: 'TestAudio.mp4',
+    trackIndex: 0,
+    startTime: 0,
+    duration: 12,
+    volume: 100,
+    muted: false,
+  });
+
+  const bars100 = computeClipWaveformBars(baseClip, 40, false);
+  const bars50 = computeClipWaveformBars({ ...baseClip, volume: 50 }, 40, false);
+  const barsMuted = computeClipWaveformBars({ ...baseClip, muted: true }, 40, false);
+
+  assert.equal(bars100.length, 40);
+  assert.equal(bars50.length, 40);
+  // Bars must have varied multi-harmonic heights (not a flat line)
+  const uniqueHeights = new Set(bars100.map((b) => b.toFixed(2)));
+  assert.ok(uniqueHeights.size >= 8, 'Waveform bars must have varied peaks and valleys');
+
+  // 50% volume bars must be strictly lower than 100% volume bars
+  const sum100 = bars100.reduce((a, b) => a + b, 0);
+  const sum50 = bars50.reduce((a, b) => a + b, 0);
+  assert.ok(sum50 < sum100 * 0.65, '50% volume must reduce waveform bar heights proportionally');
+
+  // Muted clip must collapse all bars to 0.05 baseline
+  assert.ok(barsMuted.every((b) => b === 0.05), 'Muted clip waveform bars must collapse to baseline');
+
+  // Sliced window [10..25] matches full array slice(10, 25) for zoomed-in high-density rendering without stretching bars apart
+  const barsFull500 = computeClipWaveformBars(baseClip, 500, false);
+  const barsSlice = computeClipWaveformBars(baseClip, 500, false, 100, 160);
+  assert.equal(barsSlice.length, 60);
+  assert.deepEqual(barsSlice, barsFull500.slice(100, 160));
+});
+
+test('computeCapCutDragInsertionPreview opens exact insertion slot, slides subsequent clips right, and closes Track 0 gaps when lifting to Overlay track', async () => {
+  const { computeCapCutDragInsertionPreview } = await import('./timelineEngine');
+  const c1 = createDefaultClip({ id: 'c1', name: 'Clip1.mp4', trackIndex: 0, startTime: 0, duration: 10 });
+  const c2 = createDefaultClip({ id: 'c2', name: 'Clip2.mp4', trackIndex: 0, startTime: 15, duration: 20 }); // accidental gap at 10..15s
+  const c3 = createDefaultClip({ id: 'c3', name: 'Clip3.mp4', trackIndex: 0, startTime: 40, duration: 8 });
+
+  // 1. Lifting c3 and hovering between c1 and c2 (at 9s) on Track 0:
+  //    - c1 is packed at 0..10s
+  //    - slot opens at 10..18s (duration 8s)
+  //    - c2 slides right ("né chỗ") to 18..38s
+  const previewBetween = computeCapCutDragInsertionPreview(
+    [c1, c2, c3],
+    ['c3'],
+    0,
+    9.0,
+    true
+  );
+  assert.equal(previewBetween.slot.trackIndex, 0);
+  assert.equal(previewBetween.slot.startTime, 10);
+  assert.equal(previewBetween.slot.duration, 8);
+  assert.equal(previewBetween.previewClips.find((c) => c.id === 'c1')!.startTime, 0);
+  assert.equal(previewBetween.previewClips.find((c) => c.id === 'c3')!.startTime, 10);
+  assert.equal(previewBetween.previewClips.find((c) => c.id === 'c2')!.startTime, 18);
+
+  // 2. Lifting c2 from Track 0 up to Overlay Track 3 at 12s:
+  //    - Track 0 immediately closes the gap so c1 (0..10s) and c3 (10..18s) are contiguous with zero gap!
+  //    - Slot appears on Track 3 at 12..32s
+  const previewOverlay = computeCapCutDragInsertionPreview(
+    [c1, c2, c3],
+    ['c2'],
+    3,
+    12.0,
+    true
+  );
+  assert.equal(previewOverlay.slot.trackIndex, 3);
+  assert.equal(previewOverlay.slot.startTime, 12);
+  assert.equal(previewOverlay.slot.duration, 20);
+  assert.equal(previewOverlay.previewClips.find((c) => c.id === 'c1')!.startTime, 0);
+  assert.equal(previewOverlay.previewClips.find((c) => c.id === 'c3')!.startTime, 10);
+  assert.equal(previewOverlay.previewClips.find((c) => c.id === 'c2')!.trackIndex, 3);
+  assert.equal(previewOverlay.previewClips.find((c) => c.id === 'c2')!.startTime, 12);
+});
+
+test('stepTimelineZoom and stepTimelineZoomByWheelDelta scale timeline zoom gently without sudden jumps', async () => {
+  const { stepTimelineZoom, stepTimelineZoomByWheelDelta } = await import('./timelineEngine');
+  const z0 = 28;
+  const zIn = stepTimelineZoom(z0, 'in');
+  const zOut = stepTimelineZoom(z0, 'out');
+  // Gentle ~12% step instead of 25-30% jump
+  assert.ok(zIn > z0 && zIn <= 33, `Expected gentle zoom in from 28, got ${zIn}`);
+  assert.ok(zOut < z0 && zOut >= 24, `Expected gentle zoom out from 28, got ${zOut}`);
+
+  // Touchpad wheel delta (-40px pinch/scroll) changes zoom by a small smooth fraction
+  const zWheelIn = stepTimelineZoomByWheelDelta(28, -40);
+  const zWheelOut = stepTimelineZoomByWheelDelta(28, 40);
+  assert.ok(zWheelIn > 28 && zWheelIn <= 31, `Expected gentle wheel zoom in, got ${zWheelIn}`);
+  assert.ok(zWheelOut < 28 && zWheelOut >= 25, `Expected gentle wheel zoom out, got ${zWheelOut}`);
+});
+
+test('shouldReleaseTimelinePointerCapture releases playhead/clip drag immediately when left mouse button (buttons & 1) is not held', async () => {
+  const { shouldReleaseTimelinePointerCapture } = await import('./timelineEngine');
+  // Free mouse movement without buttons pressed (buttons = 0) must immediately release playhead/drag capture
+  assert.equal(shouldReleaseTimelinePointerCapture(0, false), true);
+  // Right-click or middle-click only (buttons = 2 or 4) must also release left-button drag capture
+  assert.equal(shouldReleaseTimelinePointerCapture(2, false), true);
+  assert.equal(shouldReleaseTimelinePointerCapture(4, false), true);
+  // Holding left mouse button (buttons = 1) keeps active drag
+  assert.equal(shouldReleaseTimelinePointerCapture(1, false), false);
+  // Intentional double-click pickup mode allows moving without holding button until click-to-drop
+  assert.equal(shouldReleaseTimelinePointerCapture(0, true), false);
+});
+
+test('collectSequentialExportVideoClips collects Track 0 clips and non-overlapping upper-track video clips in chronological order', async () => {
+  const { collectSequentialExportVideoClips } = await import('./timelineEngine');
+  const clip1 = createDefaultClip({
+    id: 'v1',
+    name: 'Golpo_Clip1.mp4',
+    trackIndex: 0,
+    startTime: 0,
+    duration: 133.5,
+    mediaUrl: 'blob:http://localhost:3000/v1',
+  });
+  const clip2OnUpperTrack = createDefaultClip({
+    id: 'v2',
+    name: 'Second_Clip2.mp4',
+    trackIndex: 3, // Placed after clip1 on Track 3
+    startTime: 133.5,
+    duration: 28.0,
+    mediaUrl: 'blob:http://localhost:3000/v2',
+  });
+  const stickerClip = createDefaultClip({
+    id: 'stk1',
+    name: 'VN Flag',
+    trackIndex: 3,
+    startTime: 10,
+    duration: 5,
+    stickerEmoji: '🇻🇳',
+  });
+
+  const collected = collectSequentialExportVideoClips([clip2OnUpperTrack, stickerClip, clip1]);
+  assert.equal(collected.length, 2);
+  assert.equal(collected[0].id, 'v1');
+  assert.equal(collected[1].id, 'v2');
+});
+
+test('computeSynchronizedClipLayout stretches all timeline clips synchronously with exact boundary lock and supports >6000 waveform bars on long clips', async () => {
+  const {
+    computeSynchronizedClipLayout,
+    computeClipWaveformBars,
+    stepTimelineZoomByWheelDelta,
+  } = await import('./timelineEngine');
+
+  const clip1 = { startTime: 0, duration: 133.5 };
+  const clip2 = { startTime: 133.5, duration: 28.5 };
+
+  // Test across multiple zoom levels (slider, wheel, touchpad pinch)
+  for (const pps of [2, 6.5, 28, 72.4, 240, 600]) {
+    const l1 = computeSynchronizedClipLayout(clip1, pps);
+    const l2 = computeSynchronizedClipLayout(clip2, pps);
+
+    // Clip 1 right edge must equal Clip 2 left edge to the exact pixel (zero overlap / zero gap)
+    assert.equal(
+      l1.rightPx,
+      l2.leftPx,
+      `At ${pps} px/s, Clip 1 rightPx (${l1.rightPx}) must equal Clip 2 leftPx (${l2.leftPx})`
+    );
+    assert.equal(
+      Number((l1.leftPx + l1.widthPx).toFixed(2)),
+      l2.leftPx,
+      `At ${pps} px/s, Clip 1 leftPx + widthPx must equal Clip 2 leftPx`
+    );
+
+    // Width ratio between Clip 1 and Clip 2 must remain strictly constant (133.5 / 28.5)
+    const ratio = l1.widthPx / l2.widthPx;
+    assert.ok(
+      Math.abs(ratio - 133.5 / 28.5) < 0.01,
+      `Expected constant proportional width ratio ${133.5 / 28.5} at ${pps} px/s, got ${ratio}`
+    );
+  }
+
+  // Touchpad pinch zoom (isPinch = true) scales smoothly
+  const pinchedIn = stepTimelineZoomByWheelDelta(28, -20, true);
+  assert.ok(pinchedIn > 28, `Expected pinch zoom in > 28, got ${pinchedIn}`);
+
+  // Long clip (133.5s at 300 px/s -> 40,050px -> 13,350 bars) must still return waveform bars past index 6000
+  const longClip = createDefaultClip({
+    id: 'long-133s',
+    name: 'LongVideo.mp4',
+    trackIndex: 0,
+    startTime: 0,
+    duration: 133.5,
+    volume: 100,
+  });
+  const slicedPast6000 = computeClipWaveformBars(longClip, 13350, false, 8000, 8100);
+  assert.equal(
+    slicedPast6000.length,
+    100,
+    'Long clips zoomed past 6000 bars must continue rendering waveform bars across the full clip width'
+  );
+});
+
+test('resolveEffectiveClipAspectRatio preserves independent per-clip aspect ratio in "original" mode and locks only when a fixed ratio is selected, while computeRealisticExportEstimate enforces CapCut Studio HD bitrate floor', async () => {
+  const {
+    resolveEffectiveClipAspectRatio,
+    computeRealisticExportEstimate,
+  } = await import('./timelineEngine');
+
+  const clipVertical = createDefaultClip({
+    id: 'v-vertical',
+    name: 'BoyEating_9_16.mp4',
+    trackIndex: 0,
+    startTime: 0,
+    duration: 28,
+    mediaWidth: 1080,
+    mediaHeight: 1920,
+    nativeAspectRatio: '9:16',
+    sourceFileSizeBytes: 8_500_000,
+  });
+
+  const clipHorizontal = createDefaultClip({
+    id: 'v-horizontal',
+    name: 'Golpo_16_9.mp4',
+    trackIndex: 0,
+    startTime: 28,
+    duration: 134,
+    mediaWidth: 1920,
+    mediaHeight: 1080,
+    nativeAspectRatio: '16:9',
+    sourceFileSizeBytes: 9_200_000,
+  });
+
+  // 1. In 'original' ("Tỉ lệ gốc") mode, each video clip resolves to its own independent native aspect ratio
+  assert.equal(
+    resolveEffectiveClipAspectRatio('original', clipVertical, [clipVertical, clipHorizontal]),
+    '9:16',
+    'Vertical clip in original mode must resolve to 9:16'
+  );
+  assert.equal(
+    resolveEffectiveClipAspectRatio('original', clipHorizontal, [clipVertical, clipHorizontal]),
+    '16:9',
+    'Horizontal clip in original mode must resolve to 16:9 without being shrunk by the first clip'
+  );
+
+  // 2. When user explicitly selects a fixed aspect ratio (e.g. '9:16' or '1:1'), all clips follow that fixed ratio
+  assert.equal(
+    resolveEffectiveClipAspectRatio('9:16', clipHorizontal, [clipVertical, clipHorizontal]),
+    '9:16',
+    'Explicitly selected 9:16 ratio must lock horizontal clip to 9:16'
+  );
+  assert.equal(
+    resolveEffectiveClipAspectRatio('1:1', clipVertical, [clipVertical, clipHorizontal]),
+    '1:1',
+    'Explicitly selected 1:1 ratio must lock vertical clip to 1:1'
+  );
+
+  // 3. Verify computeRealisticExportEstimate never starves 1080p HD to 0.5 Mbps even when source file is highly compressed
+  const est1080 = computeRealisticExportEstimate(
+    [clipVertical, clipHorizontal],
+    '1080p',
+    '9:16',
+    '30fps',
+    'recommended',
+    'h264',
+    162.0
+  );
+  assert.ok(
+    est1080.effectiveBitrateMbps >= 8.5,
+    `Expected 1080p studio export bitrate >= 8.5 Mbps (never 0.5 Mbps), got ${est1080.effectiveBitrateMbps} Mbps`
+  );
+  assert.ok(
+    est1080.qualityLabel.includes('1080×1920') && est1080.qualityLabel.includes('30 FPS'),
+    `Expected qualityLabel to include 1080×1920 · 30 FPS, got ${est1080.qualityLabel}`
+  );
+});
+
+
+

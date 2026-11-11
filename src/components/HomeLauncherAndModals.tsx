@@ -240,7 +240,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
   };
 
   return (
-    <div className={`flex flex-1 min-h-0 overflow-hidden select-none ${
+    <div className={`flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden select-none ${
       themeMode === 'light' ? 'bg-[#F1F5F9] text-[#0F172A]' : 'bg-[#0F1014] text-[#E4E4E7]'
     }`}>
       {/* Left Navigation Sidebar (TDO CUT Studio Hub) - hidden on mobile screens, shown on desktop */}
@@ -674,33 +674,53 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
         {/* HERO & QUICK TOOLS (Shown on Home tab) */}
         {navTab === 'home' && (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-4">
+            {/* Mobile & Desktop Hero Cards (CapCut Mobile 2-col hero - Image 4) */}
+            <div className="grid grid-cols-2 md:grid-cols-12 gap-3 md:gap-4">
               <button
                 type="button"
                 onClick={onCreateNewProject}
-                className={`col-span-1 md:col-span-7 h-28 md:h-36 rounded-xl border p-4 md:p-6 flex flex-col items-center justify-center gap-1.5 md:gap-2 shadow-xs transition-all cursor-pointer group ${
+                className={`col-span-1 md:col-span-7 h-28 md:h-36 rounded-2xl border p-3 md:p-6 flex flex-col items-center justify-center gap-1.5 md:gap-2 shadow-xs transition-all cursor-pointer group ${
                   themeMode === 'light'
                     ? 'bg-white hover:bg-[#F8FAFC] border-[#CBD5E1] hover:border-[#00E5CC]'
                     : 'bg-[#181A22] hover:bg-[#1E212B] border-[#2B2E3C] hover:border-[#00E5CC]/70'
                 }`}
               >
-                <div className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-[#00E5CC]/10 text-[#00E5CC] group-hover:bg-[#00E5CC] group-hover:text-black flex items-center justify-center transition-all">
+                <div className="w-9 h-9 md:w-11 md:h-11 rounded-full bg-[#00E5CC]/15 text-[#00E5CC] group-hover:bg-[#00E5CC] group-hover:text-black flex items-center justify-center transition-all">
                   <Plus className="w-5 h-5 stroke-[2.5]" />
                 </div>
-                <span className={`text-sm font-semibold tracking-tight transition-colors ${
+                <span className={`text-xs md:text-sm font-bold tracking-tight transition-colors ${
                   themeMode === 'light' ? 'text-[#0F172A] group-hover:text-[#00A89A]' : 'text-white group-hover:text-[#00E5CC]'
                 }`}>
-                  {isEn ? 'New Project' : 'Dự án mới'}
+                  {isEn ? 'New Project' : 'Video mới'}
                 </span>
-                <span className="text-xs text-[#9CA3AF] font-normal leading-normal text-center">
+                <span className="hidden md:inline text-xs text-[#9CA3AF] font-normal leading-normal text-center">
                   {isEn
                     ? 'Start creating with a clean multi-track timeline'
                     : 'Khởi tạo dòng thời gian trống để dựng video'}
                 </span>
               </button>
 
-              {/* Quick Side Cards next to Hero */}
-              <div className="col-span-1 md:col-span-5 grid grid-cols-2 gap-2.5 md:gap-3">
+              <button
+                type="button"
+                onClick={() => setNavTab('ai_design')}
+                className={`col-span-1 md:hidden h-28 rounded-2xl border p-3 flex flex-col items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer group ${
+                  themeMode === 'light'
+                    ? 'bg-white hover:bg-[#F8FAFC] border-[#CBD5E1] hover:border-[#00E5CC]'
+                    : 'bg-[#181A22] hover:bg-[#1E212B] border-[#2B2E3C] hover:border-[#00E5CC]/70'
+                }`}
+              >
+                <div className="w-9 h-9 rounded-full bg-[#00E5CC]/15 text-[#00E5CC] group-hover:bg-[#00E5CC] group-hover:text-black flex items-center justify-center transition-all">
+                  <ImageIcon className="w-4 h-4 stroke-[2.2]" />
+                </div>
+                <span className={`text-xs font-bold tracking-tight transition-colors ${
+                  themeMode === 'light' ? 'text-[#0F172A]' : 'text-white'
+                }`}>
+                  {isEn ? 'Photo Edit' : 'Chỉnh sửa ảnh'}
+                </span>
+              </button>
+
+              {/* Desktop Quick Side Cards next to Hero */}
+              <div className="hidden md:grid col-span-5 grid-cols-2 gap-2.5 md:gap-3">
                 <button
                   type="button"
                   onClick={onOpenMatrixBatch}
@@ -1127,6 +1147,43 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
             </div>
           )}
         </div>
+      </div>
+
+      {/* Mobile Fixed Bottom Navigation Bar (CapCut Mobile style - Image 4) */}
+      <div
+        className={`flex md:hidden items-center justify-around px-2 py-2 border-t shrink-0 z-30 select-none ${
+          themeMode === 'light'
+            ? 'bg-white border-[#E2E8F0] text-[#0F172A]'
+            : 'bg-[#14151B] border-[#22242D] text-white'
+        }`}
+      >
+        {(
+          [
+            { id: 'home', label: isEn ? 'Edit' : 'Chỉnh sửa', icon: Scissors },
+            { id: 'templates', label: isEn ? 'Templates' : 'Mẫu', icon: LayoutTemplate },
+            { id: 'spaces', label: isEn ? 'Spaces' : 'Không gian', icon: Cloud },
+            { id: 'ai_design', label: isEn ? 'Cover' : 'Ảnh bìa', icon: ImageIcon },
+            { id: 'trash', label: isEn ? 'Trash' : 'Thùng rác', icon: Trash2 },
+          ] as const
+        ).map((item) => {
+          const Icon = item.icon;
+          const active = navTab === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setNavTab(item.id)}
+              className={`flex flex-col items-center justify-center px-2 py-1 rounded-lg cursor-pointer transition-colors active:scale-95 ${
+                active
+                  ? 'text-[#00E5CC] font-bold'
+                  : 'text-[#94A3B8] hover:text-current'
+              }`}
+            >
+              <Icon className="w-5 h-5 mb-0.5" />
+              <span className="text-[10px] leading-tight font-medium">{item.label}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

@@ -137,6 +137,7 @@ import {
   PreviewQualityOption,
 } from './components/VideoPreviewCanvas';
 import { MultiTrackTimeline } from './components/MultiTrackTimeline';
+import { MobileWorkstation } from './components/MobileWorkstation';
 import {
   ExportVideoModal,
   MatrixBatchGeneratorModal,
@@ -4632,12 +4633,13 @@ export default function App() {
         className="hidden"
       />
 
-      {/* TOP TDO CUT APPLICATION TITLE BAR */}
-      <header className={`flex items-center justify-between px-3 h-11 border-b shrink-0 z-30 select-none ${
-        themeMode === 'light'
-          ? 'bg-[#FFFFFF] border-[#E2E8F0] text-[#0F172A]'
-          : 'bg-[#131418] border-[#24262E] text-[#E4E4E7]'
-      }`}>
+      {/* TOP TDO CUT APPLICATION TITLE BAR (Desktop or Home Hub) */}
+      {(!isMobile || activeView !== 'workstation') && (
+        <header className={`flex items-center justify-between px-3 h-11 border-b shrink-0 z-30 select-none ${
+          themeMode === 'light'
+            ? 'bg-[#FFFFFF] border-[#E2E8F0] text-[#0F172A]'
+            : 'bg-[#131418] border-[#24262E] text-[#E4E4E7]'
+        }`}>
         {/* Left Brand, Logo, Menu Dropdown & Navigation */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 font-bold text-xs tracking-tight">
@@ -5084,6 +5086,7 @@ export default function App() {
           )}
         </div>
       </header>
+      )}
 
       {/* MAIN BODY (HOME SCREEN LAUNCHER vs 4-ZONE EDITOR) */}
       {activeView === 'home' ? (
@@ -5323,6 +5326,130 @@ export default function App() {
             />
           </div>
         </main>
+      ) : isMobile ? (
+        <MobileWorkstation
+          clips={clips}
+          timelineTracks={timelineTracks}
+          playheadSec={playheadSec}
+          totalTimelineDuration={totalTimelineDuration}
+          isPlaying={isPlaying}
+          aspectRatio={aspectRatio}
+          previewQuality={previewQuality}
+          selectedClipId={selectedClipId}
+          selectedClipIds={selectedClipIds}
+          currentClip={currentClip}
+          historyPastLength={historyPast.length}
+          historyFutureLength={historyFuture.length}
+          trackHidden={trackHidden}
+          trackMuted={trackMuted}
+          coverDataUrl={coverDataUrl || undefined}
+          themeMode={themeMode}
+          language={language}
+          projectName={projectName}
+          onPlayheadChange={(sec) => {
+            setActiveZoneFocus('timeline');
+            setPlayheadSec(sec);
+          }}
+          onTogglePlay={() => setIsPlaying((p) => !p)}
+          onStepFrame={(delta) =>
+            setPlayheadSec((s) => Math.max(0, s + delta / 30))
+          }
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          onSplitClip={() => {
+            commitClips((prev) => splitClipAtPlayhead(prev, playheadSec, selectedClipId));
+            showToast(language === 'en' ? 'Split clip at Playhead!' : 'Đã tách clip tại Playhead!');
+          }}
+          onDeleteSelected={() => handleDeleteMediaCardsAndClips()}
+          onSelectClip={(id) => {
+            setActiveZoneFocus('timeline');
+            setSelectedClipId(id);
+            setSelectedClipIds(id ? [id] : []);
+            if (id) setInspectorMode('clip');
+          }}
+          onUpdateClipProp={(key, value) => {
+            updateSelectedClipProp(key as keyof TimelineClip, value);
+          }}
+          onFlipHorizontal={() => {
+            if (currentClip) {
+              updateSelectedClipProp('flipH', !currentClip.flipH);
+              showToast(language === 'en' ? 'Flipped video horizontally!' : 'Đã lật ngang khung hình!');
+            }
+          }}
+          onSetAspectRatio={setAspectRatio}
+          onSetPreviewQuality={setPreviewQuality}
+          onToggleTheme={() => {
+            const nextTheme: StudioThemeMode = themeMode === 'dark' ? 'light' : 'dark';
+            setThemeMode(nextTheme);
+          }}
+          onExitToHome={() => setActiveView('home')}
+          onOpenExport={() => setIsExportModalOpen(true)}
+          onAddMedia={() => mediaInputRef.current?.click()}
+          onDropResource={handleDropResourceOnTimeline}
+          onApplyTransitionToAll={(type, dur) => {
+            commitClips((prev) =>
+              prev.map((c) =>
+                c.trackIndex === 0
+                  ? { ...c, transitionType: type, transitionDuration: dur }
+                  : c
+              )
+            );
+            showToast(
+              language === 'en'
+                ? `Applied "${type}" transition to all clips!`
+                : `Đã áp dụng chuyển tiếp "${type}" cho TẤT CẢ điểm cắt!`
+            );
+          }}
+          onOpenCropModal={() => {
+            if (selectedClipId) {
+              setCropModalClipId(selectedClipId);
+            } else if (currentClip) {
+              setCropModalClipId(currentClip.id);
+            }
+          }}
+          onToggleTrackMute={(trackIdx) => {
+            setTrackMuted((prev) => ({
+              ...prev,
+              [trackIdx]: !prev[trackIdx],
+            }));
+          }}
+          renderPlayer={() => (
+            <VideoPreviewCanvas
+              playheadSec={playheadSec}
+              totalDurationSec={totalTimelineDuration}
+              fps={30}
+              isPlaying={isPlaying}
+              aspectRatio={aspectRatio}
+              previewQuality={previewQuality}
+              selectedClipId={selectedClipId}
+              activeVideoClip={activeVideoClip}
+              prevVideoClip={prevVideoClip}
+              nextVideoClip={nextVideoClip}
+              activeOverlayClip={activeOverlayClip}
+              activeSubtitleClip={activeSubtitleClip}
+              activeAudioClip={activeAudioClip}
+              activeClipsAtPlayhead={activeClipsAtPlayhead}
+              videoTrackHidden={trackHidden[0]}
+              videoTrackMuted={trackMuted[0]}
+              overlayTrackHidden={trackHidden[3]}
+              textTrackHidden={trackHidden[2]}
+              audioTrackMuted={trackMuted[1]}
+              globalAdjustments={globalAdjustments}
+              blurredPadding916={blurredPadding916}
+              antiDetectSpoof={antiDetect.spoofIphoneMeta}
+              onTogglePlay={() => setIsPlaying((p) => !p)}
+              onAspectRatioChange={setAspectRatio}
+              onStepFrame={(delta) =>
+                setPlayheadSec((s) => Math.max(0, s + delta / 30))
+              }
+              onSelectClipFromCanvas={(clipId) => {
+                setSelectedClipId(clipId);
+                setSelectedClipIds([clipId]);
+                setInspectorMode('clip');
+              }}
+            />
+          )}
+        />
       ) : (
         <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {/* UPPER HALF: 3 ZONES (Resource Pool | 60 FPS Preview Player | Context Inspector) */}

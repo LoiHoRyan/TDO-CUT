@@ -120,6 +120,8 @@ interface MultiTrackTimelineProps {
     dropTimeSec: number,
     targetClipId?: string
   ) => void;
+  onOpenTransitions?: (targetClipId: string) => void;
+  activeSelectedTransition?: { id: TimelineDragPayload['transitionType']; label: string; dur?: number } | null;
   onAddTrackLayer?: (type?: 'overlay' | 'text' | 'audio') => void;
   onAddOverlayClip?: () => void;
   onMoveTrackOrder?: (trackId: number, direction: 'up' | 'down') => void;
@@ -173,6 +175,8 @@ interface MultiTrackTimelineProps {
       | 'noise_reduction'
       | 'auto_cutout'
       | 'retouch'
+      | 'enhance'
+      | 'voice_clean'
       | 'hd_upscale'
       | 'prerender'
       | 'transcript'
@@ -190,11 +194,13 @@ interface MultiTrackTimelineProps {
   onSetMarkIn?: () => void;
   onSetMarkOut?: () => void;
   onClearMarkInOut?: () => void;
+  onClearInOutRange?: () => void;
   onToggleLoopRange?: () => void;
   onRippleTrimRange?: (mode: 'keep_inside' | 'ripple_delete_inside') => void;
   onRemoveDeadAirSilence?: () => void;
   onSyncClipsToBeats?: () => void;
   language?: 'vi' | 'en';
+  themeMode?: 'light' | 'dark';
 }
 
 const TRACK_HEADER_WIDTH = 136;
@@ -243,6 +249,8 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
   onDragSessionEnd,
   onResizeClipEdge,
   onDropResourceOnTimeline,
+  onOpenTransitions,
+  activeSelectedTransition,
   onAddTrackLayer,
   onAddOverlayClip,
   onMoveTrackOrder,
@@ -295,13 +303,24 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
   loopRangeEnabled = false,
   onSetMarkIn,
   onSetMarkOut,
-  onClearMarkInOut,
+  onClearMarkInOut: rawClearMarkInOut,
+  onClearInOutRange,
   onToggleLoopRange,
   onRippleTrimRange,
   onRemoveDeadAirSilence,
   onSyncClipsToBeats,
   language = 'vi',
+  themeMode = 'dark',
 }) => {
+  const onClearMarkInOut = rawClearMarkInOut || onClearInOutRange;
+  const isLight = themeMode === 'light';
+  const tbBtnClass = isLight
+    ? 'text-[#475569] hover:text-[#0F172A] hover:bg-[#F1F5F9]'
+    : 'text-[#D1D5DB] hover:text-white hover:bg-[#252830]';
+  const tbSubBtnClass = isLight
+    ? 'text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9]'
+    : 'text-[#9CA3AF] hover:text-white hover:bg-[#252830]';
+  const tbDividerClass = isLight ? 'bg-[#CBD5E1]' : 'bg-[#2E313A]';
   const timelineSectionRef = useRef<HTMLElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const trackRowRefs = useRef<Record<number, HTMLDivElement | null>>({});
@@ -341,6 +360,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
   const clips = dragPreviewClips ?? incomingClips;
   const [dragOffsetSec, setDragOffsetSec] = useState(0);
   const [dragHoverTrackId, setDragHoverTrackId] = useState<number | null>(null);
+  const [dragOverSeamKey, setDragOverSeamKey] = useState<string | null>(null);
   const [snapGuideTimeSec, setSnapGuideTimeSec] = useState<number | null>(null);
   const [snapGuideLabel, setSnapGuideLabel] = useState<string | null>(null);
   const [externalDropIndicator, setExternalDropIndicator] = useState<{
@@ -376,6 +396,8 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
   const [showEditPilotPopover, setShowEditPilotPopover] = useState(false);
   const [minTrimSec, setMinTrimSec] = useState(2.0);
   const [maxTrimSec, setMaxTrimSec] = useState(4.0);
+  const [isSmartToolsOpen, setIsSmartToolsOpen] = useState(false);
+  const [isToolDropdownOpen, setIsToolDropdownOpen] = useState(false);
 
   // Right-click Context Menu on Clip (Image 3)
   const [contextMenu, setContextMenu] = useState<{
@@ -1097,6 +1119,25 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
     e.dataTransfer.dropEffect = 'copy';
     const sec = clientXToSeconds(e.clientX);
     setExternalDropIndicator({ trackId, timeSec: sec });
+
+    if (trackId === 0 && videoClipsSorted.length > 1) {
+      const nearSeam = videoClipsSorted.find(
+        (c, idx) => idx > 0 && Math.abs(c.startTime - sec) <= 0.75
+      );
+      if (nearSeam) {
+        const prev = videoClipsSorted[videoClipsSorted.indexOf(nearSeam) - 1];
+        if (prev) {
+          const seamKey = `seam-${prev.id}-${nearSeam.id}`;
+          if (dragOverSeamKey !== seamKey) {
+            setDragOverSeamKey(seamKey);
+          }
+          return;
+        }
+      }
+    }
+    if (dragOverSeamKey) {
+      setDragOverSeamKey(null);
+    }
   };
 
   const handleDropOnTrack = (e: React.DragEvent, trackId: number, targetClipId?: string) => {
@@ -1105,6 +1146,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
     setExternalDropIndicator(null);
     if (trackLocks[trackId]) return;
     const raw =
+      e.dataTransfer.getData('application/x-tdocut-drag') ||
       e.dataTransfer.getData('application/x-trendopsis-drag') ||
       e.dataTransfer.getData('application/json');
     if (!raw || !onDropResourceOnTimeline) return;
@@ -1182,298 +1224,517 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
         handlePointerUpTimeline();
       }}
       onWheel={handleWheelTimeline}
-      className="flex flex-col h-full bg-[#131316] border-t border-[#2B2B30] select-none overflow-hidden relative"
+      className={`flex flex-col h-full select-none overflow-hidden relative border-t ${
+        isLight
+          ? 'bg-[#F8FAFC] border-[#E2E8F0] text-[#0F172A]'
+          : 'bg-[#131316] border-[#2B2B30] text-[#D1D5DB]'
+      }`}
     >
-      {/* CapCut PC Middle Toolbar */}
-      <div className="flex items-center justify-between gap-1.5 px-2 h-8 bg-[#18181C] border-b border-[#2B2B30] shrink-0">
-        {/* Left Editing Icons */}
-        <div className="flex items-center gap-0.5 overflow-x-auto no-scrollbar">
+      {/* Professional Studio Toolbar */}
+      <div
+        data-track-toolbar="true"
+        className={`flex items-center justify-between gap-2 px-3 h-9 border-b shrink-0 select-none ${
+          isLight
+            ? 'bg-[#FFFFFF] border-[#E2E8F0] text-[#0F172A]'
+            : 'bg-[#15161A] border-[#24262C] text-[#D1D5DB]'
+        }`}
+      >
+        {/* Left: Tools, Operations, and Smart Actions (CapCut PC Exact Layout) */}
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+          {/* 1. Quick Add (+) */}
           <button
             type="button"
             onClick={onAddQuickClip}
-            title="Thêm nhanh cảnh mới vào cuối Timeline"
-            className="p-1 text-[#A1A1AA] hover:text-white hover:bg-[#27272E] rounded transition-colors cursor-pointer shrink-0"
+            title={language === 'en' ? 'Add / Import Media (+)' : 'Thêm tệp phương tiện (+)'}
+            className={`p-1.5 rounded transition-colors cursor-pointer shrink-0 ${tbBtnClass}`}
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-4 h-4" />
           </button>
 
-          {/* Select Mode (Phím A) vs Razor Blade Split Mode (Phím B) */}
-          <button
-            type="button"
-            onClick={() => onToolModeChange?.('select')}
-            title="Công cụ Mũi tên Chọn (Phím A)"
-            className={`p-1 rounded cursor-pointer shrink-0 ${
-              toolMode === 'select'
-                ? 'text-[#00E5CC] bg-[#00E5CC]/15 border border-[#00E5CC]/40'
-                : 'text-[#A1A1AA] hover:text-white'
-            }`}
-          >
-            <MousePointer className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              onToolModeChange?.(toolMode === 'razor' ? 'select' : 'razor')
-            }
-            title="Chế độ Lưỡi dao cạo Bấm-Đâu-Đứt-Đó (Phím B)"
-            className={`p-1 rounded cursor-pointer shrink-0 ${
-              toolMode === 'razor'
-                ? 'text-[#00E5CC] bg-[#00E5CC]/15 border border-[#00E5CC]/40'
-                : 'text-[#A1A1AA] hover:text-white'
-            }`}
-          >
-            <Scissors className="w-3.5 h-3.5" />
-          </button>
+          <div className={`h-4 w-px mx-0.5 shrink-0 ${tbDividerClass}`} />
 
-          <div className="h-3.5 w-px bg-[#2B2B30] mx-0.5 shrink-0" />
+          {/* 2. Selection Tool / Razor Blade Tool Dropdown */}
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsToolDropdownOpen((v) => !v)}
+              title={
+                toolMode === 'select'
+                  ? language === 'en'
+                    ? 'Selection Tool (V / A)'
+                    : 'Công cụ Chọn (Phím V / A)'
+                  : language === 'en'
+                  ? 'Razor Blade Cut Mode (C / B)'
+                  : 'Dao cắt Clip (Phím C / B)'
+              }
+              className={`flex items-center gap-0.5 p-1 rounded transition-colors cursor-pointer ${
+                toolMode === 'razor'
+                  ? 'bg-[#00E5CC]/20 text-[#00E5CC]'
+                  : tbBtnClass
+              }`}
+            >
+              {toolMode === 'select' ? (
+                <MousePointer className="w-4 h-4 text-[#00E5CC]" />
+              ) : (
+                <Scissors className="w-4 h-4 text-[#00E5CC]" />
+              )}
+              <ChevronDown className="w-2.5 h-2.5 text-[#9CA3AF]" />
+            </button>
+            {isToolDropdownOpen && (
+              <div
+                onMouseDown={(e) => e.stopPropagation()}
+                className={`absolute left-0 top-full mt-1.5 z-50 w-36 rounded shadow-2xl py-1 text-xs backdrop-blur-md border ${
+                  isLight
+                    ? 'bg-[#FFFFFF] border-[#CBD5E1] text-[#0F172A]'
+                    : 'bg-[#181920] border-[#2D303B] text-[#E5E7EB]'
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    onToolModeChange?.('select');
+                    setIsToolDropdownOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-2 px-3 py-1.5 cursor-pointer text-left ${
+                    toolMode === 'select'
+                      ? 'text-[#00E5CC] font-semibold bg-[#00E5CC]/10'
+                      : isLight
+                      ? 'hover:bg-[#F1F5F9]'
+                      : 'hover:bg-[#252832]'
+                  }`}
+                >
+                  <MousePointer className="w-3.5 h-3.5" />
+                  <span>{language === 'en' ? 'Select (V)' : 'Chọn (V)'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onToolModeChange?.('razor');
+                    setIsToolDropdownOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-2 px-3 py-1.5 cursor-pointer text-left ${
+                    toolMode === 'razor'
+                      ? 'text-[#00E5CC] font-semibold bg-[#00E5CC]/10'
+                      : isLight
+                      ? 'hover:bg-[#F1F5F9]'
+                      : 'hover:bg-[#252832]'
+                  }`}
+                >
+                  <Scissors className="w-3.5 h-3.5" />
+                  <span>{language === 'en' ? 'Razor (C)' : 'Dao cắt (C)'}</span>
+                </button>
+              </div>
+            )}
+          </div>
 
-          <button
-            type="button"
-            onClick={onUndo}
-            disabled={!canUndo}
-            title="Hoàn tác (Ctrl+Z)"
-            className={`p-1 rounded transition-colors cursor-pointer shrink-0 ${
-              canUndo
-                ? 'text-[#D4D4D8] hover:text-white hover:bg-[#27272E]'
-                : 'text-[#52525B] cursor-not-allowed'
-            }`}
-          >
-            <Undo2 className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={onRedo}
-            disabled={!canRedo}
-            title="Làm lại (Ctrl+Shift+Z)"
-            className={`p-1 rounded transition-colors cursor-pointer shrink-0 ${
-              canRedo
-                ? 'text-[#D4D4D8] hover:text-white hover:bg-[#27272E]'
-                : 'text-[#52525B] cursor-not-allowed'
-            }`}
-          >
-            <Redo2 className="w-3.5 h-3.5" />
-          </button>
+          <div className={`h-4 w-px mx-0.5 shrink-0 ${tbDividerClass}`} />
 
-          <div className="h-3.5 w-px bg-[#2B2B30] mx-0.5 shrink-0" />
+          {/* 3. Undo / Redo */}
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button
+              type="button"
+              onClick={onUndo}
+              disabled={!canUndo}
+              title={language === 'en' ? 'Undo (Ctrl+Z)' : 'Hoàn tác (Ctrl+Z)'}
+              className={`p-1.5 rounded transition-colors cursor-pointer ${
+                canUndo ? tbBtnClass : isLight ? 'text-[#CBD5E1] cursor-not-allowed' : 'text-[#4B5563] cursor-not-allowed'
+              }`}
+            >
+              <Undo2 className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={onRedo}
+              disabled={!canRedo}
+              title={language === 'en' ? 'Redo (Ctrl+Shift+Z)' : 'Làm lại (Ctrl+Shift+Z)'}
+              className={`p-1.5 rounded transition-colors cursor-pointer ${
+                canRedo ? tbBtnClass : isLight ? 'text-[#CBD5E1] cursor-not-allowed' : 'text-[#4B5563] cursor-not-allowed'
+              }`}
+            >
+              <Redo2 className="w-4 h-4" />
+            </button>
+          </div>
 
-          {/* Split (Ctrl+B) */}
+          {/* 4. Split Clip at Playhead ][ */}
           <button
             type="button"
             onClick={onSplitAtPlayhead}
-            title="Tách đôi Clip tại vị trí Playhead (Ctrl+B)"
-            className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-[#E4E4E7] hover:text-white bg-[#24242B] hover:bg-[#2E2E38] border border-[#32323A] rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            title={language === 'en' ? 'Split at Playhead (Ctrl+B)' : 'Tách đôi clip tại Playhead (Ctrl+B)'}
+            className={`p-1.5 rounded transition-colors cursor-pointer shrink-0 ${tbBtnClass}`}
           >
-            <Scissors className="w-3 h-3 text-[#00E5CC]" />
-            <span>Tách (B)</span>
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M7 5H10V19H7" />
+              <path d="M17 5H14V19H17" />
+            </svg>
           </button>
 
-          {/* Delete Left (Q) */}
+          {/* 5. Delete Left (Trim Start to Playhead) ╎] */}
           <button
             type="button"
             onClick={onTrimStartToPlayhead}
-            title="Xóa bên trái vạch trắng (Delete Left - Phím Q)"
-            className="p-1 text-[#A1A1AA] hover:text-white hover:bg-[#27272E] rounded transition-colors cursor-pointer shrink-0"
+            title={language === 'en' ? 'Delete Left / Trim Start to Playhead (Q)' : 'Xóa clip bên trái vạch Playhead (Phím Q)'}
+            className={`p-1.5 rounded transition-colors cursor-pointer shrink-0 ${tbBtnClass}`}
           >
-            <ArrowLeftToLine className="w-3.5 h-3.5" />
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M7 5H10V19H7" strokeDasharray="2 2" strokeOpacity="0.4" />
+              <path d="M17 5H14V19H17" />
+            </svg>
           </button>
 
-          {/* Delete Right (W) */}
+          {/* 6. Delete Right (Trim End to Playhead) [╎ */}
           <button
             type="button"
             onClick={onTrimEndToPlayhead}
-            title="Xóa bên phải vạch trắng (Delete Right - Phím W)"
-            className="p-1 text-[#A1A1AA] hover:text-white hover:bg-[#27272E] rounded transition-colors cursor-pointer shrink-0"
+            title={language === 'en' ? 'Delete Right / Trim End to Playhead (W)' : 'Xóa clip bên phải vạch Playhead (Phím W)'}
+            className={`p-1.5 rounded transition-colors cursor-pointer shrink-0 ${tbBtnClass}`}
           >
-            <ArrowRightToLine className="w-3.5 h-3.5" />
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M7 5H10V19H7" />
+              <path d="M17 5H14V19H17" strokeDasharray="2 2" strokeOpacity="0.4" />
+            </svg>
           </button>
 
-          {/* Delete */}
+          {/* 7. Trash / Delete Selected */}
           <button
             type="button"
             onClick={onDeleteSelected}
-            title="Xóa Clip hoặc Tệp đang chọn (Delete / Backspace)"
-            className={`p-1 rounded transition-colors cursor-pointer shrink-0 ${
+            title={language === 'en' ? 'Delete Selected Clip (Del / Backspace)' : 'Xóa clip đang chọn (Phím Delete)'}
+            className={`p-1.5 rounded transition-colors cursor-pointer shrink-0 ${
               selectedClipId || selectedClipIds.length > 0
-                ? 'text-[#F87171] hover:bg-[#2E1D22]'
-                : 'text-[#A1A1AA] hover:text-[#F87171] hover:bg-[#2E1D22]'
+                ? 'text-rose-500 hover:bg-rose-500/20'
+                : isLight
+                ? 'text-[#94A3B8] hover:text-rose-500 hover:bg-rose-50'
+                : 'text-[#9CA3AF] hover:text-rose-400 hover:bg-rose-500/10'
             }`}
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            <Trash2 className="w-4 h-4" />
           </button>
 
-          {/* Add Marker (Phím M) */}
+          {/* 8. Marker */}
           <button
             type="button"
             onClick={onAddMarker}
-            title="Cắm cờ đánh dấu nhịp nhạc tại vạch trắng (Add Marker - Phím M)"
-            className="p-1 text-[#A1A1AA] hover:text-[#F59E0B] hover:bg-[#27272E] rounded transition-colors cursor-pointer shrink-0"
+            title={language === 'en' ? 'Add Marker (M)' : 'Cắm cờ đánh dấu nhịp (Phím M)'}
+            className={`p-1.5 hover:text-amber-500 rounded transition-colors cursor-pointer shrink-0 ${tbSubBtnClass}`}
           >
-            <Flag className="w-3.5 h-3.5" />
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 21L5 15V4a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v11L12 21z" />
+            </svg>
           </button>
 
-          {/* Freeze Frame (Shift+B) */}
-          <button
-            type="button"
-            onClick={onFreezeFrame}
-            title="Đóng băng khung hình 3 giây tại Playhead (Freeze - Shift+B)"
-            className="p-1 text-[#A1A1AA] hover:text-[#00E5CC] hover:bg-[#27272E] rounded transition-colors cursor-pointer shrink-0"
-          >
-            <Snowflake className="w-3.5 h-3.5" />
-          </button>
-
-          {/* Reverse Clip */}
-          <button
-            type="button"
-            onClick={onReverseSelected}
-            disabled={!selectedClipId}
-            title="Đảo ngược phát lùi Clip (Reverse)"
-            className={`p-1 rounded transition-colors cursor-pointer shrink-0 ${
-              selectedClipId
-                ? 'text-[#A1A1AA] hover:text-[#00E5CC] hover:bg-[#27272E]'
-                : 'text-[#52525B] cursor-not-allowed'
-            }`}
-          >
-            <Rewind className="w-3.5 h-3.5" />
-          </button>
-
-          {/* Mirror (Flip H) */}
-          <button
-            type="button"
-            onClick={onQuickFlipSelected}
-            disabled={!selectedClipId}
-            title="Phản chiếu / Lật gương Clip (Mirror)"
-            className={`p-1 rounded transition-colors cursor-pointer shrink-0 ${
-              selectedClipId
-                ? 'text-[#A1A1AA] hover:text-white hover:bg-[#27272E]'
-                : 'text-[#52525B] cursor-not-allowed'
-            }`}
-          >
-            <FlipHorizontal className="w-3.5 h-3.5" />
-          </button>
-
-          {/* Rotate +90 */}
-          <button
-            type="button"
-            onClick={onQuickRotateSelected}
-            disabled={!selectedClipId}
-            title="Xoay +90° Clip đang chọn (Rotate)"
-            className={`p-1 rounded transition-colors cursor-pointer shrink-0 ${
-              selectedClipId
-                ? 'text-[#A1A1AA] hover:text-white hover:bg-[#27272E]'
-                : 'text-[#52525B] cursor-not-allowed'
-            }`}
-          >
-            <RotateCw className="w-3.5 h-3.5" />
-          </button>
-
-          {/* Crop Ratio / Cắt khung (Image 4) */}
+          {/* 9. Crop & Zoom */}
           <button
             type="button"
             onClick={() => onQuickAiAction?.('crop')}
-            disabled={!selectedClipId}
-            title="Cắt khung hình & Thu phóng (Crop)"
-            className={`p-1 rounded transition-colors cursor-pointer shrink-0 ${
-              selectedClipId
-                ? 'text-[#A1A1AA] hover:text-[#00E5CC] hover:bg-[#27272E]'
-                : 'text-[#52525B] cursor-not-allowed'
-            }`}
+            title={language === 'en' ? 'Crop & Zoom' : 'Cắt khung hình & Thu phóng (Crop)'}
+            className={`p-1.5 hover:text-[#00C7B7] rounded transition-colors cursor-pointer shrink-0 ${tbSubBtnClass}`}
           >
-            <Crop className="w-3.5 h-3.5" />
+            <Crop className="w-4 h-4" />
           </button>
 
-          <div className="h-3.5 w-px bg-[#2B2B30] mx-0.5 shrink-0" />
+          {/* 10. Mirror / Flip Horizontal */}
+          <button
+            type="button"
+            onClick={onQuickFlipSelected}
+            title={language === 'en' ? 'Mirror / Horizontal Flip' : 'Lật gương ngang Clip'}
+            className={`p-1.5 hover:text-[#00C7B7] rounded transition-colors cursor-pointer shrink-0 ${tbSubBtnClass}`}
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10 5L4 16h6V5z" fill="currentColor" fillOpacity="0.25" />
+              <path d="M14 5l6 16h-6V5z" fill="currentColor" fillOpacity="0.8" />
+              <path d="M9 19a4 4 0 0 0 6 0" strokeDasharray="1.5 1.5" />
+            </svg>
+          </button>
 
-          {/* AI Scene Split (Tách cảnh AI - Image 4) */}
+          <div className={`h-4 w-px mx-0.5 shrink-0 ${tbDividerClass}`} />
+
+          {/* 11. CapCut AI Smart Tools Direct Buttons */}
           <button
             type="button"
             onClick={() => (onOpenSceneSplitModal ? onOpenSceneSplitModal() : onOpenAiSceneSplit?.())}
-            title="Tách cảnh tự động AI (Split Scene - Ctrl+Shift+B)"
-            className="p-1 text-[#A1A1AA] hover:text-[#00E5CC] hover:bg-[#27272E] rounded transition-colors cursor-pointer shrink-0"
+            title={language === 'en' ? 'Auto Scene Cut AI' : 'Tách cảnh tự động AI'}
+            className={`p-1.5 hover:text-[#00C7B7] rounded transition-colors cursor-pointer shrink-0 ${tbSubBtnClass}`}
           >
-            <Film className="w-3.5 h-3.5" />
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="4" width="20" height="16" rx="2" />
+              <line x1="2" y1="9" x2="22" y2="9" />
+              <circle cx="8" cy="15" r="1.5" />
+              <circle cx="16" cy="15" r="1.5" />
+              <path d="M9.5 13.5L14.5 16.5M14.5 13.5L9.5 16.5" />
+            </svg>
           </button>
 
-          {/* Remove Filler Words AI (Xóa từ thừa AI - Image 4) */}
-          <button
-            type="button"
-            onClick={() => onQuickAiAction?.('filler_words')}
-            title="Xóa từ thừa & khoảng lặng bằng AI (Remove filler words)"
-            className="p-1 text-[#A1A1AA] hover:text-[#00E5CC] hover:bg-[#27272E] rounded transition-colors cursor-pointer shrink-0"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-          </button>
-
-          {/* Noise Reduction (Giảm tiếng ồn AI - Image 4) */}
-          <button
-            type="button"
-            onClick={() => onQuickAiAction?.('noise_reduction')}
-            title="Khử tiếng ồn âm thanh AI (Noise Reduction)"
-            className="p-1 text-[#A1A1AA] hover:text-[#00E5CC] hover:bg-[#27272E] rounded transition-colors cursor-pointer shrink-0"
-          >
-            <Volume2 className="w-3.5 h-3.5" />
-          </button>
-
-          {/* AI Auto Cutout (Tách nền AI - Image 4) */}
           <button
             type="button"
             onClick={() => onQuickAiAction?.('auto_cutout')}
-            title="Tách nền người tự động AI (Auto Cutout)"
-            className="p-1 text-[#A1A1AA] hover:text-[#00E5CC] hover:bg-[#27272E] rounded transition-colors cursor-pointer shrink-0"
+            title={language === 'en' ? 'AI Smart Cutout' : 'Tách nền thông minh AI'}
+            className={`p-1.5 hover:text-[#00C7B7] rounded transition-colors cursor-pointer shrink-0 ${tbSubBtnClass}`}
           >
-            <UserCheck className="w-3.5 h-3.5" />
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M7 5H5v14h2" />
+              <path d="M17 5h2v14h-2" />
+              <path d="M12 7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z" />
+              <path d="M8 17c0-2 2-3 4-3s4 1 4 3" />
+              <path d="M18 3l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z" fill="#00E5CC" stroke="none" />
+            </svg>
           </button>
 
-          {/* AI Retouch / Smooth Skin (Làm mịn da & mặt - Image 4) */}
           <button
             type="button"
             onClick={() => onQuickAiAction?.('retouch')}
-            title="Làm đẹp & mịn da mặt tự động (Retouch)"
-            className="p-1 text-[#A1A1AA] hover:text-[#00E5CC] hover:bg-[#27272E] rounded transition-colors cursor-pointer shrink-0"
+            title={language === 'en' ? 'AI Magic Retouch' : 'Bút làm đẹp & Phục hồi AI'}
+            className={`p-1.5 hover:text-[#00C7B7] rounded transition-colors cursor-pointer shrink-0 ${tbSubBtnClass}`}
           >
-            <Wand2 className="w-3.5 h-3.5" />
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M16 3l5 5-9 9H7v-5L16 3z" />
+              <path d="M4 20l2-2" />
+              <path d="M4 6l1 1.5L6.5 8 5 8.5 4 10 3.5 8.5 2 8l1.5-.5L4 6z" fill="#00E5CC" stroke="none" />
+            </svg>
           </button>
 
-          {/* HD Upscale Badge Button (Image 4) */}
+          <button
+            type="button"
+            onClick={() => onQuickAiAction?.('crop')}
+            title={language === 'en' ? 'Canvas & Aspect Format' : 'Định dạng khung hình Canvas'}
+            className={`p-1.5 hover:text-[#00C7B7] rounded transition-colors cursor-pointer shrink-0 ${tbSubBtnClass}`}
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="4" y="4" width="16" height="16" rx="2" />
+              <path d="M4 4h8v16H4z" fill="currentColor" fillOpacity="0.4" />
+            </svg>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onQuickAiAction?.('enhance')}
+            title={language === 'en' ? 'Face Retouch' : 'Làm mịn da mặt'}
+            className={`p-1.5 hover:text-[#00C7B7] rounded transition-colors cursor-pointer shrink-0 ${tbSubBtnClass}`}
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="10" cy="8" r="3.5" />
+              <path d="M3 19c0-3 3-5 7-5s7 2 7 5" />
+              <path d="M19 6l.8 1.6 1.7.8-1.7.8-.8 1.6-.8-1.6-1.7-.8 1.7-.8.8-1.6z" fill="#00E5CC" stroke="none" />
+            </svg>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onQuickAiAction?.('auto_cutout')}
+            title={language === 'en' ? 'Auto Cutout' : 'Tách nền nhân vật'}
+            className={`p-1.5 hover:text-[#00C7B7] rounded transition-colors cursor-pointer shrink-0 ${tbSubBtnClass}`}
+          >
+            <UserCheck className="w-4 h-4" />
+          </button>
+
           <button
             type="button"
             onClick={() => onQuickAiAction?.('hd_upscale')}
-            title="Làm nét chất lượng video siêu phân giải (HD Upscale)"
-            className="px-1 py-0.5 text-[9px] font-extrabold text-[#D4D4D8] hover:text-[#00E5CC] border border-[#3F3F4A] hover:border-[#00E5CC] rounded cursor-pointer shrink-0"
+            title={language === 'en' ? 'HD Upscale 4K' : 'Nâng cấp độ nét siêu phân giải HD'}
+            className={`p-1 hover:text-[#00C7B7] rounded transition-colors cursor-pointer shrink-0 ${tbSubBtnClass}`}
           >
-            HD
+            <div className="flex items-center justify-center w-5 h-5 rounded border border-current text-[9px] font-black tracking-tighter">
+              HD
+            </div>
           </button>
 
-          <div className="h-3.5 w-px bg-[#2B2B30] mx-0.5 shrink-0" />
+          <button
+            type="button"
+            onClick={() => onQuickAiAction?.('noise_reduction')}
+            title={language === 'en' ? 'Video Noise Reduction' : 'Khử nhiễu video'}
+            className={`p-1.5 hover:text-[#00C7B7] rounded transition-colors cursor-pointer shrink-0 ${tbSubBtnClass}`}
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="4" width="14" height="12" rx="2" />
+              <polygon points="6 7 11 10 6 13" fill="currentColor" fillOpacity="0.4" />
+              <path d="M18 7a3 3 0 0 1 0 6" />
+              <path d="M21 5a6 6 0 0 1 0 10" />
+            </svg>
+          </button>
 
-          {/* Add Overlay Clip Button (CapCut PC "Thêm lớp phủ" — opens user file picker) */}
-          {onAddOverlayClip && (
+          <button
+            type="button"
+            onClick={() => (onRemoveDeadAirSilence ? onRemoveDeadAirSilence() : onQuickAiAction?.('voice_clean'))}
+            title={language === 'en' ? 'Voice Noise Reduction & Strip Silence' : 'Lọc tạp âm & Cắt khoảng lặng'}
+            className={`p-1.5 hover:text-emerald-500 rounded transition-colors cursor-pointer shrink-0 ${tbSubBtnClass}`}
+          >
+            <Activity className="w-4 h-4" />
+          </button>
+
+          {/* More AI Tools chevron (Image 1 & 2) */}
+          <div className="relative shrink-0">
             <button
               type="button"
-              onClick={onAddOverlayClip}
-              title="Thêm Lớp Phủ (Chọn video hoặc hình ảnh từ thư mục máy tính để chèn lên tầng Lớp phủ)"
-              className="px-1.5 py-0.5 rounded bg-[#00E5CC]/15 hover:bg-[#00E5CC]/25 border border-[#00E5CC]/40 text-[10px] font-semibold text-[#00E5CC] flex items-center gap-1 cursor-pointer shrink-0"
+              onClick={() => setIsSmartToolsOpen((v) => !v)}
+              title={language === 'en' ? 'More AI & Smart Editing Tools' : 'Xem toàn bộ công cụ AI & Tiện ích'}
+              className={`p-1.5 rounded transition-colors cursor-pointer ${
+                isSmartToolsOpen
+                  ? 'bg-[#00E5CC]/20 text-[#00E5CC]'
+                  : tbSubBtnClass
+              }`}
             >
-              <Layers className="w-3 h-3 text-[#00E5CC]" />
-              <span>{language === 'en' ? 'Overlay' : 'Lớp Phủ'}</span>
+              <ChevronDown className="w-3.5 h-3.5 -rotate-90" />
             </button>
-          )}
 
-          <div className="h-3.5 w-px bg-[#2B2B30] mx-0.5 shrink-0" />
+            {isSmartToolsOpen && (
+              <div
+                onMouseDown={(e) => e.stopPropagation()}
+                className={`absolute left-0 top-full mt-1.5 z-50 w-64 rounded-lg shadow-2xl py-1 text-xs backdrop-blur-md border divide-y ${
+                  isLight
+                    ? 'bg-[#FFFFFF] border-[#CBD5E1] text-[#0F172A] divide-[#E2E8F0]'
+                    : 'bg-[#181920] border-[#2D303B] text-[#E5E7EB] divide-[#262832]'
+                }`}
+              >
+                <div className="py-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSmartToolsOpen(false);
+                      onOpenSceneSplitModal ? onOpenSceneSplitModal() : onOpenAiSceneSplit?.();
+                    }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-left cursor-pointer transition-colors ${
+                      isLight ? 'hover:bg-[#F1F5F9]' : 'hover:bg-[#222530]'
+                    }`}
+                  >
+                    <Film className="w-4 h-4 text-[#00E5CC] shrink-0" />
+                    <div>
+                      <div className={`font-semibold ${isLight ? 'text-[#0F172A]' : 'text-white'}`}>{language === 'en' ? 'Auto Scene Cut' : 'Tách cảnh tự động AI'}</div>
+                      <div className={`text-[10px] ${isLight ? 'text-[#64748B]' : 'text-[#9CA3AF]'}`}>{language === 'en' ? 'Detects transitions and cuts video' : 'Tự động phát hiện chuyển cảnh và cắt clip'}</div>
+                    </div>
+                  </button>
 
-          {/* In / Out Range Controls ([I] / [O]) & Smart Studio Actions */}
-          <div className="flex items-center gap-0.5 bg-[#141419] border border-[#2B2B34] rounded px-1 py-0.5 shrink-0">
+                  {onRemoveDeadAirSilence && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsSmartToolsOpen(false);
+                        onRemoveDeadAirSilence();
+                      }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-left cursor-pointer transition-colors ${
+                        isLight ? 'hover:bg-[#F1F5F9]' : 'hover:bg-[#222530]'
+                      }`}
+                    >
+                      <Activity className="w-4 h-4 text-emerald-500 shrink-0" />
+                      <div>
+                        <div className={`font-semibold ${isLight ? 'text-[#0F172A]' : 'text-white'}`}>{language === 'en' ? 'Strip Silence & Dead-Air' : 'Cắt khoảng lặng & Tạp âm'}</div>
+                        <div className={`text-[10px] ${isLight ? 'text-[#64748B]' : 'text-[#9CA3AF]'}`}>{language === 'en' ? 'Removes pauses and compacts clips' : 'Tự động xóa khoảng lặng và dồn sát cảnh'}</div>
+                      </div>
+                    </button>
+                  )}
+
+                  {onSyncClipsToBeats && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsSmartToolsOpen(false);
+                        onSyncClipsToBeats();
+                      }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-left cursor-pointer transition-colors ${
+                        isLight ? 'hover:bg-[#F1F5F9]' : 'hover:bg-[#222530]'
+                      }`}
+                    >
+                      <Music2 className="w-4 h-4 text-amber-500 shrink-0" />
+                      <div>
+                        <div className={`font-semibold ${isLight ? 'text-[#0F172A]' : 'text-white'}`}>{language === 'en' ? 'Auto-Beat Sync' : 'Khớp nhịp nhạc (Beat Sync)'}</div>
+                        <div className={`text-[10px] ${isLight ? 'text-[#64748B]' : 'text-[#9CA3AF]'}`}>{language === 'en' ? 'Snaps video cuts to musical beat' : 'Canh điểm cắt chuẩn xác theo phách nhạc'}</div>
+                      </div>
+                    </button>
+                  )}
+                </div>
+
+                <div className="py-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSmartToolsOpen(false);
+                      onQuickAiAction?.('auto_cutout');
+                    }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-left cursor-pointer transition-colors ${
+                      isLight ? 'hover:bg-[#F1F5F9]' : 'hover:bg-[#222530]'
+                    }`}
+                  >
+                    <UserCheck className="w-4 h-4 text-sky-500 shrink-0" />
+                    <div>
+                      <div className={`font-semibold ${isLight ? 'text-[#0F172A]' : 'text-white'}`}>{language === 'en' ? 'AI Auto Cutout' : 'Tách nền người AI'}</div>
+                      <div className={`text-[10px] ${isLight ? 'text-[#64748B]' : 'text-[#9CA3AF]'}`}>{language === 'en' ? 'Removes background without green screen' : 'Xóa phông nền không cần màn xanh'}</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSmartToolsOpen(false);
+                      onQuickAiAction?.('noise_reduction');
+                    }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-left cursor-pointer transition-colors ${
+                      isLight ? 'hover:bg-[#F1F5F9]' : 'hover:bg-[#222530]'
+                    }`}
+                  >
+                    <Volume2 className="w-4 h-4 text-indigo-500 shrink-0" />
+                    <div>
+                      <div className={`font-semibold ${isLight ? 'text-[#0F172A]' : 'text-white'}`}>{language === 'en' ? 'Voice Noise Reduction' : 'Khử tiếng ồn âm thanh'}</div>
+                      <div className={`text-[10px] ${isLight ? 'text-[#64748B]' : 'text-[#9CA3AF]'}`}>{language === 'en' ? 'Cleans fan noise, wind, and hiss' : 'Lọc tạp âm quạt, tiếng rè và tiếng gió'}</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSmartToolsOpen(false);
+                      onQuickAiAction?.('retouch');
+                    }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-left cursor-pointer transition-colors ${
+                      isLight ? 'hover:bg-[#F1F5F9]' : 'hover:bg-[#222530]'
+                    }`}
+                  >
+                    <UserCheck className="w-4 h-4 text-pink-500 shrink-0" />
+                    <div>
+                      <div className={`font-semibold ${isLight ? 'text-[#0F172A]' : 'text-white'}`}>{language === 'en' ? 'Face Retouch & Enhance' : 'Làm đẹp & Mịn da mặt'}</div>
+                      <div className={`text-[10px] ${isLight ? 'text-[#64748B]' : 'text-[#9CA3AF]'}`}>{language === 'en' ? 'Smooth skin and brighten face' : 'Tự động sáng da và nét chân dung'}</div>
+                    </div>
+                  </button>
+                </div>
+
+                {onCloseAllGapsOnTrack && (
+                  <div className="py-1">
+                    <button
+                      type="button"
+                      data-testid="concat-close-all-gaps-btn"
+                      onClick={() => {
+                        setIsSmartToolsOpen(false);
+                        onCloseAllGapsOnTrack(0);
+                      }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-left cursor-pointer transition-colors text-[#00C7B7] ${
+                        isLight ? 'hover:bg-[#F1F5F9]' : 'hover:bg-[#222530]'
+                      }`}
+                    >
+                      <Layers className="w-4 h-4 shrink-0" />
+                      <div>
+                        <div className="font-semibold">{language === 'en' ? 'Concat All Gaps (Main Track)' : 'Ghép khít toàn bộ (Concat V1)'}</div>
+                        <div className={`text-[10px] ${isLight ? 'text-[#64748B]' : 'text-[#9CA3AF]'}`}>{language === 'en' ? 'Closes all empty spaces between clips' : 'Dồn sát tất cả clip trên trục chính'}</div>
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* In / Out Markers Controls */}
+          <div className={`flex items-center gap-0.5 rounded px-1.5 py-0.5 shrink-0 border ${
+            isLight
+              ? 'bg-[#F1F5F9] border-[#CBD5E1]'
+              : 'bg-[#1C1D22] border-[#2A2C34]'
+          }`}>
             <button
               type="button"
               onClick={onSetMarkIn}
-              title={
-                language === 'en'
-                  ? 'Set In Point at Playhead (Shortcut: I)'
-                  : 'Đặt điểm vào In tại Playhead (Phím I)'
-              }
+              title={language === 'en' ? 'Set In Point (Shortcut: I)' : 'Đặt điểm vào In (Phím I)'}
               className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold cursor-pointer transition-colors ${
                 markInSec !== null
-                  ? 'bg-[#00E5CC]/20 text-[#00E5CC] border border-[#00E5CC]/50'
-                  : 'text-[#A1A1AA] hover:text-white'
+                  ? 'bg-[#00E5CC]/25 text-[#00E5CC] border border-[#00E5CC]/40'
+                  : isLight
+                  ? 'text-[#64748B] hover:text-[#0F172A]'
+                  : 'text-[#9CA3AF] hover:text-white'
               }`}
             >
               [I{markInSec !== null ? `:${markInSec.toFixed(1)}s` : ''}
@@ -1481,15 +1742,13 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             <button
               type="button"
               onClick={onSetMarkOut}
-              title={
-                language === 'en'
-                  ? 'Set Out Point at Playhead (Shortcut: O)'
-                  : 'Đặt điểm ra Out tại Playhead (Phím O)'
-              }
+              title={language === 'en' ? 'Set Out Point (Shortcut: O)' : 'Đặt điểm ra Out (Phím O)'}
               className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold cursor-pointer transition-colors ${
                 markOutSec !== null
-                  ? 'bg-[#F59E0B]/20 text-[#F59E0B] border border-[#F59E0B]/50'
-                  : 'text-[#A1A1AA] hover:text-white'
+                  ? 'bg-amber-400/25 text-amber-500 border border-amber-400/40'
+                  : isLight
+                  ? 'text-[#64748B] hover:text-[#0F172A]'
+                  : 'text-[#9CA3AF] hover:text-white'
               }`}
             >
               {markOutSec !== null ? `${markOutSec.toFixed(1)}s:` : ''}O]
@@ -1500,15 +1759,13 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                 <button
                   type="button"
                   onClick={onToggleLoopRange}
-                  title={
-                    language === 'en'
-                      ? 'Loop playback between In & Out points'
-                      : 'Phát lặp liên tục trong vùng [In - Out]'
-                  }
+                  title={language === 'en' ? 'Loop playback between In/Out' : 'Phát lặp trong vùng [In-Out]'}
                   className={`px-1.5 py-0.5 rounded text-[10px] font-semibold cursor-pointer ${
                     loopRangeEnabled
-                      ? 'bg-[#00E5CC] text-[#090D12]'
-                      : 'bg-[#22222B] text-[#D4D4D8] hover:text-white'
+                      ? 'bg-[#00E5CC] text-black font-bold'
+                      : isLight
+                      ? 'text-[#475569] hover:text-[#0F172A] hover:bg-[#E2E8F0]'
+                      : 'text-[#D4D4D8] hover:text-white hover:bg-[#252830]'
                   }`}
                 >
                   Loop
@@ -1516,92 +1773,31 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                 <button
                   type="button"
                   onClick={() => onRippleTrimRange?.('ripple_delete_inside')}
-                  title={
-                    language === 'en'
-                      ? 'Ripple Cut: Delete [In..Out] range and close gap'
-                      : 'Ripple Cut: Xóa vùng [In..Out] và tự động khép khoảng trống'
-                  }
-                  className="px-1.5 py-0.5 rounded bg-[#F43F5E]/20 hover:bg-[#F43F5E]/30 border border-[#F43F5E]/40 text-[#FB7185] text-[10px] font-semibold cursor-pointer"
+                  title={language === 'en' ? 'Delete [In..Out] and close gap' : 'Xóa vùng [In..Out] và khép khoảng trống'}
+                  className="px-1.5 py-0.5 rounded text-rose-500 hover:bg-rose-500/20 text-[10px] font-semibold cursor-pointer"
                 >
-                  {language === 'en' ? 'Ripple Cut I/O' : 'Xóa vùng I/O'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onRippleTrimRange?.('keep_inside')}
-                  title={
-                    language === 'en'
-                      ? 'Trim timeline to keep only [In..Out] range'
-                      : 'Cắt gọn Timeline: Chỉ giữ lại vùng [In..Out]'
-                  }
-                  className="px-1.5 py-0.5 rounded bg-[#00E5CC]/15 hover:bg-[#00E5CC]/25 border border-[#00E5CC]/40 text-[#00E5CC] text-[10px] font-semibold cursor-pointer"
-                >
-                  {language === 'en' ? 'Keep I/O' : 'Giữ vùng I/O'}
+                  {language === 'en' ? 'Cut I/O' : 'Xóa I/O'}
                 </button>
                 <button
                   type="button"
                   onClick={onClearMarkInOut}
-                  title={language === 'en' ? 'Clear In/Out points' : 'Xóa đánh dấu In/Out'}
-                  className="px-1 py-0.5 text-[10px] text-[#9CA3AF] hover:text-white cursor-pointer"
+                  title={language === 'en' ? 'Clear In/Out markers' : 'Xóa đánh dấu In/Out'}
+                  className={`px-1 py-0.5 text-[10px] cursor-pointer ${
+                    isLight ? 'text-[#94A3B8] hover:text-[#0F172A]' : 'text-[#6B7280] hover:text-white'
+                  }`}
                 >
                   ✕
                 </button>
               </>
             )}
           </div>
-
-          {/* Smart Silence Remover & Auto-Beat Sync */}
-          {onRemoveDeadAirSilence && (
-            <button
-              type="button"
-              onClick={onRemoveDeadAirSilence}
-              title={
-                language === 'en'
-                  ? 'Smart Silence & Dead-Air Remover'
-                  : 'Tự động cắt khoảng lặng & khép sát các cảnh'
-              }
-              className="px-2 py-0.5 rounded bg-[#22222C] hover:bg-[#2C2C38] border border-[#343442] text-[10px] font-semibold text-[#E4E4E7] flex items-center gap-1 cursor-pointer shrink-0"
-            >
-              <Activity className="w-3 h-3 text-[#00E5CC]" />
-              <span>{language === 'en' ? 'Strip Silence' : 'Cắt khoảng lặng'}</span>
-            </button>
-          )}
-          {onSyncClipsToBeats && (
-            <button
-              type="button"
-              onClick={onSyncClipsToBeats}
-              title={
-                language === 'en'
-                  ? 'Auto-Beat Sync: Snap video cuts to musical beat grid'
-                  : 'Beat Sync: Tự động khớp điểm cắt video theo nhịp nhạc'
-              }
-              className="px-2 py-0.5 rounded bg-[#22222C] hover:bg-[#2C2C38] border border-[#343442] text-[10px] font-semibold text-[#F59E0B] flex items-center gap-1 cursor-pointer shrink-0"
-            >
-              <Music2 className="w-3 h-3 text-[#F59E0B]" />
-              <span>{language === 'en' ? 'Beat Sync' : 'Khớp Beat'}</span>
-            </button>
-          )}
-          {onCloseAllGapsOnTrack && (
-            <button
-              type="button"
-              data-testid="concat-close-all-gaps-btn"
-              onClick={() => onCloseAllGapsOnTrack(0)}
-              title={
-                language === 'en'
-                  ? 'Concat All: Close all gaps on Main Video Track (V1)'
-                  : 'Ghép khít toàn bộ (Concat All): Tự động dồn sát mọi clip trên trục Video chính (V1)'
-              }
-              className="px-2 py-0.5 rounded bg-[#00E5CC]/15 hover:bg-[#00E5CC]/25 border border-[#00E5CC]/45 text-[10px] font-semibold text-[#00E5CC] flex items-center gap-1 cursor-pointer shrink-0"
-            >
-              <span>⇄ {language === 'en' ? 'Concat All' : 'Ghép khít (Concat)'}</span>
-            </button>
-          )}
         </div>
 
         {/* Right Timeline Controls (Multi-select status, Mic, Magnet P, Snap N, Link, Pre-render, dB Meter, Zoom) */}
         <div className="flex items-center gap-1.5 shrink-0">
           {effectiveSelectedIds.length > 1 && (
-            <span className="px-2 py-0.5 rounded bg-[#00E5CC]/15 border border-[#00E5CC]/40 text-[10px] font-semibold text-[#00E5CC]">
-              Đã chọn {effectiveSelectedIds.length} clip
+            <span className="px-2 py-0.5 rounded bg-[#00E5CC]/15 border border-[#00E5CC]/30 text-[10px] font-semibold text-[#00E5CC]">
+              {language === 'en' ? `${effectiveSelectedIds.length} clips selected` : `Đã chọn ${effectiveSelectedIds.length} clip`}
             </span>
           )}
 
@@ -1609,102 +1805,141 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             <button
               type="button"
               onClick={onStartVoiceover}
-              title="Record Voiceover — Thu âm lồng tiếng trực tiếp"
-              className="p-1 text-[#A1A1AA] hover:text-white rounded cursor-pointer"
+              title={language === 'en' ? 'Record Voiceover' : 'Thu âm lồng tiếng trực tiếp'}
+              className="p-1.5 text-[#9CA3AF] hover:text-white rounded hover:bg-[#252830] cursor-pointer transition-colors"
             >
               <Mic className="w-3.5 h-3.5" />
             </button>
           )}
+
+          {/* Magnet / Ripple Editing Mode (P) */}
           <button
             type="button"
             onClick={onToggleSnap}
-            title="Main track magnet (Nam châm trục chính - Phím P): Tự động khít các clip trên trục chính"
-            className={`px-1.5 py-0.5 rounded border text-[10px] font-mono flex items-center gap-1 transition-colors cursor-pointer ${
+            title={language === 'en' ? 'Main track magnet (Ripple Auto-snap - P)' : 'Nam châm trục chính (Tự động khít cảnh - Phím P)'}
+            className={`px-1.5 py-1 rounded border text-[11px] font-mono flex items-center gap-1 transition-all cursor-pointer ${
               snapEnabled
-                ? 'text-[#00E5CC] bg-[#00E5CC]/15 border-[#00E5CC]/40'
-                : 'text-[#71717A] bg-transparent border-transparent hover:text-white'
+                ? 'text-[#00E5CC] bg-[#00E5CC]/15 border-[#00E5CC]/40 shadow-xs'
+                : isLight
+                ? 'text-[#475569] bg-[#F1F5F9] border-[#CBD5E1] hover:text-[#0F172A]'
+                : 'text-[#9CA3AF] bg-[#1C1D22] border-[#2A2C34] hover:text-white hover:border-[#383C48]'
             }`}
           >
             <Magnet className="w-3.5 h-3.5" />
           </button>
+
+          {/* Edge Snapping (N) */}
           <button
             type="button"
             onClick={onToggleAutoSnapEdge}
-            title="Auto snapping (Tự động bắt dính mép clip - Phím N)"
-            className={`px-1.5 py-0.5 rounded border text-[10px] font-mono transition-colors cursor-pointer ${
+            title={language === 'en' ? 'Auto-snapping clip edges (N)' : 'Tự động bắt dính mép clip (Phím N)'}
+            className={`px-2 py-0.5 rounded border text-[11px] font-mono font-bold transition-all cursor-pointer ${
               autoSnapEdge
-                ? 'text-[#00E5CC] bg-[#00E5CC]/15 border-[#00E5CC]/40'
-                : 'text-[#71717A] bg-transparent border-transparent hover:text-white'
+                ? 'text-[#00E5CC] bg-[#00E5CC]/15 border-[#00E5CC]/40 shadow-xs'
+                : isLight
+                ? 'text-[#475569] bg-[#F1F5F9] border-[#CBD5E1] hover:text-[#0F172A]'
+                : 'text-[#9CA3AF] bg-[#1C1D22] border-[#2A2C34] hover:text-white hover:border-[#383C48]'
             }`}
           >
             N
           </button>
+
+          {/* Audio/Video Link */}
           <button
             type="button"
             onClick={onToggleAudioLink}
-            title={audioLinked ? 'Linkage: Đang liên kết Video & Audio (Ctrl+G)' : 'Đã tháo liên kết'}
-            className={`p-1 rounded border transition-colors cursor-pointer ${
+            title={audioLinked ? (language === 'en' ? 'Linked Selection (Ctrl+G)' : 'Đang liên kết Video & Audio') : (language === 'en' ? 'Unlinked Selection' : 'Đã tháo liên kết')}
+            className={`p-1.5 rounded border transition-all cursor-pointer ${
               audioLinked
                 ? 'text-[#00E5CC] bg-[#00E5CC]/15 border-[#00E5CC]/40'
-                : 'text-[#71717A] bg-transparent border-transparent hover:text-white'
+                : isLight
+                ? 'text-[#475569] bg-[#F1F5F9] border-[#CBD5E1] hover:text-[#0F172A]'
+                : 'text-[#9CA3AF] bg-[#1C1D22] border-[#2A2C34] hover:text-white'
             }`}
           >
             {audioLinked ? <Link2 className="w-3.5 h-3.5" /> : <Unlink2 className="w-3.5 h-3.5" />}
           </button>
-          <button
-            type="button"
-            onClick={() => onQuickAiAction?.('prerender')}
-            title="Kết xuất trước đoạn Timeline mượt 60 FPS (Pre-render)"
-            className="p-1 text-[#A1A1AA] hover:text-[#00E5CC] rounded cursor-pointer"
-          >
-            <Cpu className="w-3.5 h-3.5" />
-          </button>
 
-          {/* Live Decibel Audio Meter (-60dB .. 0dB) */}
+          {/* Live Decibel Audio Meter */}
           <div
-            title="Thước đo âm lượng Decibel (-60dB .. -6dB .. 0dB)"
-            className="flex items-center gap-0.5 px-1.5 py-1 bg-[#111115] border border-[#2B2B34] rounded h-5"
+            title="Thước đo âm lượng Decibel (-60dB .. 0dB)"
+            className={`flex items-center gap-0.5 px-1.5 py-1 border rounded h-6 ${
+              isLight
+                ? 'bg-[#F1F5F9] border-[#CBD5E1]'
+                : 'bg-[#121317] border-[#2A2C34]'
+            }`}
           >
             <div
-              style={{ height: isPlaying ? `${45 + ((Math.round(playheadSec * 27)) % 55)}%` : '22%' }}
+              style={{ height: isPlaying ? `${40 + ((Math.round(playheadSec * 29)) % 55)}%` : '20%' }}
               className="w-1 bg-gradient-to-t from-emerald-400 via-amber-400 to-rose-500 rounded-xs transition-all"
             />
             <div
-              style={{ height: isPlaying ? `${35 + ((Math.round(playheadSec * 33)) % 60)}%` : '18%' }}
+              style={{ height: isPlaying ? `${30 + ((Math.round(playheadSec * 37)) % 60)}%` : '15%' }}
               className="w-1 bg-gradient-to-t from-emerald-400 via-amber-400 to-rose-500 rounded-xs transition-all"
             />
           </div>
 
-          <button
-            type="button"
-            onClick={() => applyTimelineZoomWithAnchor(stepTimelineZoom(pixelsPerSecond, 'out'))}
-            title="Thu nhỏ Timeline vừa phải (Ctrl + -)"
-            className="p-1 text-[#A1A1AA] hover:text-white cursor-pointer"
-          >
-            <ZoomOut className="w-3.5 h-3.5" />
-          </button>
-          <input
-            type="range"
-            min={MIN_TIMELINE_ZOOM_PPS}
-            max={MAX_TIMELINE_ZOOM_PPS}
-            step={0.5}
-            value={clampTimelineZoom(pixelsPerSecond)}
-            onChange={(e) => {
-              const rawTarget = Number(e.target.value);
-              applyTimelineZoomWithAnchor(clampTimelineZoom(Number(rawTarget.toFixed(1))));
-            }}
-            title={`Kéo dài / Thu phóng Timeline đồng bộ (${Math.round(pixelsPerSecond)} px/giây — Tối đa ${MAX_TIMELINE_ZOOM_PPS} px/giây)`}
-            aria-label="Thanh phóng to thu nhỏ Timeline"
-            className="w-36 sm:w-44 accent-[#00E5CC] cursor-pointer"
-          />
-          <button
-            type="button"
-            onClick={() => applyTimelineZoomWithAnchor(stepTimelineZoom(pixelsPerSecond, 'in'))}
-            title="Phóng to kéo dài Timeline vừa phải (Ctrl + =)"
-            className="p-1 text-[#A1A1AA] hover:text-white cursor-pointer"
-          >
-            <ZoomIn className="w-3.5 h-3.5" />
-          </button>
+          <div className={`h-4 w-px mx-0.5 ${tbDividerClass}`} />
+
+          {/* Timeline Zoom Controls */}
+          <div className={`flex items-center gap-1 border rounded px-1.5 py-0.5 ${
+            isLight
+              ? 'bg-[#F1F5F9] border-[#CBD5E1]'
+              : 'bg-[#1C1D22] border-[#2A2C34]'
+          }`}>
+            <button
+              type="button"
+              onClick={() => applyTimelineZoomWithAnchor(stepTimelineZoom(pixelsPerSecond, 'out'))}
+              title={language === 'en' ? 'Zoom Out (Ctrl + -)' : 'Thu nhỏ Timeline (Ctrl + -)'}
+              className={`p-1 cursor-pointer transition-colors ${
+                isLight ? 'text-[#64748B] hover:text-[#0F172A]' : 'text-[#9CA3AF] hover:text-white'
+              }`}
+            >
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
+            <input
+              type="range"
+              min={MIN_TIMELINE_ZOOM_PPS}
+              max={MAX_TIMELINE_ZOOM_PPS}
+              step={0.5}
+              value={clampTimelineZoom(pixelsPerSecond)}
+              onChange={(e) => {
+                const rawTarget = Number(e.target.value);
+                applyTimelineZoomWithAnchor(clampTimelineZoom(Number(rawTarget.toFixed(1))));
+              }}
+              title={`Thu phóng Timeline (${Math.round(pixelsPerSecond)} px/s)`}
+              aria-label="Thanh phóng to thu nhỏ Timeline"
+              className="w-24 sm:w-32 accent-[#00E5CC] cursor-pointer h-1.5"
+            />
+            <button
+              type="button"
+              onClick={() => applyTimelineZoomWithAnchor(stepTimelineZoom(pixelsPerSecond, 'in'))}
+              title={language === 'en' ? 'Zoom In (Ctrl + =)' : 'Phóng to Timeline (Ctrl + =)'}
+              className={`p-1 cursor-pointer transition-colors ${
+                isLight ? 'text-[#64748B] hover:text-[#0F172A]' : 'text-[#9CA3AF] hover:text-white'
+              }`}
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const container = scrollContainerRef.current;
+                const availW = container ? container.clientWidth - TRACK_HEADER_WIDTH : 800;
+                const totalDur = Math.max(5, clips.reduce((acc, c) => Math.max(acc, c.startTime + c.duration), 0));
+                const fitPps = clampTimelineZoom(Math.max(MIN_TIMELINE_ZOOM_PPS, Math.min(MAX_TIMELINE_ZOOM_PPS, availW / (totalDur + 2))));
+                onZoomChange(fitPps);
+              }}
+              title={language === 'en' ? 'Zoom to Fit Timeline (Shift+Z)' : 'Thu phóng vừa khung nhìn (Shift+Z)'}
+              className={`px-1.5 py-0.5 text-[9.5px] font-mono font-semibold rounded cursor-pointer transition-colors ${
+                isLight
+                  ? 'text-[#475569] hover:text-[#00C7B7] hover:bg-[#E2E8F0]'
+                  : 'text-[#9CA3AF] hover:text-[#00E5CC] hover:bg-[#252830]'
+              }`}
+            >
+              Fit
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1715,9 +1950,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
         onScroll={(e) => setTimelineScrollLeft(e.currentTarget.scrollLeft)}
         onMouseDown={handleMouseDownEmptyTrackArea}
         onContextMenu={(e) => openEmptyTrackContextMenu(e)}
-        className={`relative flex-1 overflow-x-auto overflow-y-auto bg-[#131316] ${
-          toolMode === 'razor' ? 'cursor-crosshair' : ''
-        }`}
+        className={`relative flex-1 overflow-x-auto overflow-y-auto ${
+          isLight ? 'bg-[#F8FAFC]' : 'bg-[#131316]'
+        } ${toolMode === 'razor' ? 'cursor-crosshair' : ''}`}
       >
         <div
           className="relative min-h-full pb-6"
@@ -1726,12 +1961,21 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
           {/* Timecode Ruler + Markers (Phím M) */}
           <div
             onMouseDown={handlePointerDownRuler}
-            className="sticky top-0 z-20 flex items-center h-6 bg-[#16161A] border-b border-[#232329] cursor-ew-resize"
+            data-track-ruler="true"
+            className={`sticky top-0 z-20 flex items-center h-6 border-b cursor-ew-resize ${
+              isLight
+                ? 'bg-[#F1F5F9] border-[#CBD5E1] text-[#475569]'
+                : 'bg-[#16161A] border-[#232329] text-[#71717A]'
+            }`}
           >
             <div
               style={{ width: `${TRACK_HEADER_WIDTH}px` }}
               onMouseDown={(e) => e.stopPropagation()}
-              className="sticky left-0 z-30 flex items-center justify-between px-2.5 h-full bg-[#16161A] border-r border-[#232329] text-[10px] font-mono text-[#71717A] shrink-0"
+              className={`sticky left-0 z-30 flex items-center justify-between px-2.5 h-full border-r text-[10px] font-mono shrink-0 ${
+                isLight
+                  ? 'bg-[#F1F5F9] border-[#CBD5E1] text-[#475569]'
+                  : 'bg-[#16161A] border-[#232329] text-[#71717A]'
+              }`}
             >
               <span>{visibleTracks.length} LAYERS</span>
               <span>{clips.length} mục</span>
@@ -1739,7 +1983,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
 
             <div
               style={{
-                backgroundImage: `repeating-linear-gradient(to right, rgba(113,113,122,0.28) 0px, rgba(113,113,122,0.28) 1px, transparent 1px, transparent ${rulerConfig.minorStepPx}px)`,
+                backgroundImage: isLight
+                  ? `repeating-linear-gradient(to right, rgba(100,116,139,0.3) 0px, rgba(100,116,139,0.3) 1px, transparent 1px, transparent ${rulerConfig.minorStepPx}px)`
+                  : `repeating-linear-gradient(to right, rgba(113,113,122,0.28) 0px, rgba(113,113,122,0.28) 1px, transparent 1px, transparent ${rulerConfig.minorStepPx}px)`,
                 backgroundPosition: 'left bottom',
                 backgroundSize: `100% 5px`,
                 backgroundRepeat: 'repeat-x',
@@ -1752,10 +1998,12 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   style={{ left: `${tick.timeSec * pixelsPerSecond}px` }}
                   className="absolute top-0 bottom-0 flex flex-col justify-between pointer-events-none"
                 >
-                  <span className="pl-1 pt-0.5 text-[10px] font-mono text-[#71717A] whitespace-nowrap">
+                  <span className={`pl-1 pt-0.5 text-[10px] font-mono whitespace-nowrap ${
+                    isLight ? 'text-[#64748B]' : 'text-[#71717A]'
+                  }`}>
                     | {tick.label}
                   </span>
-                  <div className="w-px h-2 bg-[#52525B]" />
+                  <div className={`w-px h-2 ${isLight ? 'bg-[#94A3B8]' : 'bg-[#52525B]'}`} />
                 </div>
               ))}
 
@@ -1842,14 +2090,22 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                     isDropTarget
                       ? 'bg-[#00E5CC]/10 ring-1 ring-[#00E5CC]/60'
                       : isMainVideo
-                      ? 'bg-[#16161B]'
+                      ? isLight
+                        ? 'bg-[#FFFFFF] border-b border-[#E2E8F0]'
+                        : 'bg-[#16161B]'
+                      : isLight
+                      ? 'bg-[#F8FAFC] border-b border-[#E2E8F0]'
                       : 'bg-[#141418]'
                   }`}
                 >
                   {/* Sticky Left Track Header (Matches CapCut PC left track icons + Up/Down order + Delete Layer) */}
                   <div
                     style={{ width: `${TRACK_HEADER_WIDTH}px` }}
-                    className="sticky left-0 z-20 flex items-center justify-between px-2 h-full bg-[#16161A] border-r border-[#24242C]"
+                    className={`sticky left-0 z-20 flex items-center justify-between px-2 h-full border-r ${
+                      isLight
+                        ? 'bg-[#F1F5F9] border-[#CBD5E1] text-[#475569]'
+                        : 'bg-[#16161A] border-[#24242C] text-[#71717A]'
+                    }`}
                   >
                     <div className="flex items-center gap-1 text-[#71717A]">
                       {/* Track Type Badge */}
@@ -1959,10 +2215,20 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                               }
                             : undefined
                         }
-                        className="flex flex-col items-center justify-center w-8 h-11 bg-[#25252D] hover:bg-[#2F2F3A] border border-[#383844] rounded-xs text-[8px] text-[#D4D4D8] cursor-pointer overflow-hidden shrink-0"
+                        className={`flex flex-col items-center justify-center w-8 h-11 border rounded-xs text-[8px] cursor-pointer overflow-hidden shrink-0 ${
+                          isLight
+                            ? 'bg-[#F1F5F9] hover:bg-[#E2E8F0] border-[#CBD5E1] text-[#334155]'
+                            : 'bg-[#25252D] hover:bg-[#2F2F3A] border-[#383844] text-[#D4D4D8]'
+                        }`}
                       >
-                        <div className="flex flex-col items-center justify-center w-full h-full bg-black/45">
-                          <Edit3 className="w-2.5 h-2.5 text-[#E4E4E7]" />
+                        <div className={`flex flex-col items-center justify-center w-full h-full ${
+                          coverDataUrl
+                            ? 'bg-black/45 text-white'
+                            : isLight
+                            ? 'text-[#334155]'
+                            : 'bg-black/30 text-[#D4D4D8]'
+                        }`}>
+                          <Edit3 className="w-2.5 h-2.5" />
                           <span className="leading-tight">Ảnh bìa</span>
                         </div>
                       </button>
@@ -2532,52 +2798,124 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
 
                         // Case B: Adjacent concatenated clips -> Interactive CapCut Seam Transition Button (⋈)
                         if (Math.abs(gapSec) <= 0.12) {
+                          const seamKey = `seam-${prevClip.id}-${clip.id}`;
+                          const isDragOverSeam = dragOverSeamKey === seamKey;
                           const seamLeftPx = clip.startTime * pixelsPerSecond;
                           const hasTr = Boolean(clip.transitionType && clip.transitionType !== 'none');
                           const trOrder: Array<{ id: TimelineDragPayload['transitionType']; label: string }> = [
-                            { id: 'cross_dissolve', label: 'Hòa tan Mượt (Cross Dissolve)' },
-                            { id: 'slide_left', label: 'Trượt ngang (Slide Left)' },
-                            { id: 'push_up', label: 'Đẩy dọc Lên trên (Push Up)' },
-                            { id: 'wipe_split', label: 'Tách đôi Màn hình (Split Wipe)' },
-                            { id: 'zoom_in', label: 'Kéo gần (Camera Zoom In)' },
-                            { id: 'black_fade', label: 'Chuyển Đen Điện ảnh (Fade Black)' },
-                            { id: 'white_flash', label: 'Chớp Trắng Máy ảnh (White Flash)' },
-                            { id: 'glitch_transition', label: 'Nhiễu sóng Kỹ thuật số (Glitch Cut)' },
+                            { id: 'cross_dissolve', label: 'Hòa tan (Dissolve)' },
+                            { id: 'zoom_in', label: 'Kéo gần (Zoom In)' },
+                            { id: 'spin', label: 'Xoay vòng 360°' },
+                            { id: 'whip_pan', label: 'Lia máy (Whip Pan)' },
+                            { id: 'roll_shutter', label: 'Cuộn ống kính' },
+                            { id: 'pull_out', label: 'Thu xa (Pull Out)' },
+                            { id: 'slide_left', label: 'Trượt ngang' },
+                            { id: 'wipe_split', label: 'Tách đôi (Split)' },
+                            { id: 'clock_sweep', label: 'Quét kim đồng hồ' },
+                            { id: 'push_up', label: 'Đẩy lên (Push Up)' },
+                            { id: 'black_fade', label: 'Chuyển đen (Fade Black)' },
+                            { id: 'white_flash', label: 'Chớp trắng (Flash)' },
+                            { id: 'glitch_transition', label: 'Nhiễu sóng (Glitch)' },
+                            { id: 'film_burn', label: 'Cháy sáng phim' },
+                            { id: 'rgb_split', label: 'Tách kênh RGB' },
                             { id: 'none', label: 'Không chuyển tiếp' },
                           ];
                           return (
                             <button
-                              key={`seam-${prevClip.id}-${clip.id}`}
+                              key={seamKey}
                               type="button"
                               data-testid="timeline-seam-transition-btn"
+                              onDragOver={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                e.dataTransfer.dropEffect = 'copy';
+                                if (dragOverSeamKey !== seamKey) {
+                                  setDragOverSeamKey(seamKey);
+                                }
+                              }}
+                              onDragEnter={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setDragOverSeamKey(seamKey);
+                              }}
+                              onDragLeave={(e) => {
+                                e.stopPropagation();
+                                if (dragOverSeamKey === seamKey) {
+                                  setDragOverSeamKey(null);
+                                }
+                              }}
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setDragOverSeamKey(null);
+                                const raw =
+                                  e.dataTransfer.getData('application/x-tdocut-drag') ||
+                                  e.dataTransfer.getData('application/x-trendopsis-drag') ||
+                                  e.dataTransfer.getData('application/json');
+                                if (!raw || !onDropResourceOnTimeline) return;
+                                try {
+                                  const payload = JSON.parse(raw) as TimelineDragPayload;
+                                  if (payload.kind === 'transition') {
+                                    onDropResourceOnTimeline(payload, 0, clip.startTime, clip.id);
+                                    onSelectClip(clip.id);
+                                    onPlayheadChange(clip.startTime);
+                                    onOpenTransitions?.(clip.id);
+                                  }
+                                } catch {
+                                  // Ignore malformed drag data
+                                }
+                              }}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                const curIdx = trOrder.findIndex((t) => t.id === (clip.transitionType || 'none'));
-                                const nextItem = trOrder[(curIdx + 1) % trOrder.length];
-                                onDropResourceOnTimeline?.(
-                                  {
-                                    kind: 'transition',
-                                    name: nextItem.label,
-                                    duration: clip.transitionDuration || 0.6,
-                                    transitionType: nextItem.id,
-                                  },
-                                  0,
-                                  clip.startTime + 0.05,
-                                  clip.id
-                                );
                                 onSelectClip(clip.id);
                                 onPlayheadChange(clip.startTime);
+                                onOpenTransitions?.(clip.id);
+
+                                const chosenTransition =
+                                  activeSelectedTransition && activeSelectedTransition.id !== 'none'
+                                    ? activeSelectedTransition
+                                    : undefined;
+
+                                if (chosenTransition) {
+                                  onDropResourceOnTimeline?.(
+                                    {
+                                      kind: 'transition',
+                                      name: chosenTransition.label,
+                                      duration: chosenTransition.dur || clip.transitionDuration || 0.6,
+                                      transitionType: chosenTransition.id,
+                                    },
+                                    0,
+                                    clip.startTime + 0.05,
+                                    clip.id
+                                  );
+                                } else {
+                                  const curIdx = trOrder.findIndex((t) => t.id === (clip.transitionType || 'none'));
+                                  const nextItem = trOrder[(curIdx + 1) % trOrder.length];
+                                  onDropResourceOnTimeline?.(
+                                    {
+                                      kind: 'transition',
+                                      name: nextItem.label,
+                                      duration: clip.transitionDuration || 0.6,
+                                      transitionType: nextItem.id,
+                                    },
+                                    0,
+                                    clip.startTime + 0.05,
+                                    clip.id
+                                  );
+                                }
                               }}
                               title={
                                 hasTr
-                                  ? `Chuyển cảnh nối clip: ${clip.transitionType} (${clip.transitionDuration ?? 0.6}s) — Bấm để đổi hiệu ứng chuyển tiếp`
-                                  : 'Điểm nối (Concat Seam) — Bấm để thêm hiệu ứng Chuyển cảnh (Transition ⋈) giữa 2 clip'
+                                  ? `Chuyển cảnh nối clip: ${clip.transitionType} (${clip.transitionDuration ?? 0.6}s) — Bấm để đổi hiệu ứng hoặc kéo thả trực tiếp vào đây`
+                                  : 'Mắc nối tiếp (Cut Joint) — Bấm để thêm hiệu ứng Chuyển cảnh (Transition ⋈) hoặc kéo thả trực tiếp vào đây'
                               }
                               style={{ left: `${seamLeftPx}px` }}
-                              className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 z-35 w-4 h-4 rounded-xs flex items-center justify-center text-[9px] font-extrabold shadow-md cursor-pointer transition-transform hover:scale-125 ${
-                                hasTr
-                                  ? 'bg-[#00E5CC] text-[#071013] border border-white shadow-[0_0_8px_rgba(0,229,204,0.8)]'
-                                  : 'bg-[#181B24]/95 hover:bg-[#00E5CC] text-[#E4E4E7] hover:text-[#071013] border border-white/35'
+                              className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 z-35 w-6 h-6 rounded flex items-center justify-center text-[11px] font-black shadow-md cursor-pointer transition-all before:absolute before:-inset-2 before:content-[''] ${
+                                isDragOverSeam
+                                  ? 'scale-125 bg-[#00E5CC] text-[#071013] border-2 border-white shadow-[0_0_16px_rgba(0,229,204,1)] ring-2 ring-[#00E5CC]'
+                                  : hasTr
+                                  ? 'bg-[#00E5CC] text-[#071013] border border-white shadow-[0_0_8px_rgba(0,229,204,0.8)] hover:scale-115'
+                                  : 'bg-[#181B24]/95 hover:bg-[#00E5CC] text-[#E4E4E7] hover:text-[#071013] border border-white/35 hover:scale-115'
                               }`}
                             >
                               ⋈

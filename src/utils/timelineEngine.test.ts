@@ -56,24 +56,37 @@ import {
   detectAspectRatioFromDimensions,
   deleteMediaCardsAndLinkedClips,
   resolveDefaultProjectTitle,
+  getProjectInstallDir,
+  getProjectFullDirPath,
+  getDefaultExportDirPath,
+  DEFAULT_TDO_INSTALL_DIR,
   computeRealisticExportEstimate,
   TimelineClip,
 } from './timelineEngine';
 
-test('resolveDefaultProjectTitle replaces 0421-sao chép / empty / Chưa có dự án with Nhập tên dự án (VI) and Enter project name (EN)', () => {
-  assert.equal(resolveDefaultProjectTitle('', 'vi'), 'Nhập tên dự án');
-  assert.equal(resolveDefaultProjectTitle('0421-sao chép', 'vi'), 'Nhập tên dự án');
-  assert.equal(resolveDefaultProjectTitle('Chưa có dự án', 'vi'), 'Nhập tên dự án');
-  assert.equal(resolveDefaultProjectTitle('Enter project name', 'vi'), 'Nhập tên dự án');
+test('resolveDefaultProjectTitle replaces 0421-sao chép / empty / Chưa có dự án / 1 with Dự án 1', () => {
+  assert.equal(resolveDefaultProjectTitle('', 'vi'), 'Dự án 1');
+  assert.equal(resolveDefaultProjectTitle('1', 'vi'), 'Dự án 1');
+  assert.equal(resolveDefaultProjectTitle('0421-sao chép', 'vi'), 'Dự án 1');
+  assert.equal(resolveDefaultProjectTitle('Chưa có dự án', 'vi'), 'Dự án 1');
+  assert.equal(resolveDefaultProjectTitle('Enter project name', 'vi'), 'Dự án 1');
+  assert.equal(resolveDefaultProjectTitle('Nhập tên dự án', 'vi'), 'Dự án 1');
 
-  assert.equal(resolveDefaultProjectTitle('', 'en'), 'Enter project name');
-  assert.equal(resolveDefaultProjectTitle('0421-sao chép', 'en'), 'Enter project name');
-  assert.equal(resolveDefaultProjectTitle('Nhập tên dự án', 'en'), 'Enter project name');
-  assert.equal(resolveDefaultProjectTitle('Chưa có dự án', 'en'), 'Enter project name');
+  assert.equal(resolveDefaultProjectTitle('', 'en'), 'Dự án 1');
+  assert.equal(resolveDefaultProjectTitle('1', 'en'), 'Dự án 1');
+  assert.equal(resolveDefaultProjectTitle('0421-sao chép', 'en'), 'Dự án 1');
+  assert.equal(resolveDefaultProjectTitle('Nhập tên dự án', 'en'), 'Dự án 1');
+  assert.equal(resolveDefaultProjectTitle('Chưa có dự án', 'en'), 'Dự án 1');
 
   // Custom user project names are preserved
   assert.equal(resolveDefaultProjectTitle('Golpo AI Demo', 'vi'), 'Golpo AI Demo');
   assert.equal(resolveDefaultProjectTitle('Golpo AI Demo', 'en'), 'Golpo AI Demo');
+});
+
+test('getProjectInstallDir and getProjectFullDirPath compute exact dynamic installation path', () => {
+  assert.equal(getProjectInstallDir(), DEFAULT_TDO_INSTALL_DIR);
+  assert.equal(getProjectFullDirPath('Dự án 1'), 'd:/DỰ ÁN TDO-CUT/TDO-CUT/projects/Dự án 1');
+  assert.equal(getDefaultExportDirPath(), 'd:/DỰ ÁN TDO-CUT/TDO-CUT/exports');
 });
 
 test('computeRealisticExportEstimate calculates realistic MB size from source fileSizeBytes instead of inflated 731.2 MB', () => {
@@ -1019,6 +1032,7 @@ test('computeCapCutDragInsertionPreview opens exact insertion slot, slides subse
     9.0,
     true
   );
+  assert.ok(previewBetween.slot);
   assert.equal(previewBetween.slot.trackIndex, 0);
   assert.equal(previewBetween.slot.startTime, 10);
   assert.equal(previewBetween.slot.duration, 8);
@@ -1036,6 +1050,7 @@ test('computeCapCutDragInsertionPreview opens exact insertion slot, slides subse
     12.0,
     true
   );
+  assert.ok(previewOverlay.slot);
   assert.equal(previewOverlay.slot.trackIndex, 3);
   assert.equal(previewOverlay.slot.startTime, 12);
   assert.equal(previewOverlay.slot.duration, 20);
@@ -1236,6 +1251,81 @@ test('resolveEffectiveClipAspectRatio preserves independent per-clip aspect rati
     `Expected qualityLabel to include 1080×1920 · 30 FPS, got ${est1080.qualityLabel}`
   );
 });
+
+test('ensureInitialProjects returns empty list for new users and seam cut joint resolves accurately', async () => {
+  const { ensureInitialProjects } = await import('./projectDatabase');
+  const { resolveTransitionTargetClip } = await import('./timelineEngine');
+
+  const initial = await ensureInitialProjects();
+  assert.deepEqual(
+    initial,
+    [],
+    'ensureInitialProjects must return empty array [] so new user starts with 0 default projects'
+  );
+
+  // Test cut joint transition target resolution
+  const clipA: TimelineClip = createDefaultClip({
+    id: 'clip-a',
+    name: 'Intro.mp4',
+    trackIndex: 0,
+    startTime: 0,
+    duration: 5.0,
+  });
+  const clipB: TimelineClip = createDefaultClip({
+    id: 'clip-b',
+    name: 'Scene2.mp4',
+    trackIndex: 0,
+    startTime: 5.0,
+    duration: 5.0,
+  });
+  const clipC: TimelineClip = createDefaultClip({
+    id: 'clip-c',
+    name: 'Outro.mp4',
+    trackIndex: 0,
+    startTime: 10.0,
+    duration: 5.0,
+  });
+  const videoClips = [clipA, clipB, clipC].sort((a, b) => a.startTime - b.startTime);
+
+  // Scenario 1: User drops transition at 4.9s onto clip-a (preceding clip near seam)
+  // Even though HTML5 drop event sends targetClipId = 'clip-a', target must resolve to clip-b!
+  const target1 = resolveTransitionTargetClip(videoClips, 4.9, 'clip-a');
+  assert.equal(
+    target1?.id,
+    'clip-b',
+    'Drop at 4.9s onto clip-a must resolve to clip-b (the incoming seam clip)'
+  );
+
+  // Scenario 2: User drops directly onto seam button at 5.0s (targetClipId = 'clip-b')
+  const target2 = resolveTransitionTargetClip(videoClips, 5.0, 'clip-b');
+  assert.equal(target2?.id, 'clip-b', 'Drop at 5.0s onto seam button must resolve to clip-b');
+
+  // Scenario 3: User drops at 5.2s onto clip-b
+  const target3 = resolveTransitionTargetClip(videoClips, 5.2, 'clip-b');
+  assert.equal(target3?.id, 'clip-b', 'Drop at 5.2s onto clip-b must resolve to clip-b');
+
+  // Scenario 4: User drops at 9.8s near seam between clip-b and clip-c (targetClipId = 'clip-b')
+  // Even though dropped on clip-b's tail, target must resolve to clip-c!
+  const target4 = resolveTransitionTargetClip(videoClips, 9.8, 'clip-b');
+  assert.equal(
+    target4?.id,
+    'clip-c',
+    'Drop at 9.8s onto tail of clip-b must resolve to clip-c (seam at 10.0s)'
+  );
+
+  // Scenario 5: User drops at 10.0s onto second seam button (targetClipId = 'clip-c')
+  const target5 = resolveTransitionTargetClip(videoClips, 10.0, 'clip-c');
+  assert.equal(target5?.id, 'clip-c', 'Drop at 10.0s onto seam button must resolve to clip-c');
+
+  // Scenario 6: User drops without targetClipId at 4.95s (e.g. from track background or library click)
+  const target6 = resolveTransitionTargetClip(videoClips, 4.95);
+  assert.equal(target6?.id, 'clip-b', 'Drop without targetClipId at 4.95s must resolve to clip-b');
+
+  // Scenario 7: User drops without targetClipId at 10.1s
+  const target7 = resolveTransitionTargetClip(videoClips, 10.1);
+  assert.equal(target7?.id, 'clip-c', 'Drop without targetClipId at 10.1s must resolve to clip-c');
+});
+
 
 
 

@@ -1,14 +1,20 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+@theme {
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
 @layer base {
-  body {
-    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  :root, html, body {
+    font-family: var(--font-sans);
+    letter-spacing: -0.011em;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
   code, pre, .font-mono {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
   }
 }
@@ -49,126 +55,280 @@ html.light ::-webkit-scrollbar-thumb:hover,
 }
 
 /* Daylight Studio Surface Remapping */
-[data-theme="light"] {
+html.light,
+html.light body,
+[data-theme="light"],
+[data-theme="light"] body {
   background-color: #F1F5F9 !important;
   color: #0F172A !important;
 }
 
 /* Deepest app & timeline canvas backgrounds -> Crisp Slate-100 (#F1F5F9) */
+html.light .bg-black:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+[data-theme="light"] .bg-black:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#000000\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+[data-theme="light"] .bg-\[\#000000\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#070B10\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#070B10\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#0B0D13\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+[data-theme="light"] .bg-\[\#0B0D13\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#0C0D10\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#0C0D10\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#0C0D12\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+[data-theme="light"] .bg-\[\#0C0D12\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#0D0D10\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#0D0D10\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#0D0E12\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+[data-theme="light"] .bg-\[\#0D0E12\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#0E0E12\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#0E0E12\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#0F1014\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#0F1014\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#101013\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#101013\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#101014\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#101014\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#101115\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#101115\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#101116\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#101116\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#101218\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+[data-theme="light"] .bg-\[\#101218\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#111114\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#111114\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#111115\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#111115\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#121215\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#121215\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#121216\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#121216\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#121317\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+[data-theme="light"] .bg-\[\#121317\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#121318\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#121318\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#121624\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#121624\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#131316\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#131316\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#131317\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#131317\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#141418\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#141418\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#141419\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#141419\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#14151A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#14151A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *) {
   background-color: #F1F5F9 !important;
 }
 
 /* Primary panels, headers, sidebars, inspector cards -> Pure White (#FFFFFF) */
+html.light .bg-\[\#131418\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+[data-theme="light"] .bg-\[\#131418\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#15151A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#15151A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#15161A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+[data-theme="light"] .bg-\[\#15161A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#16161A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#16161A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#16161B\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#16161B\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#161820\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#161820\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#17171C\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#17171C\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#18181C\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#18181C\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#18181E\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#18181E\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#181920\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#181920\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#181A22\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#181A22\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#181B24\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+[data-theme="light"] .bg-\[\#181B24\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#1A1A20\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#1A1A20\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#1A1A22\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#1A1A22\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#1B1B22\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#1B1B22\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#1C1C22\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#1C1C22\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#1C1C24\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#1C1C24\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#1C1D22\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+[data-theme="light"] .bg-\[\#1C1D22\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#1C1D24\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#1C1D24\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
-[data-theme="light"] .bg-\[\#1C1E26\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *) {
+html.light .bg-\[\#1C1E26\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+[data-theme="light"] .bg-\[\#1C1E26\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#1D1D24\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+[data-theme="light"] .bg-\[\#1D1D24\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *) {
   background-color: #FFFFFF !important;
 }
 
 /* Interactive buttons, inputs, segmented controls, pills -> Slate-100/200 (#E2E8F0 / #F8FAFC) */
+html.light .bg-\[\#1E1E24\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#1E1E24\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#1E1E26\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#1E1E26\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#1E1F26\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#1E1F26\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#1E1F28\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#1E1F28\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#1E2028\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#1E2028\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#1E212B\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#1E212B\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#1F1F24\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+[data-theme="light"] .bg-\[\#1F1F24\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#1F1F26\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#1F1F26\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#1F1F27\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#1F1F27\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#1F212A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#1F212A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#1F222D\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#1F222D\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#202028\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#202028\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#20232E\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#20232E\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#202636\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#202636\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#222228\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#222228\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#22222A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#22222A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#22222B\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#22222B\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#22222C\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#22222C\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#22242B\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+[data-theme="light"] .bg-\[\#22242B\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#222530\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+[data-theme="light"] .bg-\[\#222530\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#23232A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#23232A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#23232B\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#23232B\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#23252C\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#23252C\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#23252E\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#23252E\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#242429\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#242429\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#24242B\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#24242B\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#24242C\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#24242C\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#25252B\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+[data-theme="light"] .bg-\[\#25252B\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#25252C\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#25252C\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#25252D\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#25252D\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#25252E\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#25252E\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#252530\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#252530\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#252630\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#252630\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#252732\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#252732\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#252830\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+[data-theme="light"] .bg-\[\#252830\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#252832\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+[data-theme="light"] .bg-\[\#252832\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#252836\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#252836\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#26262F\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#26262F\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#262630\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#262630\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#262934\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#262934\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#262936\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#262936\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#27272E\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#27272E\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#272730\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#272730\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#28282E\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+[data-theme="light"] .bg-\[\#28282E\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#282830\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#282830\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#2A2A32\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#2A2A32\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#2A2A34\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#2A2A34\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#2A2B32\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#2A2B32\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#2A2B36\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#2A2B36\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#2A2C34\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+[data-theme="light"] .bg-\[\#2A2C34\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#2A2D3A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#2A2D3A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#2B2B30\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#2B2B30\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#2B2B34\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#2B2B34\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#2B2B36\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#2B2B36\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#2B2C35\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+[data-theme="light"] .bg-\[\#2B2C35\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#2B2E3B\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#2B2E3B\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#2B2F3E\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#2B2F3E\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#2B3347\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#2B3347\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#2C2C35\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#2C2C35\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#2C2C36\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#2C2C36\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#2C2C38\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#2C2C38\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#2D2D38\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#2D2D38\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#2E2E38\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#2E2E38\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#2E2E3A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#2E2E3A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#2E313A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+[data-theme="light"] .bg-\[\#2E313A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#2F2F3A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#2F2F3A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#2F3240\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#2F3240\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#30303A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#30303A\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#30303B\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#30303B\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#30303C\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#30303C\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#30303E\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#30303E\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#32323E\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#32323E\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#323240\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#323240\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#343440\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#343440\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#34353E\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#34353E\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#353542\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#353542\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#363640\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#363640\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#3A3A44\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#3A3A44\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#3A3A46\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#3A3A46\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#3A3A48\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#3A3A48\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
+html.light .bg-\[\#3B3B48\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *),
 [data-theme="light"] .bg-\[\#3B3B48\]:not([data-keep-dark="true"]):not([data-keep-dark="true"] *) {
   background-color: #F1F5F9 !important;
 }
@@ -252,9 +412,9 @@ html.light ::-webkit-scrollbar-thumb:hover,
   color: #475569 !important;
 }
 
-/* Deep studio teal text in Light Mode so cyan text never washes out against white panels */
+/* Electric turquoise text in Light Mode so brand cyan remains vivid yet readable against white panels */
 [data-theme="light"] .text-\[\#00E5CC\]:not([class*="bg-black/"]):not([class*="bg-black/"] *):not([data-clip-item="true"] *) {
-  color: #0D9488 !important;
+  color: #00A89A !important;
 }
 
 /* Keep translucent dark badges on media cards & cover buttons crisp with white text */
@@ -263,40 +423,119 @@ html.light ::-webkit-scrollbar-thumb:hover,
   color: #FFFFFF !important;
 }
 
-/* Floating TdoEdit Pill in Light Mode: crisp white surface, teal border, dark slate text */
+/* Floating TdoEdit Pill in Light Mode: crisp white surface, cyan border, dark slate text */
 [data-theme="light"] [data-tdoedit-pill="true"] {
   background-color: #FFFFFF !important;
-  border-color: #0D9488 !important;
+  border-color: #00D2C4 !important;
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14) !important;
 }
 [data-theme="light"] [data-tdoedit-pill="true"] button {
   color: #0F172A !important;
 }
 [data-theme="light"] [data-tdoedit-pill="true"] button:hover {
-  background-color: #CCFBF1 !important;
-  color: #0F766E !important;
+  background-color: #E0FBF8 !important;
+  color: #008B7D !important;
 }
 
-/* Timeline Playhead Needle & Cap in Light Mode: high-contrast dark slate + teal cap (never white-on-white) */
+/* Timeline Playhead Needle & Cap in Light Mode: high-contrast dark slate + electric cyan cap (never white-on-white) */
 [data-theme="light"] [data-playhead-line="true"] {
   background-color: #0F172A !important;
-  box-shadow: 0 0 6px rgba(13, 148, 136, 0.55) !important;
+  box-shadow: 0 0 6px rgba(0, 210, 196, 0.55) !important;
 }
 [data-theme="light"] [data-playhead-cap="true"] {
-  background-color: #0D9488 !important;
+  background-color: #00D2C4 !important;
   border-color: #0F172A !important;
 }
 
-/* Selected Timeline Clips in Light Mode: bold dark/teal border instead of white-on-white border */
+/* Selected Timeline Clips in Light Mode: bold dark/cyan border instead of white-on-white border */
 [data-theme="light"] [data-clip-item="true"].border-white {
   border-color: #0F172A !important;
-  box-shadow: 0 0 0 2px #0D9488, 0 2px 8px rgba(15, 23, 42, 0.25) !important;
+  box-shadow: 0 0 0 2px #00D2C4, 0 2px 8px rgba(15, 23, 42, 0.25) !important;
 }
 
 /* Range Sliders in Light Mode: visible Slate-300 track bar */
 [data-theme="light"] input[type="range"] {
   background-color: #CBD5E1 !important;
   border-radius: 9999px;
+}
+
+/* Form Inputs, Selects, and Textareas in Light Mode */
+[data-theme="light"] input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+[data-theme="light"] select,
+[data-theme="light"] textarea {
+  background-color: #F8FAFC !important;
+  border-color: #CBD5E1 !important;
+  color: #0F172A !important;
+}
+
+[data-theme="light"] input::placeholder,
+[data-theme="light"] textarea::placeholder {
+  color: #64748B !important;
+}
+
+/* Timeline Track Lanes & Dividers in Light Mode */
+html.light [data-track-index],
+[data-theme="light"] [data-track-index] {
+  background-color: #F8FAFC !important;
+  border-bottom: 1px solid #E2E8F0 !important;
+}
+html.light [data-track-index="0"],
+[data-theme="light"] [data-track-index="0"] {
+  background-color: #FFFFFF !important;
+}
+html.light [data-track-index] > div:first-child,
+[data-theme="light"] [data-track-index] > div:first-child {
+  background-color: #F1F5F9 !important;
+  border-right: 1px solid #CBD5E1 !important;
+  border-bottom: 1px solid #E2E8F0 !important;
+}
+html.light [data-track-ruler="true"],
+[data-theme="light"] [data-track-ruler="true"] {
+  background-color: #F8FAFC !important;
+  border-bottom: 1px solid #CBD5E1 !important;
+  color: #475569 !important;
+}
+html.light [data-track-ruler="true"] > div,
+[data-theme="light"] [data-track-ruler="true"] > div {
+  background-color: #F8FAFC !important;
+  border-color: #CBD5E1 !important;
+  color: #475569 !important;
+}
+html.light [data-track-ruler="true"] span,
+[data-theme="light"] [data-track-ruler="true"] span {
+  color: #475569 !important;
+}
+
+/* Home Launcher & Card Elements in Light Mode */
+html.light .group.bg-\[\#161820\],
+[data-theme="light"] .group.bg-\[\#161820\],
+html.light .group.bg-\[\#181A22\],
+[data-theme="light"] .group.bg-\[\#181A22\] {
+  background-color: #FFFFFF !important;
+  border-color: #E2E8F0 !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06) !important;
+}
+html.light .group.bg-\[\#161820\]:hover,
+[data-theme="light"] .group.bg-\[\#161820\]:hover,
+html.light .group.bg-\[\#181A22\]:hover,
+[data-theme="light"] .group.bg-\[\#181A22\]:hover {
+  border-color: #00D2C4 !important;
+  box-shadow: 0 4px 12px rgba(0, 210, 196, 0.16) !important;
+}
+
+/* Modals & Dialogs in Light Mode */
+html.light [role="dialog"],
+[data-theme="light"] [role="dialog"] {
+  background-color: rgba(15, 23, 42, 0.65) !important;
+}
+
+html.light [role="dialog"] > div,
+[data-theme="light"] [role="dialog"] > div,
+html.light .modal-container,
+[data-theme="light"] .modal-container {
+  background-color: #FFFFFF !important;
+  border-color: #CBD5E1 !important;
+  color: #0F172A !important;
 }
 
 

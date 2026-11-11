@@ -11,6 +11,7 @@ import {
   Search,
   LayoutGrid,
   List,
+  LayoutTemplate,
   Trash2,
   Settings,
   Cloud,
@@ -36,6 +37,8 @@ import {
   AppLanguage,
   StudioThemeMode,
   getFlagGraphicDataUrl,
+  getProjectInstallDir,
+  setProjectInstallDir,
 } from '../utils/timelineEngine';
 
 export type HomeQuickToolId =
@@ -49,6 +52,7 @@ export interface HomeTemplatePreset {
   id: string;
   titleVi: string;
   titleEn: string;
+  name?: string;
   categoryVi: string;
   categoryEn: string;
   aspectRatio: '16:9' | '9:16' | '1:1';
@@ -56,6 +60,9 @@ export interface HomeTemplatePreset {
   clipsCount: number;
   gradient: string;
   badgeText: string;
+  effect?: any;
+  filter?: any;
+  transition?: any;
 }
 
 const STUDIO_TEMPLATES: HomeTemplatePreset[] = [
@@ -105,7 +112,7 @@ const STUDIO_TEMPLATES: HomeTemplatePreset[] = [
     durationSec: 30,
     clipsCount: 9,
     gradient: 'linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%)',
-    badgeText: 'AI VOICE',
+    badgeText: 'VOICE',
   },
   {
     id: 'tpl-flash-sale',
@@ -128,8 +135,8 @@ const STUDIO_TEMPLATES: HomeTemplatePreset[] = [
     aspectRatio: '16:9',
     durationSec: 18,
     clipsCount: 12,
-    gradient: 'linear-gradient(135deg, #10B981 0%, #047857 100%)',
-    badgeText: 'BEAT AI',
+    gradient: 'linear-gradient(135deg, #00E5CC 0%, #0D9488 100%)',
+    badgeText: 'AUTO BEAT',
   },
 ];
 
@@ -142,6 +149,8 @@ interface HomeLauncherViewProps {
   onDuplicateProject: (id: string) => void;
   onDeleteProject: (id: string) => void;
   onRestoreProject: (id: string) => void;
+  onPermanentDeleteProject?: (id: string) => void;
+  onEmptyTrash?: () => void;
   onStartRecordScreen: () => void;
   onOpenMatrixBatch: () => void;
   onOpenSettings: () => void;
@@ -163,6 +172,8 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
   onDuplicateProject,
   onDeleteProject,
   onRestoreProject,
+  onPermanentDeleteProject,
+  onEmptyTrash,
   onStartRecordScreen,
   onOpenMatrixBatch,
   onOpenSettings,
@@ -229,44 +240,56 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
   };
 
   return (
-    <div className="flex flex-1 min-h-0 bg-[#0F1014] text-[#E4E4E7] overflow-hidden select-none">
-      {/* Left Navigation Sidebar (TDO CUT Studio Hub) */}
-      <aside className="w-56 bg-[#14151A] border-r border-[#262730] p-3 flex flex-col justify-between shrink-0">
+    <div className={`flex flex-1 min-h-0 overflow-hidden select-none ${
+      themeMode === 'light' ? 'bg-[#F1F5F9] text-[#0F172A]' : 'bg-[#0F1014] text-[#E4E4E7]'
+    }`}>
+      {/* Left Navigation Sidebar (TDO CUT Studio Hub) - hidden on mobile screens, shown on desktop */}
+      <aside className={`hidden md:flex w-56 p-3 flex-col justify-between shrink-0 border-r ${
+        themeMode === 'light'
+          ? 'bg-[#FFFFFF] border-[#E2E8F0] text-[#0F172A]'
+          : 'bg-[#14151A] border-[#262730] text-[#E4E4E7]'
+      }`}>
         <div className="space-y-4">
           {/* Account & TDO CUT Brand Card */}
-          <div className="p-2.5 bg-[#1C1D24] border border-[#2C2E3A] rounded-lg space-y-2.5">
+          <div className={`p-3 rounded-xl space-y-2.5 border ${
+            themeMode === 'light'
+              ? 'bg-[#F8FAFC] border-[#E2E8F0]'
+              : 'bg-[#181A22] border-[#272A36]'
+          }`}>
             <div className="flex items-center gap-2.5">
               <img
                 src="/assets/logo.png"
                 alt="TDO CUT Logo"
-                className="w-9 h-9 rounded-lg object-contain bg-white p-0.5 shadow-sm shrink-0"
+                className="w-8 h-8 rounded-lg object-contain bg-white p-0.5 shadow-xs shrink-0"
               />
               <div className="min-w-0">
-                <div className="text-xs font-bold text-white truncate">TDO CUT Studio</div>
-                <div className="text-[10px] text-[#9CA3AF]">Pro GPU Engine · Cloud Sync</div>
+                <div className={`text-xs font-semibold tracking-tight truncate ${
+                  themeMode === 'light' ? 'text-[#0F172A]' : 'text-white'
+                }`}>TDO-CUT Studio</div>
+                <div className="text-[10px] text-[#9CA3AF]">Desktop Edition</div>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={onBackToEditor}
-              className="w-full py-1.5 px-2.5 rounded bg-[#182B2E] border border-[#00E5CC]/40 text-[#00E5CC] font-semibold text-[10.5px] flex items-center justify-center gap-1.5 cursor-pointer hover:bg-[#1E363A]"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+            <div className={`w-full py-1.5 px-2 rounded-lg text-[10.5px] flex items-center justify-center gap-1.5 border ${
+              themeMode === 'light'
+                ? 'bg-[#F1F5F9] border-[#CBD5E1] text-[#334155]'
+                : 'bg-[#101218] border-white/5 text-[#9CA3AF]'
+            }`}>
+              <CheckCircle2 className="w-3.5 h-3.5 text-[#00E5CC] shrink-0" />
               <span className="truncate">
-                {isEn ? 'TDO CUT Pro Edition Ready' : 'Phiên bản TDO CUT Pro Studio'}
+                {isEn ? 'Studio Edition Activated' : 'Phiên bản Studio Pro'}
               </span>
-            </button>
+            </div>
           </div>
 
           {/* Navigation Links */}
           <nav className="space-y-1 text-xs">
             {(
               [
-                { id: 'home', label: isEn ? 'Home' : 'Trang chủ (Home)', icon: LayoutGrid },
-                { id: 'templates', label: isEn ? 'Templates' : 'Mẫu (Templates)', icon: Sparkles },
-                { id: 'spaces', label: isEn ? 'Cloud Spaces' : 'Không gian đám mây (Spaces)', icon: Cloud },
-                { id: 'ai_design', label: isEn ? 'AI Design & Poster' : 'Thiết kế AI & Poster', icon: Wand2 },
-                { id: 'trash', label: isEn ? 'Trash (30 Days)' : 'Thùng rác (Trash 30 ngày)', icon: Trash2 },
+                { id: 'home', label: isEn ? 'Home' : 'Trang chủ', icon: LayoutGrid },
+                { id: 'templates', label: isEn ? 'Templates' : 'Mẫu dự án', icon: LayoutTemplate },
+                { id: 'spaces', label: isEn ? 'Cloud Storage' : 'Bộ nhớ đám mây', icon: Cloud },
+                { id: 'ai_design', label: isEn ? 'Cover Design' : 'Thiết kế ảnh bìa', icon: ImageIcon },
+                { id: 'trash', label: isEn ? 'Trash' : 'Thùng rác', icon: Trash2 },
               ] as const
             ).map((item) => {
               const Icon = item.icon;
@@ -276,9 +299,11 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                   key={item.id}
                   type="button"
                   onClick={() => setNavTab(item.id)}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md transition-colors cursor-pointer ${
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors cursor-pointer ${
                     active
-                      ? 'bg-[#00E5CC]/15 text-[#00E5CC] font-semibold border border-[#00E5CC]/30'
+                      ? 'bg-[#00E5CC]/15 text-[#00E5CC] font-medium border border-[#00E5CC]/30'
+                      : themeMode === 'light'
+                      ? 'text-[#475569] hover:text-[#0F172A] hover:bg-[#F1F5F9]'
                       : 'text-[#A1A1AA] hover:text-white hover:bg-[#1E2028]'
                   }`}
                 >
@@ -291,50 +316,89 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
         </div>
 
         {/* Cloud Space Quota Footer */}
-        <div className="p-2.5 bg-[#181920] border border-[#262834] rounded-md space-y-1.5 text-[11px]">
-          <div className="flex items-center justify-between text-[#A1A1AA]">
-            <span>TDO CUT Cloud Space</span>
-            <span className="font-mono text-[#00E5CC]">{cloudUsedMb} MB / 1 GB</span>
+        <div className={`p-3 rounded-xl space-y-2 text-[11px] border ${
+          themeMode === 'light'
+            ? 'bg-[#F8FAFC] border-[#E2E8F0]'
+            : 'bg-[#181A22] border-[#272A36]'
+        }`}>
+          <div className="flex items-center justify-between text-[#9CA3AF]">
+            <span className="font-normal">{isEn ? 'Cloud Storage' : 'Bộ nhớ đám mây'}</span>
+            <span className="font-mono text-[#00E5CC] text-[10.5px]">{cloudUsedMb} MB / 1 GB</span>
           </div>
-          <div className="w-full h-1.5 bg-[#101115] rounded-full overflow-hidden">
+          <div className={`w-full h-1 rounded-full overflow-hidden ${
+            themeMode === 'light' ? 'bg-[#E2E8F0]' : 'bg-[#101218]'
+          }`}>
             <div style={{ width: `${cloudUsedPct}%` }} className="h-full bg-[#00E5CC]" />
           </div>
-          <button
-            type="button"
-            onClick={onBackToEditor}
-            className="w-full mt-1 py-1.5 bg-[#252732] hover:bg-[#2F3240] text-white font-semibold rounded text-center cursor-pointer"
-          >
-            {activeProjectName && activeProjectsList.length > 0
-              ? isEn
-                ? `Back to Editor (${activeProjectName})`
-                : `Quay lại Bàn dựng (${activeProjectName})`
-              : isEn
-              ? 'Back to Editor'
-              : 'Quay lại Bàn dựng'}
-          </button>
+          {activeProjectName && activeProjectsList.length > 0 && (
+            <button
+              type="button"
+              onClick={onBackToEditor}
+              className={`w-full mt-1.5 py-1.5 font-medium rounded-lg text-xs transition-colors cursor-pointer text-center ${
+                themeMode === 'light'
+                  ? 'bg-[#E2E8F0] hover:bg-[#CBD5E1] text-[#0F172A]'
+                  : 'bg-[#222530] hover:bg-[#2B2F3D] text-[#E4E4E7] hover:text-white'
+              }`}
+            >
+              {isEn ? `Editor: ${activeProjectName}` : `Trình dựng: ${activeProjectName}`}
+            </button>
+          )}
         </div>
       </aside>
 
       {/* Center & Right Launcher Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto p-6 space-y-6">
+      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-6">
+        {/* Mobile Top Category Pills (< md) */}
+        <div className="flex md:hidden items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 shrink-0">
+          {(
+            [
+              { id: 'home', label: isEn ? 'Home' : 'Trang chủ', icon: LayoutGrid },
+              { id: 'templates', label: isEn ? 'Templates' : 'Mẫu dựng', icon: LayoutTemplate },
+              { id: 'spaces', label: isEn ? 'Cloud' : 'Đám mây', icon: Cloud },
+              { id: 'ai_design', label: isEn ? 'Cover' : 'Ảnh bìa', icon: ImageIcon },
+              { id: 'trash', label: isEn ? 'Trash' : 'Thùng rác', icon: Trash2 },
+            ] as const
+          ).map((item) => {
+            const Icon = item.icon;
+            const active = navTab === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setNavTab(item.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
+                  active
+                    ? 'bg-[#00E5CC] text-[#071013]'
+                    : themeMode === 'light'
+                    ? 'bg-white border border-[#CBD5E1] text-[#334155]'
+                    : 'bg-[#181A22] border border-[#2B2E3C] text-[#A1A1AA]'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5 shrink-0" />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
         {/* Top Launcher Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img
               src="/assets/logo.png"
               alt="TDO CUT"
-              className="w-10 h-10 rounded-xl object-contain bg-white p-0.5 shadow-md"
+              className="w-9 h-9 rounded-xl object-contain bg-white p-0.5 shadow-sm"
             />
             <div>
-              <h1 className="text-lg font-bold text-white tracking-tight">
-                {isEn
-                  ? 'TDO CUT — Studio Project Hub'
-                  : 'TDO CUT — Trung Tâm Khởi Tạo & Quản Lý Dự Án'}
+              <h1 className={`text-base font-semibold tracking-tight ${
+                themeMode === 'light' ? 'text-[#0F172A]' : 'text-white'
+              }`}>
+                {isEn ? 'Projects' : 'Dự án'}
               </h1>
-              <p className="text-xs text-[#9CA3AF]">
+              <p className="text-xs text-[#9CA3AF] leading-normal font-normal">
                 {isEn
-                  ? 'TDO CUT Multi-Track Engine · Local-First Draft Sync & Hardware NVENC/ProRes Export'
-                  : 'Lõi dựng phim đa tầng TDO CUT · Tự động đồng bộ nháp và hỗ trợ xuất GPU siêu tốc'}
+                  ? 'Start a new project or manage recent video edits'
+                  : 'Khởi tạo dự án mới hoặc quản lý các bản dựng gần đây'}
               </p>
             </div>
           </div>
@@ -343,7 +407,11 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
               <button
                 type="button"
                 onClick={onToggleTheme}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1C1D24] hover:bg-[#252732] border border-[#2E303E] rounded-md text-xs font-medium cursor-pointer"
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-normal border cursor-pointer transition-colors ${
+                  themeMode === 'light'
+                    ? 'bg-white hover:bg-[#F1F5F9] border-[#CBD5E1] text-[#0F172A]'
+                    : 'bg-[#181A22] hover:bg-[#20232E] border-[#2B2E3C] text-[#D1D5DB] hover:text-white'
+                }`}
               >
                 {themeMode === 'light' ? (
                   <Moon className="w-3.5 h-3.5 text-[#0284C7]" />
@@ -354,28 +422,32 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                   {themeMode === 'light'
                     ? isEn
                       ? 'Dark'
-                      : 'Tối'
+                      : 'Giao diện tối'
                     : isEn
                     ? 'Light'
-                    : 'Sáng'}
+                    : 'Giao diện sáng'}
                 </span>
               </button>
             )}
             <button
               type="button"
               onClick={onOpenSettings}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#1C1E26] hover:bg-[#262934] text-[#E4E4E7] border border-[#2E313E] rounded-md cursor-pointer"
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border cursor-pointer transition-colors ${
+                themeMode === 'light'
+                  ? 'bg-white hover:bg-[#F1F5F9] text-[#0F172A] border-[#CBD5E1]'
+                  : 'bg-[#181A22] hover:bg-[#20232E] text-[#D1D5DB] hover:text-white border-[#2B2E3C]'
+              }`}
             >
-              <Settings className="w-3.5 h-3.5 text-[#00E5CC]" />
-              <span>{isEn ? 'System Settings' : 'Cài đặt hệ thống'}</span>
+              <Settings className="w-3.5 h-3.5 text-[#9CA3AF]" />
+              <span>{isEn ? 'Settings' : 'Cài đặt'}</span>
             </button>
             <button
               type="button"
-              onClick={onBackToEditor}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold bg-[#00E5CC] hover:bg-[#00F5DC] text-[#090D12] rounded-md cursor-pointer"
+              onClick={activeProjectsList.length > 0 ? onBackToEditor : onCreateNewProject}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-[#00E5CC] hover:bg-[#00F5DC] text-[#090D12] rounded-lg cursor-pointer transition-colors shadow-xs"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
-              <span>{isEn ? 'Open Active Editor' : 'Mở Bàn Dựng Hiện Tại'}</span>
+              <span>{isEn ? 'Open Editor' : 'Mở trình dựng'}</span>
             </button>
           </div>
         </div>
@@ -495,11 +567,11 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
           <div className="grid grid-cols-12 gap-5 bg-[#161820] border border-[#272A36] rounded-xl p-5">
             <div className="col-span-5 space-y-3">
               <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                <Wand2 className="w-4 h-4 text-[#00E5CC]" />
+                <ImageIcon className="w-4 h-4 text-[#00E5CC]" />
                 <span>
                   {isEn
-                    ? 'AI Thumbnail & Viral Poster Generator'
-                    : 'Thiết Kế Ảnh Bìa & Poster Viral bằng AI'}
+                    ? 'Thumbnail & Viral Poster Generator'
+                    : 'Thiết Kế Ảnh Bìa & Poster'}
                 </span>
               </h2>
               <div className="space-y-1.5">
@@ -589,7 +661,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                 }`}
               >
                 <span className="px-2 py-0.5 text-[10px] font-mono bg-black/60 text-[#00E5CC] rounded mb-3">
-                  TDO CUT AI DESIGN · {posterRatio}
+                  TDO CUT COVER DESIGN · {posterRatio}
                 </span>
                 <div className="text-lg font-extrabold text-white uppercase tracking-wide drop-shadow-md px-3 py-1.5 bg-black/55 rounded-lg border border-white/15">
                   {posterHeadline}
@@ -599,42 +671,56 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
           </div>
         )}
 
-        {/* HERO & AI QUICK TOOLS (Shown on Home tab) */}
+        {/* HERO & QUICK TOOLS (Shown on Home tab) */}
         {navTab === 'home' && (
           <>
-            <div className="grid grid-cols-12 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-4">
               <button
                 type="button"
                 onClick={onCreateNewProject}
-                className="col-span-7 h-36 rounded-xl bg-gradient-to-r from-[#00B4A0] via-[#00E5CC] to-[#0284C7] p-6 flex flex-col items-center justify-center gap-2 text-[#070B10] shadow-lg hover:brightness-105 transition-all cursor-pointer"
+                className={`col-span-1 md:col-span-7 h-28 md:h-36 rounded-xl border p-4 md:p-6 flex flex-col items-center justify-center gap-1.5 md:gap-2 shadow-xs transition-all cursor-pointer group ${
+                  themeMode === 'light'
+                    ? 'bg-white hover:bg-[#F8FAFC] border-[#CBD5E1] hover:border-[#00E5CC]'
+                    : 'bg-[#181A22] hover:bg-[#1E212B] border-[#2B2E3C] hover:border-[#00E5CC]/70'
+                }`}
               >
-                <div className="w-11 h-11 rounded-full bg-[#070B10]/15 flex items-center justify-center">
-                  <Plus className="w-6 h-6 stroke-[2.5]" />
+                <div className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-[#00E5CC]/10 text-[#00E5CC] group-hover:bg-[#00E5CC] group-hover:text-black flex items-center justify-center transition-all">
+                  <Plus className="w-5 h-5 stroke-[2.5]" />
                 </div>
-                <span className="text-base font-extrabold tracking-tight">
-                  {isEn ? '+ Create New Project' : '+ Dự án mới (+ Create project)'}
+                <span className={`text-sm font-semibold tracking-tight transition-colors ${
+                  themeMode === 'light' ? 'text-[#0F172A] group-hover:text-[#00A89A]' : 'text-white group-hover:text-[#00E5CC]'
+                }`}>
+                  {isEn ? 'New Project' : 'Dự án mới'}
                 </span>
-                <span className="text-xs font-medium opacity-80">
+                <span className="text-xs text-[#9CA3AF] font-normal leading-normal text-center">
                   {isEn
-                    ? 'Launch a fresh 60 FPS multi-track timeline or drag & drop hundreds of clips'
-                    : 'Mở bàn dựng đa tầng 60 FPS mới tinh hoặc kéo thả hàng trăm clip'}
+                    ? 'Start creating with a clean multi-track timeline'
+                    : 'Khởi tạo dòng thời gian trống để dựng video'}
                 </span>
               </button>
 
-              {/* Quick AI Cards next to Hero */}
-              <div className="col-span-5 grid grid-cols-2 gap-3">
+              {/* Quick Side Cards next to Hero */}
+              <div className="col-span-1 md:col-span-5 grid grid-cols-2 gap-2.5 md:gap-3">
                 <button
                   type="button"
                   onClick={onOpenMatrixBatch}
-                  className="p-3.5 rounded-xl bg-[#181A22] hover:bg-[#20232E] border border-[#2B2E3C] flex flex-col justify-between text-left cursor-pointer"
+                  className={`p-3 md:p-4 rounded-xl border flex flex-col justify-between text-left cursor-pointer transition-all group ${
+                    themeMode === 'light'
+                      ? 'bg-white hover:bg-[#F8FAFC] border-[#CBD5E1] hover:border-[#00E5CC]'
+                      : 'bg-[#181A22] hover:bg-[#1E212B] border-[#2B2E3C] hover:border-[#00E5CC]/50'
+                  }`}
                 >
-                  <Wand2 className="w-5 h-5 text-[#00E5CC]" />
-                  <div>
-                    <div className="text-xs font-bold text-white">AutoCut &amp; Matrix AI</div>
-                    <div className="text-[11px] text-[#9CA3AF]">
+                  <Layers className="w-5 h-5 text-[#00E5CC]" />
+                  <div className="space-y-1">
+                    <div className={`text-xs font-semibold transition-colors ${
+                      themeMode === 'light' ? 'text-[#0F172A] group-hover:text-[#00A89A]' : 'text-white group-hover:text-[#00E5CC]'
+                    }`}>
+                      {isEn ? 'Matrix Variations' : 'Ma trận biến thể'}
+                    </div>
+                    <div className="text-[11px] text-[#9CA3AF] leading-snug">
                       {isEn
-                        ? 'Shuffle clips X-Y & batch export N variants'
-                        : 'Trộn ngẫu nhiên X-Y & cắt hàng loạt N video'}
+                        ? 'Auto-generate multiple video variants'
+                        : 'Tạo nhiều biến thể video tự động'}
                     </div>
                   </div>
                 </button>
@@ -645,71 +731,75 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                     onBackToEditor();
                     onStartRecordScreen();
                   }}
-                  className="p-3.5 rounded-xl bg-[#181A22] hover:bg-[#20232E] border border-[#2B2E3C] flex flex-col justify-between text-left cursor-pointer"
+                  className={`p-3 md:p-4 rounded-xl border flex flex-col justify-between text-left cursor-pointer transition-all group ${
+                    themeMode === 'light'
+                      ? 'bg-white hover:bg-[#F8FAFC] border-[#CBD5E1] hover:border-[#F43F5E]'
+                      : 'bg-[#181A22] hover:bg-[#1E212B] border-[#2B2E3C] hover:border-[#F43F5E]/50'
+                  }`}
                 >
                   <Video className="w-5 h-5 text-[#F43F5E]" />
-                  <div>
-                    <div className="text-xs font-bold text-white">
-                      {isEn ? 'Screen Recorder' : 'Ghi màn hình (Record)'}
+                  <div className="space-y-1">
+                    <div className={`text-xs font-semibold transition-colors ${
+                      themeMode === 'light' ? 'text-[#0F172A] group-hover:text-[#F43F5E]' : 'text-white group-hover:text-[#F43F5E]'
+                    }`}>
+                      {isEn ? 'Screen Recorder' : 'Ghi màn hình'}
                     </div>
-                    <div className="text-[11px] text-[#9CA3AF]">
+                    <div className="text-[11px] text-[#9CA3AF] leading-snug">
                       {isEn
-                        ? 'Record screen + Mic directly onto Timeline'
-                        : 'Quay màn hình + Mic đẩy thẳng xuống Timeline'}
+                        ? 'Record display and microphone audio'
+                        : 'Ghi màn hình kèm âm thanh micro'}
                     </div>
                   </div>
                 </button>
               </div>
             </div>
 
-            {/* More Tools Strip (All 5 buttons trigger real specialized actions!) */}
-            <div className="space-y-2">
-              <div className="text-xs font-semibold text-[#A1A1AA] uppercase tracking-wider">
-                {isEn
-                  ? 'AI TOOLS & QUICK UTILITIES (MORE TOOLS)'
-                  : 'CÔNG CỤ AI & TIỆN ÍCH NHANH (MORE TOOLS)'}
+            {/* Quick Tools Strip */}
+            <div className="space-y-2.5">
+              <div className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
+                {isEn ? 'Quick Tools' : 'Công cụ nhanh'}
               </div>
-              <div className="grid grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 md:gap-3">
                 {(
                   [
                     {
                       id: 'long_to_shorts' as HomeQuickToolId,
-                      title: isEn ? 'Long Video to Shorts' : 'Long Video to Shorts',
+                      title: isEn ? 'Shorts Video' : 'Video ngắn (Shorts)',
                       desc: isEn
-                        ? 'Auto-split long videos into 9:16 vertical shorts'
-                        : 'Tự cắt phim dài thành clip ngắn 9:16',
+                        ? 'Convert to 9:16 vertical video'
+                        : 'Chuyển khung hình dọc 9:16',
                       icon: Scissors,
                     },
                     {
                       id: 'script_to_video' as HomeQuickToolId,
-                      title: isEn ? 'Script to Video AI' : 'Script to Video AI',
+                      title: isEn ? 'Auto Captions' : 'Phụ đề tự động',
                       desc: isEn
-                        ? 'Generate AI subtitles & scenes from script'
-                        : 'Nhập kịch bản tạo phụ đề & cảnh quay',
+                        ? 'Speech recognition & subtitle sync'
+                        : 'Nhận diện giọng nói & tạo phụ đề',
                       icon: FileText,
                     },
                     {
                       id: 'tts_ai' as HomeQuickToolId,
-                      title: isEn ? 'Text to Speech AI' : 'Text to Speech AI',
+                      title: isEn ? 'Voiceover (TTS)' : 'Chuyển văn bản',
                       desc: isEn
-                        ? 'Convert captions into natural AI voiceover'
-                        : 'Đọc phụ đề bằng giọng AI tự nhiên',
+                        ? 'Natural voice synthesis'
+                        : 'Lồng tiếng tự nhiên từ văn bản',
                       icon: Mic,
                     },
                     {
                       id: 'auto_cutout' as HomeQuickToolId,
-                      title: isEn ? 'Auto Cutout (Chroma)' : 'Auto Cutout (Xóa nền)',
+                      title: isEn ? 'Smart Cutout' : 'Tách nền chủ thể',
                       desc: isEn
-                        ? 'Remove background & isolate subject automatically'
-                        : 'Tách nền nhân vật & Phông xanh',
-                      icon: Sparkles,
+                        ? 'Remove background or green screen'
+                        : 'Xóa phông tự động & phông xanh',
+                      icon: Scissors,
                     },
                     {
                       id: 'batch_edit' as HomeQuickToolId,
-                      title: isEn ? 'Batch Edit Studio' : 'Batch Edit (Hàng loạt)',
+                      title: isEn ? 'Batch Processing' : 'Xử lý đồng loạt',
                       desc: isEn
-                        ? 'Center-trim & batch process all timeline clips'
-                        : 'Cắt giữa & đổi thông số hàng loạt clip',
+                        ? 'Edit multiple clips at once'
+                        : 'Chỉnh sửa nhanh nhiều clip',
                       icon: Layers,
                     },
                   ] as const
@@ -720,11 +810,17 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                       key={tool.id}
                       type="button"
                       onClick={() => handleQuickToolClick(tool.id)}
-                      className="p-3 rounded-lg bg-[#161820] hover:bg-[#1E212B] hover:border-[#00E5CC] border border-[#262936] text-left space-y-1.5 transition-colors cursor-pointer"
+                      className={`p-3 md:p-3.5 rounded-xl border text-left space-y-1.5 transition-all cursor-pointer group ${
+                        themeMode === 'light'
+                          ? 'bg-white hover:bg-[#F8FAFC] border-[#CBD5E1] hover:border-[#00E5CC]'
+                          : 'bg-[#181A22] hover:bg-[#1E212B] hover:border-[#00E5CC]/60 border-[#2B2E3C]'
+                      }`}
                     >
                       <Icon className="w-4 h-4 text-[#00E5CC]" />
-                      <div className="text-xs font-semibold text-white">{tool.title}</div>
-                      <div className="text-[10px] text-[#8E929F] line-clamp-1">{tool.desc}</div>
+                      <div className={`text-xs font-semibold transition-colors ${
+                        themeMode === 'light' ? 'text-[#0F172A] group-hover:text-[#00A89A]' : 'text-white group-hover:text-[#00E5CC]'
+                      }`}>{tool.title}</div>
+                      <div className="text-[11px] text-[#9CA3AF] line-clamp-1">{tool.desc}</div>
                     </button>
                   );
                 })}
@@ -736,36 +832,52 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
         {/* Projects List Section */}
         <div className="space-y-3 flex-1">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-white">
-                {navTab === 'trash'
-                  ? isEn
-                    ? 'Trash (Restore projects within 30 days)'
-                    : 'Thùng rác (Khôi phục dự án trong 30 ngày)'
-                  : isEn
-                  ? `Your Projects (${visibleProjects.length})`
-                  : `Dự án của bạn (${visibleProjects.length})`}
-              </h2>
-            </div>
+            <h2 className={`text-sm font-semibold tracking-tight ${
+              themeMode === 'light' ? 'text-[#0F172A]' : 'text-white'
+            }`}>
+              {navTab === 'trash'
+                ? isEn
+                  ? 'Trash (Projects kept for 30 days)'
+                  : 'Thùng rác (Lưu giữ trong 30 ngày)'
+                : isEn
+                ? `Recent Projects (${visibleProjects.length})`
+                : `Dự án gần đây (${visibleProjects.length})`}
+            </h2>
 
             <div className="flex items-center gap-2">
+              {navTab === 'trash' && visibleProjects.length > 0 && onEmptyTrash && (
+                <button
+                  type="button"
+                  onClick={onEmptyTrash}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[#EF4444]/15 hover:bg-[#EF4444] text-[#EF4444] hover:text-white border border-[#EF4444]/40 rounded-lg cursor-pointer transition-colors shadow-xs"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>{isEn ? 'Empty Trash' : 'Dọn sạch thùng rác (Xóa tất cả)'}</span>
+                </button>
+              )}
               <div className="relative">
                 <Search className="w-3.5 h-3.5 text-[#71717A] absolute left-2.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
-                  placeholder={isEn ? 'Search project name...' : 'Tìm tên dự án...'}
-                  className="pl-8 pr-3 py-1 text-xs bg-[#161820] border border-[#2A2D3A] rounded text-white"
+                  placeholder={isEn ? 'Search projects...' : 'Tìm kiếm dự án...'}
+                  className={`pl-8 pr-3 py-1.5 text-xs rounded-lg transition-colors w-36 sm:w-48 border focus:outline-hidden focus:border-[#00E5CC] ${
+                    themeMode === 'light'
+                      ? 'bg-white border-[#CBD5E1] text-[#0F172A] placeholder-[#94A3B8]'
+                      : 'bg-[#181A22] border-[#2B2E3C] text-white placeholder-[#71717A]'
+                  }`}
                 />
               </div>
               <button
                 type="button"
                 onClick={() => setViewMode('grid')}
-                className={`p-1.5 rounded border cursor-pointer ${
+                className={`p-1.5 rounded-lg border cursor-pointer transition-colors ${
                   viewMode === 'grid'
-                    ? 'bg-[#252836] text-[#00E5CC] border-[#00E5CC]/40'
-                    : 'bg-[#161820] text-[#71717A] border-[#2A2D3A]'
+                    ? 'bg-[#00E5CC]/15 text-[#00E5CC] border-[#00E5CC]/40'
+                    : themeMode === 'light'
+                    ? 'bg-white text-[#64748B] border-[#CBD5E1]'
+                    : 'bg-[#181A22] text-[#71717A] border-[#2B2E3C]'
                 }`}
               >
                 <LayoutGrid className="w-3.5 h-3.5" />
@@ -773,10 +885,12 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
               <button
                 type="button"
                 onClick={() => setViewMode('list')}
-                className={`p-1.5 rounded border cursor-pointer ${
+                className={`p-1.5 rounded-lg border cursor-pointer transition-colors ${
                   viewMode === 'list'
-                    ? 'bg-[#252836] text-[#00E5CC] border-[#00E5CC]/40'
-                    : 'bg-[#161820] text-[#71717A] border-[#2A2D3A]'
+                    ? 'bg-[#00E5CC]/15 text-[#00E5CC] border-[#00E5CC]/40'
+                    : themeMode === 'light'
+                    ? 'bg-white text-[#64748B] border-[#CBD5E1]'
+                    : 'bg-[#181A22] text-[#71717A] border-[#2B2E3C]'
                 }`}
               >
                 <List className="w-3.5 h-3.5" />
@@ -785,9 +899,11 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
           </div>
 
           {visibleProjects.length === 0 ? (
-            <div className="h-40 rounded-lg border border-dashed border-[#2C2F3E] flex flex-col items-center justify-center text-xs text-[#8E929F] gap-2">
-              <Folder className="w-6 h-6 text-[#52525B]" />
-              <span>
+            <div className={`h-44 rounded-xl border border-dashed flex flex-col items-center justify-center text-xs gap-2 p-6 ${
+              themeMode === 'light' ? 'border-[#CBD5E1] text-[#64748B] bg-white' : 'border-[#2B2E3C] text-[#9CA3AF]'
+            }`}>
+              <Folder className="w-8 h-8 text-[#52525B] stroke-[1.5]" />
+              <span className={`font-medium ${themeMode === 'light' ? 'text-[#0F172A]' : 'text-white/90'}`}>
                 {navTab === 'trash'
                   ? isEn
                     ? 'Trash is empty.'
@@ -795,17 +911,24 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                   : searchText.trim()
                   ? isEn
                     ? 'No projects match your search.'
-                    : 'Chưa có dự án nào khớp tìm kiếm.'
+                    : 'Không tìm thấy dự án phù hợp.'
                   : isEn
                   ? 'No projects yet.'
                   : 'Chưa có dự án nào.'}
               </span>
+              {navTab !== 'trash' && !searchText.trim() && (
+                <span className="text-[11px] text-[#71717A]">
+                  {isEn
+                    ? 'Click "+ New Project" above to start your first video.'
+                    : 'Bấm "+ Dự án mới" ở trên để bắt đầu dựng video đầu tiên.'}
+                </span>
+              )}
             </div>
           ) : (
             <div
               className={
                 viewMode === 'grid'
-                  ? 'grid grid-cols-4 gap-4'
+                  ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4'
                   : 'flex flex-col gap-2'
               }
             >
@@ -819,31 +942,51 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                 return (
                   <div
                     key={proj.id}
-                    className="group relative bg-[#161820] border border-[#272A36] hover:border-[#00E5CC] rounded-lg overflow-hidden transition-all"
+                    className={`group relative rounded-lg overflow-hidden transition-all border ${
+                      themeMode === 'light'
+                        ? 'bg-[#FFFFFF] border-[#CBD5E1] hover:border-[#00E5CC] shadow-xs'
+                        : 'bg-[#161820] border-[#272A36] hover:border-[#00E5CC]'
+                    }`}
                   >
                     {/* Project Cover Thumbnail */}
                     <div
                       onClick={() => !proj.isDeletedInTrash && onOpenProject(proj)}
-                      className="h-28 bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#0D9488] p-3 flex flex-col justify-between cursor-pointer"
+                      className={`h-28 p-3 flex flex-col justify-between cursor-pointer transition-colors ${
+                        themeMode === 'light'
+                          ? 'bg-gradient-to-br from-[#E0F2FE] via-[#F0FDFA] to-[#CCFBF1] text-[#0F172A] border-b border-[#CBD5E1]'
+                          : 'bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#0D9488] text-white/90'
+                      }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="px-1.5 py-0.5 text-[10px] font-mono bg-black/60 text-[#00E5CC] rounded">
+                        <span className={`px-1.5 py-0.5 text-[10px] font-mono rounded ${
+                          themeMode === 'light'
+                            ? 'bg-white/95 text-[#0F766E] border border-slate-200 shadow-xs font-semibold'
+                            : 'bg-black/60 text-[#00E5CC]'
+                        }`}>
                           {proj.aspectRatio}
                         </span>
                         {isCloud && (
-                          <span className="px-1.5 py-0.5 text-[9px] bg-[#00E5CC]/20 text-[#00E5CC] rounded flex items-center gap-1">
+                          <span className={`px-1.5 py-0.5 text-[9px] rounded flex items-center gap-1 ${
+                            themeMode === 'light'
+                              ? 'bg-[#00E5CC]/25 text-[#0F766E] font-medium'
+                              : 'bg-[#00E5CC]/20 text-[#00E5CC]'
+                          }`}>
                             <Cloud className="w-2.5 h-2.5" /> {isEn ? 'Synced' : 'Đã đồng bộ'}
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center justify-between text-[11px] font-mono text-white/90">
+                      <div className={`flex items-center justify-between text-[11px] font-mono ${
+                        themeMode === 'light' ? 'text-[#334155] font-semibold' : 'text-white/90'
+                      }`}>
                         <span>{proj.clips.filter((c) => c.trackIndex === 0).length} clips</span>
                         <span>{dur.toFixed(1)}s</span>
                       </div>
                     </div>
 
                     {/* Project Footer & "..." Context Menu */}
-                    <div className="p-2.5 flex items-center justify-between gap-2 bg-[#181A22]">
+                    <div className={`p-2.5 flex items-center justify-between gap-2 ${
+                      themeMode === 'light' ? 'bg-[#FFFFFF] text-[#0F172A]' : 'bg-[#181A22]'
+                    }`}>
                       <div className="min-w-0 flex-1">
                         {renamingId === proj.id ? (
                           <input
@@ -861,12 +1004,18 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                                 setRenamingId(null);
                               }
                             }}
-                            className="w-full px-1.5 py-0.5 text-xs bg-[#101116] border border-[#00E5CC] rounded text-white"
+                            className={`w-full px-1.5 py-0.5 text-xs border rounded ${
+                              themeMode === 'light'
+                                ? 'bg-white border-[#00D2C4] text-[#0F172A]'
+                                : 'bg-[#101116] border-[#00E5CC] text-white'
+                            }`}
                           />
                         ) : (
                           <div
                             onClick={() => !proj.isDeletedInTrash && onOpenProject(proj)}
-                            className="text-xs font-semibold text-white truncate cursor-pointer hover:text-[#00E5CC]"
+                            className={`text-xs font-semibold truncate cursor-pointer hover:text-[#00E5CC] ${
+                              themeMode === 'light' ? 'text-[#0F172A]' : 'text-white'
+                            }`}
                           >
                             {proj.name}
                           </div>
@@ -875,13 +1024,23 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                       </div>
 
                       {proj.isDeletedInTrash ? (
-                        <button
-                          type="button"
-                          onClick={() => onRestoreProject(proj.id)}
-                          className="px-2 py-1 text-[10px] font-semibold bg-[#00E5CC] text-black rounded cursor-pointer"
-                        >
-                          {isEn ? 'Restore' : 'Khôi phục'}
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => onRestoreProject(proj.id)}
+                            className="px-2 py-1 text-[10px] font-semibold bg-[#00E5CC] text-black rounded cursor-pointer hover:bg-[#00F5DC] transition-colors"
+                          >
+                            {isEn ? 'Restore' : 'Khôi phục'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onPermanentDeleteProject?.(proj.id)}
+                            title={isEn ? 'Permanently Delete' : 'Xóa vĩnh viễn'}
+                            className="p-1 text-[#EF4444] hover:bg-[#EF4444]/15 rounded cursor-pointer transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       ) : (
                         <div className="relative">
                           <button
@@ -890,12 +1049,18 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                               setOpenMenuId((prev) => (prev === proj.id ? null : proj.id))
                             }
                             title={isEn ? 'Project options (...)' : 'Tùy chọn dự án (...)'}
-                            className="p-1 text-[#A1A1AA] hover:text-white rounded hover:bg-[#262936] cursor-pointer"
+                            className={`p-1 rounded cursor-pointer ${
+                              themeMode === 'light' ? 'text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9]' : 'text-[#A1A1AA] hover:text-white hover:bg-[#262936]'
+                            }`}
                           >
                             <MoreHorizontal className="w-4 h-4" />
                           </button>
                           {openMenuId === proj.id && (
-                            <div className="absolute right-0 bottom-7 z-30 w-44 bg-[#1F222D] border border-[#363A4B] rounded-md shadow-2xl py-1 text-xs">
+                            <div className={`absolute right-0 bottom-7 z-30 w-44 rounded-md shadow-2xl py-1 text-xs border ${
+                              themeMode === 'light'
+                                ? 'bg-white border-[#CBD5E1] text-[#0F172A]'
+                                : 'bg-[#1F222D] border-[#363A4B] text-white'
+                            }`}>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -903,7 +1068,9 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                                   setRenameVal(proj.name);
                                   setOpenMenuId(null);
                                 }}
-                                className="w-full px-3 py-1.5 text-left hover:bg-[#2B2F3E] flex items-center gap-2 text-white cursor-pointer"
+                                className={`w-full px-3 py-1.5 text-left flex items-center gap-2 cursor-pointer ${
+                                  themeMode === 'light' ? 'hover:bg-[#F1F5F9] text-[#0F172A]' : 'hover:bg-[#2B2F3E] text-white'
+                                }`}
                               >
                                 <Edit3 className="w-3.5 h-3.5 text-[#00E5CC]" />
                                 <span>{isEn ? 'Rename' : 'Đổi tên (Rename)'}</span>
@@ -914,7 +1081,9 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                                   onDuplicateProject(proj.id);
                                   setOpenMenuId(null);
                                 }}
-                                className="w-full px-3 py-1.5 text-left hover:bg-[#2B2F3E] flex items-center gap-2 text-white cursor-pointer"
+                                className={`w-full px-3 py-1.5 text-left flex items-center gap-2 cursor-pointer ${
+                                  themeMode === 'light' ? 'hover:bg-[#F1F5F9] text-[#0F172A]' : 'hover:bg-[#2B2F3E] text-white'
+                                }`}
                               >
                                 <Copy className="w-3.5 h-3.5 text-[#00E5CC]" />
                                 <span>{isEn ? 'Duplicate' : 'Nhân bản (Duplicate)'}</span>
@@ -927,7 +1096,9 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                                   );
                                   setOpenMenuId(null);
                                 }}
-                                className="w-full px-3 py-1.5 text-left hover:bg-[#2B2F3E] flex items-center gap-2 text-white cursor-pointer"
+                                className={`w-full px-3 py-1.5 text-left flex items-center gap-2 cursor-pointer ${
+                                  themeMode === 'light' ? 'hover:bg-[#F1F5F9] text-[#0F172A]' : 'hover:bg-[#2B2F3E] text-white'
+                                }`}
                               >
                                 <Cloud className="w-3.5 h-3.5 text-[#38BDF8]" />
                                 <span>{isEn ? 'Upload to Cloud Space' : 'Tải lên đám mây (Space)'}</span>
@@ -938,7 +1109,9 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                                   onDeleteProject(proj.id);
                                   setOpenMenuId(null);
                                 }}
-                                className="w-full px-3 py-1.5 text-left hover:bg-[#2B2F3E] flex items-center gap-2 text-[#F87171] cursor-pointer"
+                                className={`w-full px-3 py-1.5 text-left flex items-center gap-2 text-[#F87171] cursor-pointer ${
+                                  themeMode === 'light' ? 'hover:bg-rose-50' : 'hover:bg-[#2B2F3E]'
+                                }`}
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                                 <span>{isEn ? 'Move to Trash' : 'Xóa (Đưa vào Trash)'}</span>
@@ -1218,6 +1391,7 @@ export const SystemSettingsModal: React.FC<SystemSettingsModalProps> = ({
   const [hwDecode, setHwDecode] = useState(true);
   const [cacheSizeMb, setCacheSizeMb] = useState(0);
   const [envTestDone, setEnvTestDone] = useState(false);
+  const [draftSavePath, setDraftSavePath] = useState(() => getProjectInstallDir());
 
   if (!isOpen) return null;
 
@@ -1473,12 +1647,35 @@ export const SystemSettingsModal: React.FC<SystemSettingsModalProps> = ({
                 <label className="block text-[#A1A1AA] mb-1">
                   {language === 'en' ? 'Draft Save Path:' : 'Đường dẫn lưu nháp (Save to):'}
                 </label>
-                <input
-                  type="text"
-                  readOnly
-                  value="C:/Users/Admin/AppData/Local/TDOCut/User Data/Projects/"
-                  className="w-full px-2.5 py-1.5 bg-[#141418] border border-[#2B2B34] rounded font-mono text-[11px] text-[#D4D4D8]"
-                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={draftSavePath}
+                    onChange={(e) => {
+                      setDraftSavePath(e.target.value);
+                      setProjectInstallDir(e.target.value);
+                    }}
+                    className="flex-1 px-2.5 py-1.5 bg-[#141418] border border-[#2B2B34] rounded font-mono text-[11px] text-[#D4D4D8] focus:border-[#00E5CC]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newPath = prompt(
+                        language === 'en'
+                          ? 'Enter installation / projects folder path:'
+                          : 'Nhập đường dẫn thư mục cài đặt / dự án:',
+                        draftSavePath
+                      );
+                      if (newPath && newPath.trim()) {
+                        setDraftSavePath(newPath.trim());
+                        setProjectInstallDir(newPath.trim());
+                      }
+                    }}
+                    className="px-2.5 py-1.5 bg-[#252832] hover:bg-[#303442] text-[#00E5CC] rounded text-[11px] font-semibold cursor-pointer shrink-0"
+                  >
+                    {language === 'en' ? 'Change' : 'Thay đổi'}
+                  </button>
+                </div>
               </div>
               <div className="flex items-center justify-between">
                 <span>

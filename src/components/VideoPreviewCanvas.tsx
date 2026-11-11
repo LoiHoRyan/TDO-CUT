@@ -195,6 +195,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
   globalAdjustments,
   blurredPadding916 = false,
   onTogglePlay,
+  onStepFrame,
   onSeekPlayhead,
   onJumpToTimecode,
   onAspectRatioChange,
@@ -627,8 +628,8 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
         : Math.max(0, rawOffset);
 
     const isExportPlaying = vid.dataset.exportPlaying === 'true';
-    const seekTolerance = isPlaying || isExportPlaying ? 0.35 : 0.08;
-    if (Math.abs(vid.currentTime - targetOffset) > seekTolerance) {
+    const seekTolerance = isPlaying || isExportPlaying ? 0.6 : 0.08;
+    if (Math.abs(vid.currentTime - targetOffset) > seekTolerance && (!isPlaying || targetOffset > 0.6 || vid.paused)) {
       try {
         vid.currentTime = targetOffset;
       } catch {
@@ -643,20 +644,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
     }
   }, [playheadSec, isPlaying, activeVideoClip, videoTrackMuted]);
 
-  // Ambient animation loop for stickers & world flags on preview canvas when paused
-  const hasVisibleStickerAtPlayhead = Boolean(
-    activeClipsAtPlayhead.some((c) => Boolean(c.stickerEmoji)) ||
-      Boolean(activeSubtitleClip?.stickerEmoji)
-  );
-  useEffect(() => {
-    if (!hasVisibleStickerAtPlayhead || isPlaying || Boolean(exportDimensionsOverride)) {
-      return;
-    }
-    const timer = window.setInterval(() => {
-      setStickerAnimSec(performance.now() / 1000);
-    }, 50);
-    return () => window.clearInterval(timer);
-  }, [hasVisibleStickerAtPlayhead, isPlaying, exportDimensionsOverride]);
+  // Ambient animation loop removed: stickers and flags are clean and static for maximum performance
 
   // Sync hidden <audio> element for Audio Track (trackIndex === 1) + Audio Ducking
   useEffect(() => {
@@ -2227,19 +2215,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 findGraphicBadgeByIconOrText(itemClip.name)
               : null;
 
-          const effectiveAnimSec =
-            isPlaying || Boolean(exportDimensionsOverride)
-              ? playheadSec
-              : stickerAnimSec || playheadSec;
-          const motion = computeStickerMotionTransform(
-            effectiveAnimSec,
-            emojiSize,
-            Boolean(flagIso)
-          );
-          ctx.translate(0, motion.offsetYPx);
-          ctx.rotate(motion.rotateRad);
-          ctx.scale(motion.scalePulse, motion.scalePulse);
-
+          // Stickers, badges, and country flags are rendered clean & static (đứng yên) for zero stutter/lag
           let hitBoxW = emojiSize * 1.5;
           let hitBoxH = emojiSize * 1.5;
 
@@ -2254,37 +2230,8 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
             ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
             ctx.shadowBlur = Math.max(4, Math.round(8 * dpiScale));
             if (flagImg && flagImg.complete && flagImg.naturalWidth > 0) {
-              const natW = flagImg.naturalWidth;
-              const natH = flagImg.naturalHeight;
-              const slices = computeWavingFlagSlices(flagW, flagH, effectiveAnimSec, 20);
-              const sliceDrawW = flagW / slices.length + 0.85;
-              for (const sl of slices) {
-                const sx = sl.srcXRatio * natW;
-                const sw = Math.max(1, sl.srcWRatio * natW);
-                ctx.drawImage(
-                  flagImg,
-                  sx,
-                  0,
-                  sw,
-                  natH,
-                  sl.dstXOffsetPx,
-                  -flagH / 2 + sl.dstYOffsetPx,
-                  sliceDrawW,
-                  flagH
-                );
-                if (Math.abs(sl.shadeAlpha) > 0.01) {
-                  ctx.fillStyle =
-                    sl.shadeAlpha > 0
-                      ? `rgba(255,255,255,${sl.shadeAlpha.toFixed(3)})`
-                      : `rgba(0,0,0,${Math.abs(sl.shadeAlpha).toFixed(3)})`;
-                  ctx.fillRect(
-                    sl.dstXOffsetPx,
-                    -flagH / 2 + sl.dstYOffsetPx,
-                    sliceDrawW,
-                    flagH
-                  );
-                }
-              }
+              // Clean static SVG graphic without broken waving slices
+              ctx.drawImage(flagImg, -flagW / 2, -flagH / 2, flagW, flagH);
             } else {
               ctx.fillStyle = '#DA251D';
               ctx.beginPath();
@@ -3186,7 +3133,8 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
         onMouseUp={handleCanvasMouseUp}
         onMouseLeave={handleCanvasMouseUp}
         onWheel={handleCanvasWheel}
-        className="relative flex-1 w-full h-full bg-[#101013] overflow-hidden min-h-0 min-w-0 group"
+        data-keep-dark="true"
+        className="relative flex-1 w-full h-full bg-[#0D0E12] overflow-hidden min-h-0 min-w-0 group"
       >
         {/* Right-Click Context Menu on Video Canvas */}
         {canvasContextMenu && (
@@ -3486,7 +3434,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
       </div>
 
       {/* Bottom Transport & Timecode Bar */}
-      <div className="flex items-center justify-between px-3 h-9 bg-[#18181C] border-t border-[#2B2B30] shrink-0 relative">
+      <div className="flex items-center justify-between px-3 h-10 bg-[#15161A] border-t border-[#24262C] shrink-0 relative select-none">
         {/* Left: Double-click Editable Timecode */}
         <div className="flex items-center gap-1.5 font-mono text-xs tracking-tight whitespace-nowrap">
           {isEditingTimecode ? (
@@ -3508,7 +3456,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                   setIsEditingTimecode(false);
                 }
               }}
-              className="w-24 px-1.5 py-0.5 text-xs font-mono bg-[#101014] border border-[#00E5CC] rounded text-[#00E5CC]"
+              className="w-24 px-1.5 py-0.5 text-xs font-mono bg-[#121317] border border-[#00E5CC] rounded text-[#00E5CC]"
             />
           ) : (
             <span
@@ -3522,25 +3470,45 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
               {formatTimecode(playheadSec, fps)}
             </span>
           )}
-          <span className="text-[#52525B]">/</span>
+          <span className="text-[#4B5563]">/</span>
           <span className="text-[#9CA3AF]">
             {formatTimecode(totalDurationSec, fps)}
           </span>
         </div>
 
-        {/* Center: Single Play / Pause Button (CapCut PC Standard) */}
-        <div className="flex items-center justify-center">
+        {/* Center: Precision Transport Controls (Step Back, Play/Pause, Step Forward) */}
+        <div className="flex items-center justify-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => onStepFrame(-1)}
+            title="Lùi 1 khung hình (Phím Trái / J)"
+            className="p-1.5 text-[#9CA3AF] hover:text-white hover:bg-[#252830] rounded transition-colors cursor-pointer"
+          >
+            <SkipBack className="w-3.5 h-3.5" />
+          </button>
           <button
             type="button"
             onClick={onTogglePlay}
-            title={isPlaying ? 'Tạm dừng (Space / K)' : 'Phát (Space / L)'}
-            className="p-1.5 text-white hover:text-[#00E5CC] rounded transition-colors cursor-pointer"
+            title={isPlaying ? 'Tạm dừng (Space / K)' : 'Phát (Space / K)'}
+            className={`p-2 rounded-full transition-all cursor-pointer shadow-xs ${
+              isPlaying
+                ? 'bg-[#00E5CC] text-black hover:bg-[#00F5DC]'
+                : 'bg-[#22242B] text-white hover:bg-[#2A2D36] hover:text-[#00E5CC] border border-[#323642]'
+            }`}
           >
             {isPlaying ? (
               <Pause className="w-4 h-4 fill-current" />
             ) : (
-              <Play className="w-4 h-4 fill-current" />
+              <Play className="w-4 h-4 fill-current ml-0.5" />
             )}
+          </button>
+          <button
+            type="button"
+            onClick={() => onStepFrame(1)}
+            title="Tiến 1 khung hình (Phím Phải / L)"
+            className="p-1.5 text-[#9CA3AF] hover:text-white hover:bg-[#252830] rounded transition-colors cursor-pointer"
+          >
+            <SkipForward className="w-3.5 h-3.5" />
           </button>
         </div>
 
@@ -3556,13 +3524,13 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 setShowRatioMenu(false);
               }}
               title="Phóng to màn hình xem trước (Fit / 100% / 200%)"
-              className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium text-[#D4D4D8] hover:text-white bg-[#242429] border border-[#383840] rounded cursor-pointer"
+              className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-[#D1D5DB] hover:text-white bg-[#1C1D22] border border-[#2A2C34] hover:border-[#383C48] rounded cursor-pointer transition-all"
             >
-              <ZoomIn className="w-2.5 h-2.5 text-[#00E5CC]" />
+              <ZoomIn className="w-3 h-3 text-[#00E5CC]" />
               <span>{playerZoom === 'fit' ? 'Fit' : `${playerZoom}%`}</span>
             </button>
             {showZoomMenu && (
-              <div className="absolute bottom-7 right-0 z-30 bg-[#1F1F26] border border-[#383842] rounded shadow-xl py-1 min-w-[84px]">
+              <div className="absolute bottom-8 right-0 z-30 bg-[#181920] border border-[#2D303B] rounded-lg shadow-xl py-1 min-w-[100px]">
                 {(['fit', '100', '200'] as const).map((z) => (
                   <button
                     key={z}
@@ -3571,8 +3539,8 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                       setPlayerZoom(z);
                       setShowZoomMenu(false);
                     }}
-                    className={`w-full text-left px-2.5 py-1 text-[11px] hover:bg-[#2C2C35] cursor-pointer ${
-                      playerZoom === z ? 'text-[#00E5CC] font-semibold' : 'text-[#D4D4D8]'
+                    className={`w-full text-left px-3 py-1.5 text-xs hover:bg-[#222530] cursor-pointer ${
+                      playerZoom === z ? 'text-[#00E5CC] font-semibold' : 'text-[#D1D5DB]'
                     }`}
                   >
                     {z === 'fit' ? 'Fit (Vừa khung)' : `${z}%`}

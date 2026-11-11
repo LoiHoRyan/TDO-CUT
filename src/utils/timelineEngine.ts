@@ -189,13 +189,16 @@ export type StickerOverlayType =
   | 'fire_trend'
   | 'confetti'
   | 'subscribe'
+  | 'subscribe_bell'
+  | 'heart_love'
   | 'like_glow'
   | 'fire_meme'
   | 'rec_frame'
   | 'arrow_bounce'
   | 'face_icon'
   | 'world_flag'
-  | 'social_badge';
+  | 'social_badge'
+  | (string & {});
 
 export type HslChannelColor =
   | 'red'
@@ -369,6 +372,7 @@ export interface TimelineClip {
   mediaWidth?: number;
   mediaHeight?: number;
   fileSizeBytes?: number;
+  sourceFileSizeBytes?: number;
   nativeAspectRatio?: string;
   waveformPeaks?: number[];
   isSample?: boolean;
@@ -421,7 +425,7 @@ export interface SubProjectItem {
   id: string;
   name: string;
   createdAt: string;
-  aspectRatio: '16:9' | '9:16';
+  aspectRatio: '16:9' | '9:16' | '1:1' | '4:3' | '21:9' | string;
   clips: TimelineClip[];
   isDeletedInTrash?: boolean;
 }
@@ -436,15 +440,20 @@ export function naturalSortByName<T extends { name: string }>(items: T[]): T[] {
 
 export function createDefaultClip(
   partial: Partial<TimelineClip> &
-    Pick<TimelineClip, 'id' | 'name' | 'trackIndex' | 'startTime' | 'duration'>
+    Pick<TimelineClip, 'id' | 'name' | 'trackIndex'> &
+    Partial<Pick<TimelineClip, 'startTime' | 'duration'>>
 ): TimelineClip {
   const scale =
     partial.scale ??
     (partial.cropRatio ? Math.round(partial.cropRatio * 100) : 100);
+  const dur = partial.duration ?? 5.0;
+  const start = partial.startTime ?? 0.0;
   return {
     filePath: `C:/Media/${partial.name}`,
     sourceIn: 0,
-    sourceDuration: partial.duration,
+    sourceDuration: dur,
+    startTime: start,
+    duration: dur,
     scale,
     scaleX: scale,
     scaleY: scale,
@@ -647,11 +656,23 @@ export function splitClipAtPlayhead(
   let splitCount = 0;
   const result: TimelineClip[] = [];
 
-  const selectedIds = Array.isArray(selectedOrIds)
+  let selectedIds = Array.isArray(selectedOrIds)
     ? selectedOrIds
     : selectedOrIds
     ? [selectedOrIds]
     : [];
+
+  // If nothing is selected, target the primary clip under playhead (favoring track 0)
+  if (selectedIds.length === 0) {
+    const under = clips.filter(
+      (c) => playheadTime > c.startTime + minMargin && playheadTime < c.startTime + c.duration - minMargin
+    );
+    if (under.length > 0) {
+      under.sort((a, b) => a.trackIndex - b.trackIndex);
+      selectedIds = [under[0].id];
+    }
+  }
+
   const hasSelection = selectedIds.length > 0;
 
   for (const clip of clips) {
@@ -703,17 +724,29 @@ export function trimClipLeftToPlayhead(
   selectedOrIds?: string | string[] | null,
   autoSnap: boolean = true
 ): TimelineClip[] {
-  const selectedIds = Array.isArray(selectedOrIds)
+  let selectedIds = Array.isArray(selectedOrIds)
     ? selectedOrIds
     : selectedOrIds
     ? [selectedOrIds]
     : [];
+
+  // If no clip is explicitly selected, find the primary clip under playhead (favoring track 0)
+  if (selectedIds.length === 0) {
+    const under = clips.filter(
+      (c) => playheadTime > c.startTime + 0.05 && playheadTime < c.startTime + c.duration - 0.05
+    );
+    if (under.length > 0) {
+      under.sort((a, b) => a.trackIndex - b.trackIndex);
+      selectedIds = [under[0].id];
+    }
+  }
+
   const updated = clips.map((clip) => {
     const clipEnd = clip.startTime + clip.duration;
     const isTarget =
-      (selectedIds.length === 0 || selectedIds.includes(clip.id)) &&
-      playheadTime > clip.startTime + 0.1 &&
-      playheadTime < clipEnd - 0.1;
+      selectedIds.includes(clip.id) &&
+      playheadTime > clip.startTime + 0.05 &&
+      playheadTime < clipEnd - 0.05;
     if (!isTarget) return clip;
     const cutDelta = playheadTime - clip.startTime;
     return {
@@ -734,17 +767,29 @@ export function trimClipRightToPlayhead(
   selectedOrIds?: string | string[] | null,
   autoSnap: boolean = true
 ): TimelineClip[] {
-  const selectedIds = Array.isArray(selectedOrIds)
+  let selectedIds = Array.isArray(selectedOrIds)
     ? selectedOrIds
     : selectedOrIds
     ? [selectedOrIds]
     : [];
+
+  // If no clip is explicitly selected, find the primary clip under playhead (favoring track 0)
+  if (selectedIds.length === 0) {
+    const under = clips.filter(
+      (c) => playheadTime > c.startTime + 0.05 && playheadTime < c.startTime + c.duration - 0.05
+    );
+    if (under.length > 0) {
+      under.sort((a, b) => a.trackIndex - b.trackIndex);
+      selectedIds = [under[0].id];
+    }
+  }
+
   const updated = clips.map((clip) => {
     const clipEnd = clip.startTime + clip.duration;
     const isTarget =
-      (selectedIds.length === 0 || selectedIds.includes(clip.id)) &&
-      playheadTime > clip.startTime + 0.1 &&
-      playheadTime < clipEnd - 0.1;
+      selectedIds.includes(clip.id) &&
+      playheadTime > clip.startTime + 0.05 &&
+      playheadTime < clipEnd - 0.05;
     if (!isTarget) return clip;
     return {
       ...clip,
@@ -1718,7 +1763,7 @@ export function exportSubtitlesToSrt(clips: TimelineClip[]): string {
   };
 
   if (subs.length === 0) {
-    return `1\n00:00:00,000 --> 00:00:04,000\nTrendOpsis Cut — Phụ đề tự động\n`;
+    return `1\n00:00:00,000 --> 00:00:04,000\nTDO-CUT — Phụ đề tự động\n`;
   }
 
   return subs
@@ -1733,7 +1778,7 @@ export function exportSubtitlesToSrt(clips: TimelineClip[]): string {
 
 export function exportTimelineToXml(
   clips: TimelineClip[],
-  projectName: string = 'TrendOpsis_Cut_Project',
+  projectName: string = 'TDO_Cut_Project',
   fps: number = 30
 ): string {
   const v1 = clips
@@ -1783,7 +1828,7 @@ ${clipItemsXml}
 export function generateCapCutDraftJson(
   clips: TimelineClip[],
   arg2: string = '16:9',
-  arg3: string = 'TrendOpsis_Cut'
+  arg3: string = 'TDO_Cut'
 ): Record<string, unknown> {
   const isRatioSecond = ['16:9', '9:16', '1:1', '4:3'].includes(arg2);
   const aspectRatio = isRatioSecond
@@ -2034,7 +2079,7 @@ export function buildFfmpegMatrixCommand(
       )
       .join('\n');
     const concatList = v1.map((_, i) => `file 'seg_${i}.mp4'`).join('\n');
-    return `# TRENDOPSIS CUT — CHẾ ĐỘ SIÊU TỐC (-c copy · Giữ nguyên độ phân giải gốc ${nativeDims.width}x${nativeDims.height} & Âm thanh · Thời lượng chuẩn ${totalRealTimeDuration.toFixed(2)}s)\n${segCommands}\n# Danh sách nối (concat_list.txt):\n# ${concatList.replace(/\n/g, ' | ')}\nffmpeg -y -f concat -safe 0 -i concat_list.txt -map 0:v:0 -map 0:a:0? -c copy -movflags +faststart "./Output/TrendOpsis_FastCopy_${count}Vars.mp4"`;
+    return `# TDO-CUT — CHẾ ĐỘ SIÊU TỐC (-c copy · Giữ nguyên độ phân giải gốc ${nativeDims.width}x${nativeDims.height} & Âm thanh · Thời lượng chuẩn ${totalRealTimeDuration.toFixed(2)}s)\n${segCommands}\n# Danh sách nối (concat_list.txt):\n# ${concatList.replace(/\n/g, ' | ')}\nffmpeg -y -f concat -safe 0 -i concat_list.txt -map 0:v:0 -map 0:a:0? -c copy -movflags +faststart "./Output/TDO_Cut_FastCopy_${count}Vars.mp4"`;
   }
 
   const inputs = v1
@@ -2065,12 +2110,12 @@ export function buildFfmpegMatrixCommand(
 
   const encoder = config.gpuEncoder || 'hevc_nvenc';
   if (encoder === 'prores') {
-    return `ffmpeg -y ${inputs} -map 0:v:0 -map 0:a:0? ${vfChain} ${afChain} -vsync cfr -c:v prores -profile:v 3 -pix_fmt yuv422p10le -crf ${crfVal} -preset ${presetVal} -b:v 45M -c:a pcm_s16le -ar 48000 -ac 2 ${durFlag} ${metaFlags} "./Output/TrendOpsis_Variant_${String(variantOrRatio)}.mov"`;
+    return `ffmpeg -y ${inputs} -map 0:v:0 -map 0:a:0? ${vfChain} ${afChain} -vsync cfr -c:v prores -profile:v 3 -pix_fmt yuv422p10le -crf ${crfVal} -preset ${presetVal} -b:v 45M -c:a pcm_s16le -ar 48000 -ac 2 ${durFlag} ${metaFlags} "./Output/TDO_Cut_Variant_${String(variantOrRatio)}.mov"`;
   }
   if (encoder === 'hevc_nvenc') {
-    return `ffmpeg -y ${inputs} -map 0:v:0 -map 0:a:0? ${vfChain} ${afChain} -vsync cfr -c:v hevc_nvenc -tag:v hvc1 -crf ${crfVal} -cq ${crfVal} -preset ${presetVal} -b:v 28M -pix_fmt yuv420p -c:a aac -b:a 192k -ar 48000 -ac 2 -movflags +faststart ${durFlag} ${metaFlags} "./Output/TrendOpsis_Variant_${String(variantOrRatio)}.mp4"`;
+    return `ffmpeg -y ${inputs} -map 0:v:0 -map 0:a:0? ${vfChain} ${afChain} -vsync cfr -c:v hevc_nvenc -tag:v hvc1 -crf ${crfVal} -cq ${crfVal} -preset ${presetVal} -b:v 28M -pix_fmt yuv420p -c:a aac -b:a 192k -ar 48000 -ac 2 -movflags +faststart ${durFlag} ${metaFlags} "./Output/TDO_Cut_Variant_${String(variantOrRatio)}.mp4"`;
   }
-  return `ffmpeg -y ${inputs} -map 0:v:0 -map 0:a:0? ${vfChain} ${afChain} -vsync cfr -c:v ${encoder} -crf ${crfVal} -preset ${presetVal} -b:v 20M -pix_fmt yuv420p -c:a aac -b:a 192k -ar 48000 -ac 2 -movflags +faststart ${durFlag} ${metaFlags} "./Output/TrendOpsis_Variant_${String(variantOrRatio)}.mp4"`;
+  return `ffmpeg -y ${inputs} -map 0:v:0 -map 0:a:0? ${vfChain} ${afChain} -vsync cfr -c:v ${encoder} -crf ${crfVal} -preset ${presetVal} -b:v 20M -pix_fmt yuv420p -c:a aac -b:a 192k -ar 48000 -ac 2 -movflags +faststart ${durFlag} ${metaFlags} "./Output/TDO_Cut_Variant_${String(variantOrRatio)}.mp4"`;
 }
 
 export interface ContainedRect {
@@ -2498,7 +2543,7 @@ export function resolveZoneSelectAll(
 
 export type ExportResolutionPreset = '480p' | '720p' | '1080p' | '2K' | '4K';
 export type ExportBitrateMode = 'recommended' | 'higher' | 'lower';
-export type ExportFpsPreset = '24fps' | '25fps' | '30fps' | '50fps' | '60fps';
+export type ExportFpsPreset = '24fps' | '25fps' | '30fps' | '50fps' | '60fps' | '24' | '25' | '30' | '50' | '60';
 
 export interface HighQualityExportSpec {
   width: number;
@@ -2557,14 +2602,19 @@ export function computeHighQualityExportSpec(
     height = toEven(shortSide / ratio);
   }
 
-  const fpsMap: Record<ExportFpsPreset, number> = {
+  const fpsMap: Record<string, number> = {
     '24fps': 24,
     '25fps': 25,
     '30fps': 30,
     '50fps': 50,
     '60fps': 60,
+    '24': 24,
+    '25': 25,
+    '30': 30,
+    '50': 50,
+    '60': 60,
   };
-  const fps = fpsMap[fpsPreset] || 30;
+  const fps = fpsMap[String(fpsPreset)] || 30;
 
   const baseBitrateMap: Record<ExportResolutionPreset, number> = {
     '480p': 8_000_000,
@@ -2641,6 +2691,7 @@ export function resolveDefaultProjectTitle(
   const trimmed = (projectName || '').trim();
   const isDefaultPlaceholder =
     !trimmed ||
+    trimmed === '1' ||
     trimmed === '0421-sao chép' ||
     trimmed === '0421-copy' ||
     trimmed === 'Chưa có dự án' ||
@@ -2648,9 +2699,52 @@ export function resolveDefaultProjectTitle(
     trimmed === 'Nhập tên dự án' ||
     trimmed === 'Enter project name';
   if (isDefaultPlaceholder) {
-    return language === 'en' ? 'Enter project name' : 'Nhập tên dự án';
+    return 'Dự án 1';
   }
   return trimmed;
+}
+
+export const DEFAULT_TDO_INSTALL_DIR = 'd:/DỰ ÁN TDO-CUT/TDO-CUT/projects';
+
+export function getProjectInstallDir(): string {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const saved = window.localStorage.getItem('tdo_cut_install_path');
+      if (saved && saved.trim()) return saved.trim().replace(/\\/g, '/');
+    }
+  } catch {
+    // fallback
+  }
+  return DEFAULT_TDO_INSTALL_DIR;
+}
+
+export function setProjectInstallDir(dir: string): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem('tdo_cut_install_path', dir.trim().replace(/\\/g, '/'));
+    }
+  } catch {
+    // fallback
+  }
+}
+
+export function getProjectFullDirPath(projectName?: string): string {
+  const base = getProjectInstallDir();
+  const cleanName = (projectName || 'Dự án 1').trim();
+  return `${base}/${cleanName}`;
+}
+
+export function getDefaultExportDirPath(): string {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const saved = window.localStorage.getItem('tdo_cut_export_path');
+      if (saved && saved.trim()) return saved.trim().replace(/\\/g, '/');
+    }
+  } catch {
+    // fallback
+  }
+  const installBase = getProjectInstallDir();
+  return installBase.replace(/\/projects\/?$/, '/exports');
 }
 
 export interface RealisticExportSizeEstimate {
@@ -3370,7 +3464,7 @@ export async function patchMediaRecorderBlobDuration(
   try {
     const ab = await blob.arrayBuffer();
     const patched = patchMediaRecorderBufferDuration(new Uint8Array(ab), durationSec);
-    return new Blob([patched], { type: blob.type || 'video/webm' });
+    return new Blob([new Uint8Array(patched).buffer as ArrayBuffer], { type: blob.type || 'video/webm' });
   } catch {
     return blob;
   }
@@ -4435,13 +4529,14 @@ export interface StickerCatalogItem {
   label: string;
   labelEn?: string;
   icon: string;
-  cat: 'all' | 'cta' | 'faces' | 'emoji' | 'flags' | 'neon';
+  cat: 'all' | 'cta' | 'faces' | 'emoji' | 'flags' | 'neon' | (string & {});
   isoCode?: string;
   flagSvgDataUrl?: string;
   badgeText?: string;
   badgeSubText?: string;
   badgeBg?: string;
   badgeAccent?: string;
+  badgeColor?: string;
 }
 
 const RAW_WORLD_COUNTRIES: Array<[string, string, string]> = [
@@ -4934,7 +5029,7 @@ const RAW_GRAPHIC_BADGE_STICKERS: Array<{
     icon: '➕ FOLLOW ME',
     cat: 'cta',
     badgeText: 'FOLLOW ME +',
-    badgeSubText: '@TRENDOPSIS',
+    badgeSubText: '@TDOCUT',
     badgeBg: '#EC4899',
     badgeAccent: '#FFFFFF',
   },
@@ -5307,3 +5402,62 @@ export const TREND_EMOJI_STICKERS: StickerCatalogItem[] = RAW_TREND_EMOJI_AND_HA
     cat: 'emoji',
   })
 );
+
+/**
+ * Resolves the exact target incoming clip for an inter-clip transition on Track 0.
+ * A transition belongs at a cut joint between two clips (index >= 1).
+ * When dropping onto Track 0 near a cut joint (or even onto the preceding clip's tail),
+ * this function correctly resolves the seam to the incoming clip.
+ */
+export function resolveTransitionTargetClip(
+  videoClips: TimelineClip[],
+  dropTimeSec: number,
+  targetClipId?: string
+): TimelineClip | undefined {
+  const sorted = [...videoClips]
+    .filter((c) => c.trackIndex === 0)
+    .sort((a, b) => a.startTime - b.startTime);
+
+  if (sorted.length === 0) return undefined;
+  if (sorted.length === 1) return sorted[0];
+
+  const seamClips = sorted.slice(1);
+
+  if (targetClipId) {
+    const targetIdx = sorted.findIndex((c) => c.id === targetClipId);
+    if (targetIdx >= 0) {
+      const targetClip = sorted[targetIdx];
+
+      // Clip 0 has no preceding clip; a transition must attach to the seam between clip 0 and clip 1 (sorted[1]).
+      if (targetIdx === 0) {
+        return sorted[1];
+      }
+
+      // If user dropped on targetClip near its right tail, target the cut joint with the next clip!
+      const clipEnd = targetClip.startTime + targetClip.duration;
+      if (
+        targetIdx < sorted.length - 1 &&
+        (dropTimeSec >= clipEnd - 1.5 ||
+          dropTimeSec > targetClip.startTime + targetClip.duration * 0.65)
+      ) {
+        return sorted[targetIdx + 1];
+      }
+
+      return targetClip;
+    }
+  }
+
+  // If no targetClipId was provided or not found, match the cut joint closest to dropTimeSec
+  let bestSeam = seamClips[0];
+  let minDiff = Math.abs(seamClips[0].startTime - dropTimeSec);
+  for (let i = 1; i < seamClips.length; i++) {
+    const diff = Math.abs(seamClips[i].startTime - dropTimeSec);
+    if (diff < minDiff) {
+      minDiff = diff;
+      bestSeam = seamClips[i];
+    }
+  }
+
+  return bestSeam;
+}
+

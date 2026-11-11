@@ -27,6 +27,7 @@ import {
   computeHighQualityExportSpec,
   computeRealisticExportEstimate,
   resolveDefaultProjectTitle,
+  getDefaultExportDirPath,
   patchMediaRecorderBlobDuration,
   canUseDirectStreamCopyForExport,
   extractFlagIsoCode,
@@ -155,7 +156,7 @@ async function renderOverlayClipToSpriteData(
     const localCenterX = tx - boxX;
     const localCenterY = ty - boxY;
 
-    const frameCount = 16;
+    const frameCount = 1; // Stickers, badges, and flags are rendered clean & static (đứng yên) for maximum export performance and zero lag/freeze
     const spriteCanvas = document.createElement('canvas');
     spriteCanvas.width = frameWidth * frameCount;
     spriteCanvas.height = frameHeight;
@@ -163,13 +164,6 @@ async function renderOverlayClipToSpriteData(
     if (!ctx) return null;
 
     for (let f = 0; f < frameCount; f++) {
-      const animTimeSec = f / frameCount; // 1.0s smooth loop at 16fps
-      const motion = computeStickerMotionTransform(
-        animTimeSec,
-        emojiSize,
-        Boolean(flagIso)
-      );
-
       ctx.save();
       ctx.beginPath();
       ctx.rect(f * frameWidth, 0, frameWidth, frameHeight);
@@ -182,48 +176,14 @@ async function renderOverlayClipToSpriteData(
       }
       ctx.scale(scaleXFactor, scaleYFactor);
 
-      // Apply continuous sticker/flag motion transform for frame f
-      ctx.translate(0, motion.offsetYPx);
-      ctx.rotate(motion.rotateRad);
-      ctx.scale(motion.scalePulse, motion.scalePulse);
-
       if (flagIso) {
         const flagW = Math.round(emojiSize * 1.55);
         const flagH = Math.round(emojiSize * 1.04);
         ctx.shadowColor = 'rgba(0, 0, 0, 0.52)';
         ctx.shadowBlur = Math.max(4, Math.round(8 * dpiScale));
         if (loadedFlagImg && loadedFlagImg.naturalWidth > 0) {
-          const natW = loadedFlagImg.naturalWidth;
-          const natH = loadedFlagImg.naturalHeight;
-          const slices = computeWavingFlagSlices(flagW, flagH, animTimeSec, 20);
-          const sliceDrawW = flagW / slices.length + 0.85;
-          for (const sl of slices) {
-            const sx = sl.srcXRatio * natW;
-            const sw = Math.max(1, sl.srcWRatio * natW);
-            ctx.drawImage(
-              loadedFlagImg,
-              sx,
-              0,
-              sw,
-              natH,
-              sl.dstXOffsetPx,
-              -flagH / 2 + sl.dstYOffsetPx,
-              sliceDrawW,
-              flagH
-            );
-            if (Math.abs(sl.shadeAlpha) > 0.01) {
-              ctx.fillStyle =
-                sl.shadeAlpha > 0
-                  ? `rgba(255,255,255,${sl.shadeAlpha.toFixed(3)})`
-                  : `rgba(0,0,0,${Math.abs(sl.shadeAlpha).toFixed(3)})`;
-              ctx.fillRect(
-                sl.dstXOffsetPx,
-                -flagH / 2 + sl.dstYOffsetPx,
-                sliceDrawW,
-                flagH
-              );
-            }
-          }
+          // Render flag cleanly as a single static high-resolution SVG graphic without broken waving slices
+          ctx.drawImage(loadedFlagImg, -flagW / 2, -flagH / 2, flagW, flagH);
         } else {
           ctx.fillStyle = '#DA251D';
           ctx.beginPath();
@@ -424,7 +384,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
 }) => {
   const isEn = language === 'en';
   const [title, setTitle] = useState(() => resolveDefaultProjectTitle(projectName, language));
-  const [exportPath, setExportPath] = useState('C:/Users/PC/Videos/TrendOpsis_Exports/');
+  const [exportPath, setExportPath] = useState(() => getDefaultExportDirPath());
 
   // Sync default project name when projectName prop or language changes
   useEffect(() => {
@@ -432,6 +392,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
       const trimmedProject = (projectName || '').trim();
       const isProjectValidCustom =
         Boolean(trimmedProject) &&
+        trimmedProject !== '1' &&
         trimmedProject !== '0421-sao chép' &&
         trimmedProject !== '0421-copy' &&
         trimmedProject !== 'Chưa có dự án' &&
@@ -443,6 +404,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
       }
       const isPrevPlaceholder =
         !prev.trim() ||
+        prev === '1' ||
         prev === '0421-sao chép' ||
         prev === '0421-copy' ||
         prev === 'Chưa có dự án' ||
@@ -450,11 +412,11 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
         prev === 'Nhập tên dự án' ||
         prev === 'Enter project name';
       if (isPrevPlaceholder) {
-        return isEn ? 'Enter project name' : 'Nhập tên dự án';
+        return resolveDefaultProjectTitle(projectName, language);
       }
       return prev;
     });
-  }, [projectName, isEn]);
+  }, [projectName, language]);
 
   // Left Column: Cover Editor — default text is "Nhập văn bản" (VI) / "Enter text" (EN)
   const [coverTextOverlay, setCoverTextOverlay] = useState(
@@ -838,6 +800,9 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
         }
         if (abortExportRef.current) return;
 
+        if (!primaryClip.mediaUrl) {
+          throw new Error('Primary clip has no media URL');
+        }
         const resp = await fetch(primaryClip.mediaUrl);
         if (abortExportRef.current) return;
         const sourceBlob = await resp.blob();
@@ -931,7 +896,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             return idx;
           };
 
-          const videoSegmentsMeta = [];
+          const videoSegmentsMeta: any[] = [];
           let exactOutDurationSec = 0;
           for (const vClip of v1WithMedia) {
             if (abortExportRef.current) break;
@@ -966,7 +931,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           }
 
           const v1IdSet = new Set(v1WithMedia.map((c) => c.id));
-          const audioSegmentsMeta = [];
+          const audioSegmentsMeta: any[] = [];
           const activeAudioClips = clips.filter(
             (c) =>
               !c.disabled &&
@@ -1094,7 +1059,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           activeJobIdRef.current = jobId;
 
           // Step B: Poll live FFmpeg encoding progress every 750ms (keeps Cloud Run CPU active indefinitely)
-          let finalStatus: {
+          interface FfmpegJobStatus {
             status: 'processing' | 'done' | 'error' | 'cancelled';
             progressPct: number;
             encodedSec: number;
@@ -1104,7 +1069,8 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             bitrateMbps: string;
             mimeType: string;
             error: string | null;
-          } | null = null;
+          }
+          let finalStatus: FfmpegJobStatus | null = null;
 
           while (!abortExportRef.current) {
             await new Promise((r) => setTimeout(r, 750));
@@ -1116,7 +1082,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             if (!statusResp.ok) {
               throw new Error(`Export status check failed (${statusResp.status})`);
             }
-            const statusJson = (await statusResp.json()) as NonNullable<typeof finalStatus>;
+            const statusJson = (await statusResp.json()) as FfmpegJobStatus;
             const mappedProgress = Math.min(
               95,
               Math.max(26, Math.round(25 + (statusJson.progressPct || 0) * 0.7))
@@ -1625,13 +1591,24 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           await new Promise((r) => setTimeout(r, 60));
         }
 
-        // Prime first video clip at start offset
+        // Prime first video clip at start offset and wait for seek so frame 0 is rendered immediately (zero startup freeze)
         const firstClip = activeV1Clips[0];
         if (firstClip) {
           const firstEntry = preloadedVideos.get(firstClip.id);
           if (firstEntry) {
             firstEntry.el.currentTime = firstClip.sourceIn || 0;
             firstEntry.el.playbackRate = Math.max(0.25, Math.min(4.0, firstClip.speed || 1.0));
+            await new Promise<void>((resolve) => {
+              if (!firstEntry.el.seeking && firstEntry.el.readyState >= 2) return resolve();
+              const finish = () => {
+                firstEntry.el.removeEventListener('seeked', finish);
+                firstEntry.el.removeEventListener('canplay', finish);
+                resolve();
+              };
+              firstEntry.el.addEventListener('seeked', finish, { once: true });
+              firstEntry.el.addEventListener('canplay', finish, { once: true });
+              window.setTimeout(finish, 150);
+            });
           }
         }
         drawCompositeExportFrame(0, 0);
@@ -1722,6 +1699,12 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
         const frameIntervalMs = Math.max(15, Math.round(1000 / targetFps));
 
         recorder.start(100);
+        if (firstClip) {
+          const firstEntry = preloadedVideos.get(firstClip.id);
+          if (firstEntry && firstEntry.el.paused) {
+            firstEntry.el.play().catch(() => {});
+          }
+        }
         const recordStartMs = performance.now();
         let frameCounter = 0;
         let lastProgressUpdateMs = 0;
@@ -1759,7 +1742,9 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                   : Math.max(0, Math.min(2, (vClip.volume ?? 100) / 100));
                 gainNode.gain.setValueAtTime(targetGain, exportAudioCtx.currentTime);
               }
-              if (Math.abs(el.currentTime - targetMediaTime) > 0.25) {
+              const timeDiff = Math.abs(el.currentTime - targetMediaTime);
+              // Avoid disruptive micro-seeks during initial 0.8s playback startup so video never freezes at start
+              if (timeDiff > 0.5 && (elapsedSec > 0.8 || vClip !== firstClip)) {
                 try {
                   el.currentTime = targetMediaTime;
                 } catch {
@@ -1876,7 +1861,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             // Ignore
           }
           await new Promise((r) => setTimeout(r, 90));
-          if (recorder.state !== 'inactive') {
+          if ((recorder as MediaRecorder).state !== 'inactive') {
             recorder.stop();
           }
         }
@@ -2417,59 +2402,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               </div>
             </div>
 
-            {/* Section 3: Copyright Check & Fast FFmpeg Mode */}
-            <div className="p-2.5 bg-[#141418] border border-[#2B2B34] rounded space-y-2 text-[11px]">
-              <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2 font-medium text-white cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={copyrightCheck}
-                    onChange={(e) => {
-                      setCopyrightCheck(e.target.checked);
-                      setCopyrightPassed(true);
-                    }}
-                    className="accent-[#00E5CC]"
-                  />
-                  <ShieldCheck className="w-3.5 h-3.5 text-[#34D399]" />
-                  <span>
-                    {isEn
-                      ? 'Run Audio Copyright Check'
-                      : 'Kiểm tra bản quyền âm thanh (Run a copyright check)'}
-                  </span>
-                </label>
-                {copyrightCheck && copyrightPassed && (
-                  <span className="text-[10px] text-[#34D399] font-medium">
-                    {isEn
-                      ? '✓ No copyright issues detected'
-                      : '✓ Không phát hiện vi phạm TikTok/YouTube'}
-                  </span>
-                )}
-              </div>
 
-              <div className="flex items-center justify-between pt-1 border-t border-[#26262F]">
-                <label className="flex items-center gap-2 text-[#D4D4D8] cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={fastCopyMode}
-                    onChange={(e) => setFastCopyMode(e.target.checked)}
-                    className="accent-[#00E5CC]"
-                  />
-                  <span>
-                    {isEn
-                      ? 'FFmpeg `-c copy` (Lossless stream copy without re-encoding)'
-                      : 'FFmpeg `-c copy` (Ghép 50 clip / 60 phút trong 3 giây, không nén lại)'}
-                  </span>
-                </label>
-                <select
-                  value={scriptOs}
-                  onChange={(e) => setScriptOs(e.target.value as 'bat' | 'sh')}
-                  className="px-2 py-0.5 bg-[#1F1F26] border border-[#383842] rounded text-white text-[10px]"
-                >
-                  <option value="bat">Windows (.bat)</option>
-                  <option value="sh">macOS / Linux (.sh)</option>
-                </select>
-              </div>
-            </div>
 
             {/* Cancellation Notice */}
             {cancelNotice && !isRendering && (
@@ -2570,44 +2503,8 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           </div>
         </div>
 
-        {/* Modal Footer with 4 Real Export Options */}
-        <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 bg-[#25252C] border-t border-[#32323C] shrink-0">
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Button: TDO Project Draft JSON (No CapCut PC reference!) */}
-            <button
-              type="button"
-              onClick={onDownloadCapCutDraft}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#2E2E38] hover:bg-[#3A3A46] text-white rounded transition-colors cursor-pointer"
-            >
-              <FileJson className="w-3.5 h-3.5 text-[#00E5CC]" />
-              <span>
-                {isEn ? 'TDO Project (tdo_project.json)' : 'Dự án TDO (tdo_project.json)'}
-              </span>
-            </button>
-
-            {/* Button: Premiere / DaVinci XML */}
-            <button
-              type="button"
-              onClick={handleExportXmlDirect}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#2E2E38] hover:bg-[#3A3A46] text-white rounded transition-colors cursor-pointer"
-            >
-              <Code className="w-3.5 h-3.5 text-[#F59E0B]" />
-              <span>{isEn ? 'Export XML (Premiere / DaVinci)' : 'Xuất XML (Premiere / DaVinci)'}</span>
-            </button>
-
-            {/* Button: Fast FFmpeg Script (.bat / .sh) */}
-            <button
-              type="button"
-              onClick={handleDownloadFfmpegScript}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#202636] hover:bg-[#2B3347] text-[#00E5CC] border border-[#00E5CC]/40 rounded transition-colors cursor-pointer"
-            >
-              <Terminal className="w-3.5 h-3.5" />
-              <span>
-                {isEn ? `Fast FFmpeg Script (.${scriptOs})` : `Lệnh FFmpeg Siêu Tốc (.${scriptOs})`}
-              </span>
-            </button>
-          </div>
-
+        {/* Modal Footer with Clean Direct Video Export */}
+        <div className="flex items-center justify-end gap-2 px-5 py-3 bg-[#25252C] border-t border-[#32323C] shrink-0">
           {/* Primary Export & Cancel Export Buttons */}
           <div className="flex items-center gap-2">
             {isRendering && (

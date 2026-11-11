@@ -7,7 +7,7 @@ export interface PythonSourceModule {
   code: string;
 }
 
-export const ARCHITECTURE_DIAGRAM = `TrendOpsis_Cut_Hybrid_PC/ (Kiến trúc Lai 3 Tầng chuẩn CapCut PC - Windows & macOS)
+export const ARCHITECTURE_DIAGRAM = `TDO_Cut_Hybrid_PC/ (Kiến trúc Lai 3 Tầng chuẩn CapCut PC - Windows & macOS)
 ├── 1_cpp_core_engine/                  # [TẦNG 1: C++ CORE ENGINE — Xử lý hiệu năng & Đồ họa phần cứng]
 │   ├── capcut_core_engine.cpp          # Giải mã/Mã hóa phần cứng (NVENC/AMF/QSV/VideoToolbox), OpenGL/Direct3D11/Metal Shaders 60 FPS
 │   ├── gpu_shader_pipeline.hpp         # Xử lý Effects, Filters (LUT 3D), Spatial Crop, Blend Modes & Keyframe Matrix trực tiếp trên GPU

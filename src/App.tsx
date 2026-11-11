@@ -42,11 +42,20 @@ import {
   ArrowRightLeft,
   Target,
   Subtitles,
+  Scissors,
   Layout,
   Sun,
   Moon,
   Download,
   FolderOpen,
+  Undo2,
+  Redo2,
+  Zap,
+  FileCode,
+  Info,
+  Play,
+  Pause,
+  X,
 } from 'lucide-react';
 import {
   TimelineClip,
@@ -94,6 +103,7 @@ import {
   stepTimelineZoom,
   resolveZoneSelectAll,
   resolveMediaClipDuration,
+  resolveTransitionTargetClip,
   shouldCoalesceUndoCommit,
   rippleTrimTimelineRange,
   removeTimelineDeadAirAndSilence,
@@ -111,10 +121,15 @@ import {
   GRAPHIC_BADGE_STICKERS,
   StickerCatalogItem,
   getFlagGraphicDataUrl,
+  extractFlagIsoCode,
   findGraphicBadgeByIconOrText,
   detectAspectRatioFromDimensions,
   deleteMediaCardsAndLinkedClips,
   formatTimecode,
+  getProjectFullDirPath,
+  getProjectInstallDir,
+  setProjectInstallDir,
+  resolveDefaultProjectTitle,
 } from './utils/timelineEngine';
 import {
   VideoPreviewCanvas,
@@ -140,6 +155,14 @@ import {
   SfxPresetId,
   webAudioEngine,
 } from './utils/webAudioSynthesizer';
+import {
+  saveProject,
+  deleteProjectPermanently,
+  setProjectTrashStatus,
+  duplicateProject as duplicateDbProject,
+  ensureInitialProjects,
+  StoredProject,
+} from './utils/projectDatabase';
 
 const INITIAL_CLIPS: TimelineClip[] = [];
 
@@ -856,7 +879,19 @@ export default function App() {
     }
     document.documentElement.classList.toggle('dark', themeMode === 'dark');
     document.documentElement.classList.toggle('light', themeMode === 'light');
+    document.documentElement.setAttribute('data-theme', themeMode);
   }, [themeMode]);
+
+  useEffect(() => {
+    fetch('/api/app-info')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.projectsDir) {
+          setProjectInstallDir(data.projectsDir);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     try {
@@ -892,12 +927,31 @@ export default function App() {
   // Dual Workspace Navigation ('home' = CapCut PC Home Screen Launcher, 'workstation' = 4-Zone Editor, 'pyqt_source' = Python Engine Code)
   const [activeView, setActiveView] = useState<'home' | 'workstation' | 'pyqt_source'>(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('view') === 'home') return 'home';
-    return 'workstation';
+    if (params.get('view') === 'workstation') return 'workstation';
+    if (params.get('view') === 'pyqt_source') return 'pyqt_source';
+    return 'home';
   });
 
   // Top Header Menu & Modals
   const [isTopMenuOpen, setIsTopMenuOpen] = useState(false);
+  const topMenuContainerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!isTopMenuOpen) return;
+    const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
+      if (
+        topMenuContainerRef.current &&
+        !topMenuContainerRef.current.contains(e.target as Node)
+      ) {
+        setIsTopMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('touchstart', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('touchstart', handleOutsideClick);
+    };
+  }, [isTopMenuOpen]);
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [autoSaveTimeStr, setAutoSaveTimeStr] = useState<string>(() =>
@@ -949,21 +1003,27 @@ export default function App() {
           const trimmed = parsed.projectName.trim();
           const lower = trimmed.toLowerCase();
           if (
+            !lower ||
+            lower === '1' ||
             lower === '0421-sao chép' ||
             lower === '0421-sao chep' ||
             lower === '0421-copy' ||
             lower === 'chưa có dự án' ||
-            lower === 'untitled project'
+            lower === 'untitled project' ||
+            lower === 'dự án mẫu tdo-cut 4k' ||
+            lower === 'du an mau tdo-cut 4k' ||
+            lower === 'nhập tên dự án' ||
+            lower === 'enter project name'
           ) {
-            return '';
+            return 'Dự án 1';
           }
-          return trimmed;
+          return trimmed || 'Dự án 1';
         }
       }
     } catch {
       // Ignore storage error
     }
-    return '';
+    return 'Dự án 1';
   });
   const [isEditingProjectName, setIsEditingProjectName] = useState(false);
 
@@ -983,6 +1043,25 @@ export default function App() {
   const [autoSnapEdge, setAutoSnapEdge] = useState<boolean>(true);
   const [subCategoryFilter, setSubCategoryFilter] = useState<string>('all');
   const [stickerSearchQuery, setStickerSearchQuery] = useState<string>('');
+
+  // Mobile-first responsive detection (< 768px) & bottom drawer tab
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 768;
+    }
+    return false;
+  });
+  const [mobileBottomTab, setMobileBottomTab] = useState<
+    'media' | 'text' | 'stickers' | 'effects' | 'transitions' | null
+  >(null);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   interface WorkspaceSnapshot {
     clips: TimelineClip[];
@@ -1005,6 +1084,50 @@ export default function App() {
   });
   const [mediaCards, setMediaCards] = useState<MediaCardItem[]>(INITIAL_MEDIA_CARDS);
   const [subProjects, setSubProjects] = useState<SubProjectItem[]>([]);
+  const [activeProjectId, setActiveProjectId] = useState<string>('');
+  const [selectedTransitionItem, setSelectedTransitionItem] = useState<{
+    id: TransitionType;
+    label: string;
+    dur: number;
+  } | null>(null);
+
+  // Load persisted projects from IndexedDB on startup
+  useEffect(() => {
+    let isMounted = true;
+    ensureInitialProjects()
+      .then((list) => {
+        if (!isMounted) return;
+        const subItems: SubProjectItem[] = list.map((p) => ({
+          id: p.id,
+          name: p.name,
+          createdAt: p.createdAt,
+          aspectRatio: p.aspectRatio,
+          clips: p.clips,
+          isDeletedInTrash: p.isDeletedInTrash,
+        }));
+        setSubProjects(subItems);
+        const activeProj = list.find((p) => !p.isDeletedInTrash);
+        if (activeProj) {
+          setActiveProjectId(activeProj.id);
+          const resolvedName = resolveDefaultProjectTitle(activeProj.name, language);
+          if (!projectName || projectName === '1') {
+            setProjectName(resolvedName);
+            setAspectRatio((activeProj.aspectRatio as AspectRatioOption) || '16:9');
+            setClips(activeProj.clips.map((c) => ({ ...c })));
+          }
+        } else {
+          setActiveProjectId('');
+          if (!projectName || projectName === '1') {
+            setProjectName('Dự án 1');
+            setClips([]);
+          }
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const [timelineTracks, setTimelineTracks] = useState<TimelineTrackDef[]>(DEFAULT_TIMELINE_TRACKS);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
@@ -1121,17 +1244,35 @@ export default function App() {
     }, 3200);
   };
 
-  // Persist projectName to LocalStorage
+  // Persist project changes to IndexedDB permanently
   useEffect(() => {
-    try {
-      localStorage.setItem(
-        STORAGE_KEY_PROJECT,
-        JSON.stringify({ projectName, aspectRatio })
-      );
-    } catch {
-      // Ignore storage quota errors
-    }
-  }, [projectName, aspectRatio]);
+    if (!activeProjectId || !projectName.trim()) return;
+    const timer = setTimeout(() => {
+      const dur = clips.reduce((acc, c) => Math.max(acc, c.startTime + c.duration), 0);
+      saveProject({
+        id: activeProjectId,
+        name: projectName,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        aspectRatio,
+        durationSec: dur,
+        clips,
+        version: 1,
+      }).then(() => {
+        setAutoSaveTimeStr(
+          new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+        );
+        setSubProjects((prev) =>
+          prev.map((p) =>
+            p.id === activeProjectId
+              ? { ...p, name: projectName, aspectRatio, clips }
+              : p
+          )
+        );
+      }).catch(() => {});
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [activeProjectId, projectName, aspectRatio, clips]);
 
   // Helper to push current workspace state into Undo history (coalesces continuous slider/drag ticks on the same commitKey)
   const pushUndoSnapshot = (overrideClips?: TimelineClip[], commitKey?: string) => {
@@ -1631,16 +1772,12 @@ export default function App() {
     }
 
     if (payload.kind === 'transition' && payload.transitionType) {
-      const videoClips = clips.filter((c) => c.trackIndex === 0);
-      let clipAtDrop =
-        (targetClipId ? clips.find((c) => c.id === targetClipId && c.trackIndex === 0) : undefined) ||
-        videoClips.find((c) => startSec >= c.startTime && startSec <= c.startTime + c.duration);
-      if (!clipAtDrop && videoClips.length > 0) {
-        clipAtDrop = videoClips.reduce((best, c) =>
-          Math.abs(c.startTime - startSec) < Math.abs(best.startTime - startSec) ? c : best
-        );
-      }
-      const chosenClipId = clipAtDrop?.id;
+      const videoClips = clips
+        .filter((c) => c.trackIndex === 0)
+        .sort((a, b) => a.startTime - b.startTime);
+
+      const targetClip = resolveTransitionTargetClip(videoClips, startSec, targetClipId);
+      const chosenClipId = targetClip?.id;
       const transDur = payload.duration || 0.6;
 
       commitClips((prev) =>
@@ -1654,12 +1791,17 @@ export default function App() {
             : c
         )
       );
-      if (clipAtDrop) {
-        setSelectedClipId(clipAtDrop.id);
-        setSelectedClipIds([clipAtDrop.id]);
-        setPlayheadSec(Number((clipAtDrop.startTime + Math.min(0.2, transDur * 0.35)).toFixed(2)));
+
+      if (targetClip) {
+        setSelectedClipId(targetClip.id);
+        setSelectedClipIds([targetClip.id]);
+        setPlayheadSec(Number((targetClip.startTime + Math.min(0.2, transDur * 0.35)).toFixed(2)));
       }
-      showToast(`Đã áp dụng chuyển cảnh "${payload.name}" (${transDur}s) vào điểm cắt clip!`);
+      showToast(
+        language === 'en'
+          ? `Applied transition "${payload.name}" (${transDur}s) to cut joint!`
+          : `Đã áp dụng chuyển cảnh "${payload.name}" (${transDur}s) vào điểm nối clip!`
+      );
       return;
     }
 
@@ -3178,18 +3320,53 @@ export default function App() {
             },
           ];
 
-    let cursor = 0;
-    const generated: TimelineClip[] = sampleLines.map((item, idx) => {
+    // Synchronize subtitle clips with actual timeline audio duration & waveform
+    const audioTrackClips = clips.filter(
+      (c) =>
+        (c.trackIndex === 0 || c.trackIndex === 1 || c.trackIndex === 3) &&
+        !c.muted &&
+        (c.volume ?? 100) > 0
+    );
+
+    let startSec = 0;
+    let totalSpanSec = 16.0;
+
+    if (currentClip && (currentClip.trackIndex === 0 || currentClip.trackIndex === 3)) {
+      // Focus auto-captions onto the selected video or audio clip
+      startSec = currentClip.startTime;
+      totalSpanSec = currentClip.duration;
+    } else if (audioTrackClips.length > 0) {
+      // Synchronize across the entire timeline's audio bounds
+      startSec = Math.min(...audioTrackClips.map((c) => c.startTime));
+      const endSec = Math.max(...audioTrackClips.map((c) => c.startTime + c.duration));
+      totalSpanSec = Math.max(3.0, endSec - startSec);
+    }
+
+    // Determine number of subtitle sentences needed based on duration (2.5s to 3.8s per subtitle line)
+    const targetCount = Math.max(1, Math.min(24, Math.round(totalSpanSec / 3.2)));
+    const actualDurPerLine = Number((totalSpanSec / targetCount).toFixed(2));
+
+    let cursor = startSec;
+    const generated: TimelineClip[] = [];
+
+    for (let idx = 0; idx < targetCount; idx++) {
+      const templateItem = sampleLines[idx % sampleLines.length];
       const cleanedText = useFillerFilter
-        ? item.text.replace(/\b(ờ|à|ừm|uh|um)\b/gi, '').trim()
-        : item.text;
-      const clip: TimelineClip = {
+        ? templateItem.text.replace(/\b(ờ|à|ừm|uh|um)\b/gi, '').trim()
+        : templateItem.text;
+
+      const dur =
+        idx === targetCount - 1
+          ? Number((startSec + totalSpanSec - cursor).toFixed(2))
+          : actualDurPerLine;
+
+      generated.push({
         id: `auto-sub-${Date.now()}-${idx}`,
         name: cleanedText,
         filePath: '',
         trackIndex: 2,
-        startTime: cursor,
-        duration: item.dur,
+        startTime: Number(cursor.toFixed(2)),
+        duration: Math.max(1.0, dur),
         sourceIn: 0,
         speed: 1.0,
         volume: 100,
@@ -3197,13 +3374,13 @@ export default function App() {
         cropRatio: 1.0,
         subtitleText: cleanedText,
         fontSize: activeMode === 'lyrics' ? 30 : 26,
-        textColor: item.color,
-        textStrokeColor: item.stroke,
+        textColor: templateItem.color,
+        textStrokeColor: templateItem.stroke,
         colorHex: activeMode === 'lyrics' ? '#DB2777' : '#A45A49',
-      };
-      cursor += item.dur;
-      return clip;
-    });
+      });
+
+      cursor += dur;
+    }
 
     commitClips((prev) => [
       ...prev.filter(
@@ -3674,73 +3851,73 @@ export default function App() {
   const VISUAL_EFFECT_CATALOG_ITEMS = useMemo(
     () =>
       [
-        { id: 'none', uid: 'fx-none', label: 'Không hiệu ứng', cat: 'all', badge: 'Gốc' },
-        // Hiệu ứng Video / Máy ảnh & Chia khung
-        { id: 'shake', uid: 'fx-shake', label: 'Rung lắc (Camera Shake)', cat: 'all', badge: 'Camera' },
-        { id: 'ken_burns', uid: 'fx-ken-burns', label: 'Thu phóng chậm (Ken Burns)', cat: 'all', badge: 'Zoom' },
-        { id: 'bass_impact', uid: 'fx-bass-impact', label: 'Rung theo Nhịp Bass (Beat Shake)', cat: 'all', badge: 'Beat' },
-        { id: 'dolly_zoom', uid: 'fx-dolly-zoom', label: 'Hiệu ứng Vertigo (Dolly Zoom)', cat: 'all', badge: 'Cinema' },
-        { id: 'split_screen_2', uid: 'fx-split-2', label: 'Chia Đôi Màn Hình (Twin Split 2x)', cat: 'all', badge: 'Split 2x' },
-        { id: 'split_screen_4', uid: 'fx-split-4', label: 'Chia 4 Khung Hình (Quad Grid 4x)', cat: 'all', badge: 'Grid 4x' },
-        { id: 'kaleidoscope', uid: 'fx-kaleidoscope', label: 'Kính Vạn Hoa Ảo Giác (Kaleidoscope)', cat: 'all', badge: 'Mirror' },
-        { id: 'speed_lines', uid: 'fx-speed-lines', label: 'Tia Tốc Độ Anime (Anime Speed Lines)', cat: 'all', badge: 'Anime' },
-        { id: 'underwater', uid: 'fx-underwater', label: 'Sóng Nước Đại Dương (Underwater)', cat: 'all', badge: 'Ocean' },
+        { id: 'none', uid: 'fx-none', label: 'Không hiệu ứng', cat: 'all', badge: 'Gốc', swatch: 'linear-gradient(135deg, #181920 0%, #252834 100%)' },
+        // Hiệu ứng Video / Máy ảnh & Chia khung (Image 3)
+        { id: 'split_screen_4', uid: 'fx-split-4', label: 'Bức tường ghép', cat: 'all', badge: 'Ghép ảnh', swatch: 'linear-gradient(135deg, #1E1B4B 0%, #3B82F6 40%, #EC4899 100%)' },
+        { id: 'glitch', uid: 'fx-glitch', label: 'Quét nhiễu', cat: 'all', badge: 'Nhiễu sóng', swatch: 'linear-gradient(135deg, #0F172A 0%, #06B6D4 50%, #3B82F6 100%)' },
+        { id: 'cyber_holo', uid: 'fx-cyber-holo', label: 'Khối rơi chồng', cat: 'all', badge: '3D Cube', swatch: 'linear-gradient(135deg, #020617 0%, #1E293B 50%, #0F172A 100%)' },
+        { id: 'ken_burns', uid: 'fx-ken-burns', label: 'Đứng hình', cat: 'all', badge: 'Pause', swatch: 'linear-gradient(135deg, #334155 0%, #475569 50%, #64748B 100%)' },
+        { id: 'dolly_zoom', uid: 'fx-dolly-zoom', label: 'Thu phóng méo mó', cat: 'all', badge: 'Warp', swatch: 'linear-gradient(135deg, #E2E8F0 0%, #CBD5E1 50%, #94A3B8 100%)' },
+        { id: 'vhs', uid: 'fx-vhs', label: 'Nhiễu tương phản', cat: 'all', badge: 'Retro', swatch: 'linear-gradient(135deg, #1E3A8A 0%, #2563EB 50%, #60A5FA 100%)' },
+        { id: 'laser_eyes', uid: 'fx-laser-eyes', label: 'Kinh dị đỏ', cat: 'all', badge: 'Horror', swatch: 'linear-gradient(135deg, #1E3A8A 0%, #3B82F6 40%, #EF4444 90%)' },
+        { id: 'matrix_rain', uid: 'fx-matrix-rain', label: 'Mã spam', cat: 'all', badge: 'Matrix', swatch: 'linear-gradient(135deg, #022C22 0%, #065F46 40%, #10B981 100%)' },
+        { id: 'shake', uid: 'fx-shake', label: 'Rung lắc máy ảnh', cat: 'all', badge: 'Shake', swatch: 'linear-gradient(135deg, #1E293B 0%, #334155 50%, #475569 100%)' },
+        { id: 'bass_impact', uid: 'fx-bass-impact', label: 'Rung nhịp Bass', cat: 'all', badge: 'Beat', swatch: 'linear-gradient(135deg, #4C0519 0%, #9F1239 50%, #E11D48 100%)' },
+        { id: 'split_screen_2', uid: 'fx-split-2', label: 'Chia đôi màn hình', cat: 'all', badge: 'Split', swatch: 'linear-gradient(135deg, #172554 0%, #1D4ED8 50%, #3B82F6 100%)' },
+        { id: 'kaleidoscope', uid: 'fx-kaleidoscope', label: 'Kính vạn hoa', cat: 'all', badge: 'Mirror', swatch: 'linear-gradient(135deg, #4A044E 0%, #86198F 50%, #D946EF 100%)' },
+        { id: 'speed_lines', uid: 'fx-speed-lines', label: 'Tia tốc độ Anime', cat: 'all', badge: 'Anime', swatch: 'linear-gradient(135deg, #451A03 0%, #92400E 50%, #F59E0B 100%)' },
+        { id: 'underwater', uid: 'fx-underwater', label: 'Sóng đại dương', cat: 'all', badge: 'Ocean', swatch: 'linear-gradient(135deg, #083344 0%, #0E7490 50%, #06B6D4 100%)' },
         // Hiệu ứng Cơ thể (body)
-        { id: 'clone_trail', uid: 'fx-clone-trail', label: 'Phân thân Chuyển động (Clone Trail)', cat: 'body', badge: 'Body FX' },
-        { id: 'soul_out', uid: 'fx-soul-out', label: 'Tách bóng Hồn lìa xác (Soul Out)', cat: 'body', badge: 'TikTok' },
-        { id: 'dreamy_glow', uid: 'fx-dreamy-glow', label: 'Hào quang Mộng mơ (Body Glow)', cat: 'body', badge: 'Body FX' },
-        { id: 'laser_eyes', uid: 'fx-laser-eyes', label: 'Tia chớp Cơ thể (Laser Eyes)', cat: 'body', badge: 'Body FX' },
-        { id: 'neon_outline', uid: 'fx-neon-outline', label: 'Viền điện tử Quanh người (Stroke)', cat: 'body', badge: 'Body FX' },
-        { id: 'lightning_storm', uid: 'fx-lightning-storm', label: 'Tia Sét Siêu Năng Lực (Thunder Bolt)', cat: 'body', badge: 'Body FX' },
-        { id: 'thermal_vision', uid: 'fx-thermal-vision', label: 'Camera Tầm Nhiệt Hồng Ngoại (Thermal)', cat: 'body', badge: 'Sci-Fi' },
-        { id: 'spotlight_stage', uid: 'fx-spotlight-stage', label: 'Đèn Rọi Tâm Điểm Sân Khấu (Spotlight)', cat: 'body', badge: 'Stage' },
+        { id: 'clone_trail', uid: 'fx-clone-trail', label: 'Phân thân chuyển động', cat: 'body', badge: 'Body FX', swatch: 'linear-gradient(135deg, #2E1065 0%, #581C87 50%, #9333EA 100%)' },
+        { id: 'soul_out', uid: 'fx-soul-out', label: 'Tách bóng xuất hồn', cat: 'body', badge: 'TikTok', swatch: 'linear-gradient(135deg, #111827 0%, #374151 50%, #6B7280 100%)' },
+        { id: 'dreamy_glow', uid: 'fx-dreamy-glow', label: 'Hào quang lấp lánh', cat: 'body', badge: 'Body FX', swatch: 'linear-gradient(135deg, #831843 0%, #BE185D 50%, #F472B6 100%)' },
+        { id: 'neon_outline', uid: 'fx-neon-outline', label: 'Viền điện tử cơ thể', cat: 'body', badge: 'Body FX', swatch: 'linear-gradient(135deg, #042F2E 0%, #0D9488 50%, #2DD4BF 100%)' },
+        { id: 'lightning_storm', uid: 'fx-lightning-storm', label: 'Tia sét siêu nhiên', cat: 'body', badge: 'Body FX', swatch: 'linear-gradient(135deg, #1E1B4B 0%, #4338CA 50%, #818CF8 100%)' },
+        { id: 'thermal_vision', uid: 'fx-thermal-vision', label: 'Camera tầm nhiệt', cat: 'body', badge: 'Sci-Fi', swatch: 'linear-gradient(135deg, #450A0A 0%, #DC2626 40%, #FBBF24 80%)' },
+        { id: 'spotlight_stage', uid: 'fx-spotlight-stage', label: 'Đèn rọi sân khấu', cat: 'body', badge: 'Stage', swatch: 'linear-gradient(135deg, #18181B 0%, #27272A 50%, #A1A1AA 100%)' },
         // Cổ điển / VHS & Điện ảnh (retro)
-        { id: 'vhs', uid: 'fx-vhs', label: 'Băng từ VHS 1998 (VHS Retro)', cat: 'retro', badge: 'Retro' },
-        { id: 'fade_black', uid: 'fx-fade-black', label: 'Mờ dần Điện ảnh (Fade Black)', cat: 'retro', badge: 'Cinema' },
-        { id: 'super8_grain', uid: 'fx-super8-grain', label: 'Hạt phim Nhựa 16mm (Film Grain)', cat: 'retro', badge: '16mm' },
-        { id: 'old_tv', uid: 'fx-old-tv', label: 'Tivi CRT Màn hình cong (Old TV)', cat: 'retro', badge: 'CRT' },
-        { id: 'dv_cam', uid: 'fx-dv-cam', label: 'Máy quay DV Camcorder 2000s', cat: 'retro', badge: 'Y2K' },
-        { id: 'cinema_bars', uid: 'fx-cinema-bars', label: 'Viền Đen Điện Ảnh 2.35:1 (Letterbox)', cat: 'retro', badge: '2.35:1' },
-        { id: 'halftone_comic', uid: 'fx-halftone-comic', label: 'Chấm Bi Truyện Tranh (Comic Halftone)', cat: 'retro', badge: 'Comic' },
-        { id: 'night_vision', uid: 'fx-night-vision', label: 'Ống Nhòm Đêm Quân Sự (Night Vision)', cat: 'retro', badge: 'NVG' },
+        { id: 'fade_black', uid: 'fx-fade-black', label: 'Mờ dần điện ảnh', cat: 'retro', badge: 'Cinema', swatch: 'linear-gradient(135deg, #000000 0%, #18181B 100%)' },
+        { id: 'super8_grain', uid: 'fx-super8-grain', label: 'Hạt phim 16mm', cat: 'retro', badge: '16mm', swatch: 'linear-gradient(135deg, #292524 0%, #57534E 50%, #A8A29E 100%)' },
+        { id: 'old_tv', uid: 'fx-old-tv', label: 'Tivi CRT cong', cat: 'retro', badge: 'CRT', swatch: 'linear-gradient(135deg, #1E293B 0%, #334155 50%, #64748B 100%)' },
+        { id: 'dv_cam', uid: 'fx-dv-cam', label: 'Máy quay DV 2000s', cat: 'retro', badge: 'Y2K', swatch: 'linear-gradient(135deg, #0F172A 0%, #1E3A8A 50%, #3B82F6 100%)' },
+        { id: 'cinema_bars', uid: 'fx-cinema-bars', label: 'Viền đen 2.35:1', cat: 'retro', badge: '2.35:1', swatch: 'linear-gradient(180deg, #000 20%, #1E293B 20%, #1E293B 80%, #000 80%)' },
+        { id: 'halftone_comic', uid: 'fx-halftone-comic', label: 'Chấm bi truyện tranh', cat: 'retro', badge: 'Comic', swatch: 'linear-gradient(135deg, #701A75 0%, #A21CAF 50%, #F472B6 100%)' },
+        { id: 'night_vision', uid: 'fx-night-vision', label: 'Ống nhòm đêm', cat: 'retro', badge: 'NVG', swatch: 'linear-gradient(135deg, #052E16 0%, #14532D 50%, #22C55E 100%)' },
         // Ánh sáng Neon, Thời tiết & Hạt (glow)
-        { id: 'flash', uid: 'fx-flash', label: 'Nháy sáng Trắng (White Flash)', cat: 'glow', badge: 'Flash' },
-        { id: 'glitch', uid: 'fx-glitch', label: 'Nhiễu sóng RGB (Chromatic Glitch)', cat: 'glow', badge: 'RGB' },
-        { id: 'strobe_party', uid: 'fx-strobe-party', label: 'Đèn Chớp Sân Khấu (Strobe Light)', cat: 'glow', badge: 'Club' },
-        { id: 'cyber_holo', uid: 'fx-cyber-holo', label: 'Quét Hologram Cyberpunk', cat: 'glow', badge: 'Sci-Fi' },
-        { id: 'golden_rays', uid: 'fx-golden-rays', label: 'Tia Nắng Hoàng Hôn (Sun Rays)', cat: 'glow', badge: 'Glow' },
-        { id: 'matrix_rain', uid: 'fx-matrix-rain', label: 'Mưa Mã Nhị Phân (Matrix Digital Rain)', cat: 'glow', badge: 'Matrix' },
-        { id: 'fire_sparks', uid: 'fx-fire-sparks', label: 'Đốm Lửa Rực Cháy (Fire Embers)', cat: 'glow', badge: 'Fire' },
-        { id: 'snowfall', uid: 'fx-snowfall', label: 'Tuyết Rơi Mùa Đông (Winter Snowfall)', cat: 'glow', badge: 'Snow' },
-        { id: 'sakura_petals', uid: 'fx-sakura-petals', label: 'Hoa Anh Đào Bay (Sakura Petals)', cat: 'glow', badge: 'Sakura' },
-        { id: 'confetti_party', uid: 'fx-confetti-party', label: 'Pháo Giấy Chúc Mừng (Party Confetti)', cat: 'glow', badge: 'Party' },
-      ] as Array<{ id: VisualEffectType; uid: string; label: string; cat: string; badge: string }>,
+        { id: 'flash', uid: 'fx-flash', label: 'Nháy chớp trắng', cat: 'glow', badge: 'Flash', swatch: 'linear-gradient(135deg, #E2E8F0 0%, #FFFFFF 50%, #CBD5E1 100%)' },
+        { id: 'strobe_party', uid: 'fx-strobe-party', label: 'Đèn chớp vũ trường', cat: 'glow', badge: 'Club', swatch: 'linear-gradient(135deg, #4C1D95 0%, #8B5CF6 50%, #EC4899 100%)' },
+        { id: 'golden_rays', uid: 'fx-golden-rays', label: 'Tia nắng hoàng hôn', cat: 'glow', badge: 'Glow', swatch: 'linear-gradient(135deg, #78350F 0%, #D97706 50%, #F59E0B 100%)' },
+        { id: 'fire_sparks', uid: 'fx-fire-sparks', label: 'Đốm lửa rực cháy', cat: 'glow', badge: 'Fire', swatch: 'linear-gradient(135deg, #7C2D12 0%, #EA580C 50%, #F97316 100%)' },
+        { id: 'snowfall', uid: 'fx-snowfall', label: 'Tuyết rơi mùa đông', cat: 'glow', badge: 'Snow', swatch: 'linear-gradient(135deg, #1E293B 0%, #38BDF8 50%, #E0F2FE 100%)' },
+        { id: 'sakura_petals', uid: 'fx-sakura-petals', label: 'Hoa anh đào bay', cat: 'glow', badge: 'Sakura', swatch: 'linear-gradient(135deg, #831843 0%, #DB2777 50%, #F472B6 100%)' },
+        { id: 'confetti_party', uid: 'fx-confetti-party', label: 'Pháo giấy sinh nhật', cat: 'glow', badge: 'Party', swatch: 'linear-gradient(135deg, #854D0E 0%, #F59E0B 40%, #EC4899 80%)' },
+      ] as Array<{ id: VisualEffectType; uid: string; label: string; cat: string; badge: string; swatch: string }>,
     []
   );
 
   const TRANSITION_CATALOG_ITEMS = useMemo(
     () =>
       [
-        { id: 'none', uid: 'tr-none', label: 'Không chuyển tiếp', cat: 'all', dur: 0.5 },
+        { id: 'none', uid: 'tr-none', label: 'Không chuyển tiếp', cat: 'all', dur: 0.5, icon: '⊘', swatch: 'linear-gradient(135deg, #181920 0%, #252834 100%)' },
         // Máy ảnh & Zoom (camera)
-        { id: 'zoom_in', uid: 'tr-zoom-in', label: 'Kéo gần (Camera Zoom In)', cat: 'camera', dur: 0.6 },
-        { id: 'spin', uid: 'tr-spin', label: 'Xoay vòng 360° (Camera Spin)', cat: 'camera', dur: 0.7 },
-        { id: 'whip_pan', uid: 'tr-whip-pan', label: 'Lia máy Nhanh (Whip Pan)', cat: 'camera', dur: 0.4 },
-        { id: 'roll_shutter', uid: 'tr-roll-shutter', label: 'Cuộn ống kính (Lens Roll)', cat: 'camera', dur: 0.6 },
-        { id: 'pull_out', uid: 'tr-pull-out', label: 'Thu xa Đột ngột (Pull Out)', cat: 'camera', dur: 0.5 },
+        { id: 'zoom_in', uid: 'tr-zoom-in', label: 'Kéo gần (Zoom In)', cat: 'camera', dur: 0.6, icon: '🔍', swatch: 'linear-gradient(135deg, #1E1B4B 0%, #4338CA 50%, #6366F1 100%)' },
+        { id: 'spin', uid: 'tr-spin', label: 'Xoay vòng 360°', cat: 'camera', dur: 0.7, icon: '🔄', swatch: 'linear-gradient(135deg, #311042 0%, #7E22CE 50%, #C084FC 100%)' },
+        { id: 'whip_pan', uid: 'tr-whip-pan', label: 'Lia máy (Whip Pan)', cat: 'camera', dur: 0.4, icon: '💨', swatch: 'linear-gradient(135deg, #0C4A6E 0%, #0284C7 50%, #38BDF8 100%)' },
+        { id: 'roll_shutter', uid: 'tr-roll-shutter', label: 'Cuộn ống kính', cat: 'camera', dur: 0.6, icon: '🌀', swatch: 'linear-gradient(135deg, #134E4A 0%, #0D9488 50%, #2DD4BF 100%)' },
+        { id: 'pull_out', uid: 'tr-pull-out', label: 'Thu xa (Pull Out)', cat: 'camera', dur: 0.5, icon: '🔎', swatch: 'linear-gradient(135deg, #1F2937 0%, #374151 50%, #60A5FA 100%)' },
         // Chuyển động MG (mg)
-        { id: 'cross_dissolve', uid: 'tr-cross-dissolve', label: 'Hòa tan Mượt (Cross Dissolve)', cat: 'mg', dur: 0.8 },
-        { id: 'slide_left', uid: 'tr-slide-left', label: 'Trượt ngang (Slide Left)', cat: 'mg', dur: 0.6 },
-        { id: 'wipe_split', uid: 'tr-wipe-split', label: 'Tách đôi Màn hình (Split Wipe)', cat: 'mg', dur: 0.6 },
-        { id: 'clock_sweep', uid: 'tr-clock-sweep', label: 'Quét kim Đồng hồ (Clock Wipe)', cat: 'mg', dur: 0.7 },
-        { id: 'push_up', uid: 'tr-push-up', label: 'Đẩy dọc Lên trên (Push Up)', cat: 'mg', dur: 0.5 },
+        { id: 'cross_dissolve', uid: 'tr-cross-dissolve', label: 'Hòa tan (Dissolve)', cat: 'mg', dur: 0.8, icon: '⋈', swatch: 'linear-gradient(135deg, #14532D 0%, #16A34A 50%, #4ADE80 100%)' },
+        { id: 'slide_left', uid: 'tr-slide-left', label: 'Trượt ngang', cat: 'mg', dur: 0.6, icon: '◀', swatch: 'linear-gradient(135deg, #701A75 0%, #C026D3 50%, #F472B6 100%)' },
+        { id: 'wipe_split', uid: 'tr-wipe-split', label: 'Tách đôi (Split)', cat: 'mg', dur: 0.6, icon: '◫', swatch: 'linear-gradient(135deg, #831843 0%, #DB2777 50%, #F43F5E 100%)' },
+        { id: 'clock_sweep', uid: 'tr-clock-sweep', label: 'Quét kim đồng hồ', cat: 'mg', dur: 0.7, icon: '⏱', swatch: 'linear-gradient(135deg, #78350F 0%, #D97706 50%, #FBBF24 100%)' },
+        { id: 'push_up', uid: 'tr-push-up', label: 'Đẩy lên (Push Up)', cat: 'mg', dur: 0.5, icon: '▲', swatch: 'linear-gradient(135deg, #1E293B 0%, #2563EB 50%, #38BDF8 100%)' },
         // Glitch & Flash (glitch)
-        { id: 'black_fade', uid: 'tr-black-fade', label: 'Chuyển Đen Điện ảnh (Fade Black)', cat: 'glitch', dur: 0.8 },
-        { id: 'white_flash', uid: 'tr-white-flash', label: 'Chớp Trắng Máy ảnh (White Flash)', cat: 'glitch', dur: 0.4 },
-        { id: 'glitch_transition', uid: 'tr-glitch-cut', label: 'Nhiễu sóng Kỹ thuật số (Glitch Cut)', cat: 'glitch', dur: 0.5 },
-        { id: 'film_burn', uid: 'tr-film-burn', label: 'Cháy sáng Phim nhựa (Light Leak)', cat: 'glitch', dur: 0.7 },
-        { id: 'rgb_split', uid: 'tr-rgb-split', label: 'Tách kênh Màu RGB (Datamosh)', cat: 'glitch', dur: 0.5 },
-      ] as Array<{ id: TransitionType; uid: string; label: string; cat: string; dur: number }>,
+        { id: 'black_fade', uid: 'tr-black-fade', label: 'Chuyển đen (Fade Black)', cat: 'glitch', dur: 0.8, icon: '⬛', swatch: 'linear-gradient(135deg, #09090B 0%, #18181B 50%, #27272A 100%)' },
+        { id: 'white_flash', uid: 'tr-white-flash', label: 'Chớp trắng (Flash)', cat: 'glitch', dur: 0.4, icon: '⚡', swatch: 'linear-gradient(135deg, #52525B 0%, #A1A1AA 50%, #E4E4E7 100%)' },
+        { id: 'glitch_transition', uid: 'tr-glitch-cut', label: 'Nhiễu sóng (Glitch)', cat: 'glitch', dur: 0.5, icon: '⚡', swatch: 'linear-gradient(135deg, #0F172A 0%, #06B6D4 50%, #EC4899 100%)' },
+        { id: 'film_burn', uid: 'tr-film-burn', label: 'Cháy sáng phim', cat: 'glitch', dur: 0.7, icon: '🔥', swatch: 'linear-gradient(135deg, #7C2D12 0%, #EA580C 50%, #FDE047 100%)' },
+        { id: 'rgb_split', uid: 'tr-rgb-split', label: 'Tách kênh RGB', cat: 'glitch', dur: 0.5, icon: '📺', swatch: 'linear-gradient(135deg, #881337 0%, #4338CA 50%, #06B6D4 100%)' },
+      ] as Array<{ id: TransitionType; uid: string; label: string; cat: string; dur: number; icon: string; swatch: string }>,
     []
   );
 
@@ -4456,48 +4633,86 @@ export default function App() {
       />
 
       {/* TOP TDO CUT APPLICATION TITLE BAR */}
-      <header className="flex items-center justify-between px-3 h-10 bg-[#18181C] border-b border-[#2B2B30] shrink-0 z-30">
+      <header className={`flex items-center justify-between px-3 h-11 border-b shrink-0 z-30 select-none ${
+        themeMode === 'light'
+          ? 'bg-[#FFFFFF] border-[#E2E8F0] text-[#0F172A]'
+          : 'bg-[#131418] border-[#24262E] text-[#E4E4E7]'
+      }`}>
         {/* Left Brand, Logo, Menu Dropdown & Navigation */}
-        <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-2 font-bold text-xs text-white tracking-tight">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 font-bold text-xs tracking-tight">
             <img
               src="/assets/logo.png"
               alt="TDO CUT Logo"
-              className="w-6 h-6 rounded-md object-contain bg-white p-0.5 shadow-xs shrink-0"
+              className="w-6 h-6 rounded-md object-contain bg-white/95 p-0.5 shadow-xs shrink-0"
             />
-            <span className="font-extrabold tracking-tight text-[#E4E4E7]">TDO CUT</span>
+            <span className={`font-extrabold tracking-tight text-[13px] ${
+              themeMode === 'light' ? 'text-[#0F172A]' : 'text-white'
+            }`}>TDO CUT</span>
           </div>
 
           {/* TDO CUT "Menu ▾" Dropdown */}
-          <div className="relative">
+          <div ref={topMenuContainerRef} className="relative">
             <button
               type="button"
               onClick={() => setIsTopMenuOpen((o) => !o)}
-              className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-[#D4D4D8] hover:text-white bg-[#23232A] hover:bg-[#2C2C36] border border-[#32323C] rounded cursor-pointer"
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded cursor-pointer transition-all border ${
+                themeMode === 'light'
+                  ? 'text-[#0F172A] bg-[#F1F5F9] hover:bg-[#E2E8F0] border-[#CBD5E1]'
+                  : 'text-[#D1D5DB] hover:text-white bg-[#1A1B22] hover:bg-[#242630] border-[#2D303C] hover:border-[#383C48]'
+              }`}
             >
               <span>{uiText.menu}</span>
-              <ChevronDown className="w-3 h-3" />
+              <ChevronDown className="w-3 h-3 text-[#9CA3AF]" />
             </button>
 
             {isTopMenuOpen && (
-              <div
-                onMouseLeave={() => setIsTopMenuOpen(false)}
-                className="absolute left-0 top-8 w-64 bg-[#1F1F27] border border-[#343442] rounded-lg shadow-2xl py-1.5 z-50 text-[11px] text-[#E4E4E7]"
-              >
+              <>
+                <div
+                  className="fixed inset-0 z-40 bg-transparent"
+                  onClick={() => setIsTopMenuOpen(false)}
+                />
+                <div
+                  onMouseLeave={() => setIsTopMenuOpen(false)}
+                  className={`absolute left-0 top-9 w-64 rounded-lg shadow-2xl py-1.5 z-50 text-xs backdrop-blur-md border ${
+                    themeMode === 'light'
+                      ? 'bg-[#FFFFFF] border-[#CBD5E1] text-[#0F172A]'
+                      : 'bg-[#181920] border-[#2D303B] text-[#E5E7EB]'
+                  }`}
+                >
                 <div className="px-3 py-1 text-[9px] font-bold uppercase text-[#71717A]">
                   {language === 'en' ? 'File & Project' : 'Tệp & Dự án TDO CUT'}
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     handleClearAllSampleData();
-                    setProjectName(`TDO_CUT_${new Date().toLocaleDateString('vi-VN')}`);
+                    const newId = `project_${Date.now()}`;
+                    const nextIdx = subProjects.length + 1;
+                    const newName = language === 'en' ? `Project ${nextIdx}` : `Dự án ${nextIdx}`;
+                    const newProj: StoredProject = {
+                      id: newId,
+                      name: newName,
+                      createdAt: new Date().toISOString(),
+                      updatedAt: new Date().toISOString(),
+                      aspectRatio: '16:9',
+                      durationSec: 0,
+                      clips: [],
+                      version: 1,
+                    };
+                    await saveProject(newProj).catch(() => {});
+                    setActiveProjectId(newId);
+                    setProjectName(newName);
+                    setSubProjects((prev) => [newProj, ...prev]);
                     setActiveView('workstation');
                     setIsTopMenuOpen(false);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex justify-between cursor-pointer"
+                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center justify-between cursor-pointer"
                 >
-                  <span>{language === 'en' ? 'New Project' : 'Dự án mới (New project)'}</span>
+                  <span className="flex items-center gap-1.5">
+                    <Plus className="w-3.5 h-3.5 text-[#00E5CC]" />
+                    <span>{language === 'en' ? 'New Project' : 'Dự án mới (New project)'}</span>
+                  </span>
                   <span className="font-mono text-[10px] text-[#71717A]">Ctrl+N</span>
                 </button>
                 <button
@@ -4506,9 +4721,12 @@ export default function App() {
                     mediaInputRef.current?.click();
                     setIsTopMenuOpen(false);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex justify-between cursor-pointer"
+                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center justify-between cursor-pointer"
                 >
-                  <span>{language === 'en' ? 'Import Media' : 'Nhập tệp (Import media)'}</span>
+                  <span className="flex items-center gap-1.5">
+                    <FolderOpen className="w-3.5 h-3.5 text-[#00E5CC]" />
+                    <span>{language === 'en' ? 'Import Media' : 'Nhập tệp (Import media)'}</span>
+                  </span>
                   <span className="font-mono text-[10px] text-[#71717A]">Ctrl+I</span>
                 </button>
                 <button
@@ -4543,9 +4761,12 @@ export default function App() {
                     setIsExportModalOpen(true);
                     setIsTopMenuOpen(false);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex justify-between cursor-pointer"
+                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center justify-between cursor-pointer"
                 >
-                  <span>{language === 'en' ? 'Export Video' : 'Xuất video (Export)'}</span>
+                  <span className="flex items-center gap-1.5">
+                    <Upload className="w-3.5 h-3.5 text-[#00E5CC]" />
+                    <span>{language === 'en' ? 'Export Video' : 'Xuất video (Export)'}</span>
+                  </span>
                   <span className="font-mono text-[10px] text-[#71717A]">Ctrl+E</span>
                 </button>
                 <button
@@ -4562,8 +4783,9 @@ export default function App() {
                     setIsTopMenuOpen(false);
                     showToast('Đã xuất file XML tương thích Adobe Premiere & DaVinci Resolve!');
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] cursor-pointer"
+                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center gap-1.5 cursor-pointer"
                 >
+                  <FileCode className="w-3.5 h-3.5 text-[#00E5CC]" />
                   <span>{language === 'en' ? 'Export XML (Premiere / DaVinci)' : 'Xuất XML (Premiere / DaVinci)'}</span>
                 </button>
 
@@ -4577,9 +4799,10 @@ export default function App() {
                     handleRemoveDeadAirSilence();
                     setIsTopMenuOpen(false);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] cursor-pointer"
+                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center gap-1.5 cursor-pointer"
                 >
-                  <span>⚡ {uiText.removeSilence}</span>
+                  <Zap className="w-3.5 h-3.5 text-[#00E5CC]" />
+                  <span>{uiText.removeSilence}</span>
                 </button>
                 <button
                   type="button"
@@ -4587,9 +4810,10 @@ export default function App() {
                     handleSyncVideoClipsToBeats();
                     setIsTopMenuOpen(false);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] cursor-pointer"
+                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center gap-1.5 cursor-pointer"
                 >
-                  <span>🎵 {uiText.autoBeatSync}</span>
+                  <Music className="w-3.5 h-3.5 text-[#00E5CC]" />
+                  <span>{uiText.autoBeatSync}</span>
                 </button>
                 <button
                   type="button"
@@ -4597,9 +4821,12 @@ export default function App() {
                     handleUndo();
                     setIsTopMenuOpen(false);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex justify-between cursor-pointer"
+                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center justify-between cursor-pointer"
                 >
-                  <span>{language === 'en' ? 'Undo' : 'Hoàn tác (Undo)'}</span>
+                  <span className="flex items-center gap-1.5">
+                    <Undo2 className="w-3.5 h-3.5 text-[#00E5CC]" />
+                    <span>{language === 'en' ? 'Undo' : 'Hoàn tác (Undo)'}</span>
+                  </span>
                   <span className="font-mono text-[10px] text-[#71717A]">Ctrl+Z</span>
                 </button>
                 <button
@@ -4608,8 +4835,9 @@ export default function App() {
                     setIsSettingsModalOpen(true);
                     setIsTopMenuOpen(false);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] cursor-pointer"
+                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center gap-1.5 cursor-pointer"
                 >
+                  <Settings className="w-3.5 h-3.5 text-[#00E5CC]" />
                   <span>
                     {language === 'en'
                       ? 'Settings & Language (VI / EN)'
@@ -4623,8 +4851,9 @@ export default function App() {
                     setIsMatrixModalOpen(true);
                     setIsTopMenuOpen(false);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] cursor-pointer"
+                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center gap-1.5 cursor-pointer"
                 >
+                  <Sparkles className="w-3.5 h-3.5 text-[#00E5CC]" />
                   <span>
                     {language === 'en'
                       ? 'Matrix Batch Generator'
@@ -4638,8 +4867,9 @@ export default function App() {
                     setInspectorMode('project_details');
                     setIsTopMenuOpen(false);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] cursor-pointer"
+                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center gap-1.5 cursor-pointer"
                 >
+                  <Info className="w-3.5 h-3.5 text-[#00E5CC]" />
                   <span>{language === 'en' ? 'Project Info' : 'Chi tiết dự án (Project Info)'}</span>
                 </button>
                 <button
@@ -4650,18 +4880,23 @@ export default function App() {
                   }}
                   className="w-full px-3 py-1.5 text-left text-[#00E5CC] hover:bg-[#00E5CC]/15 font-semibold cursor-pointer"
                 >
-                  <span>
-                    {activeView === 'home'
-                      ? language === 'en'
-                        ? '🎬 Open Timeline Workstation'
-                        : '🎬 Mở Bàn dựng Timeline (Workstation)'
-                      : language === 'en'
-                      ? '🏠 Back to Home Hub'
-                      : '🏠 Về màn hình Trang chủ (Back to Home)'}
+                  <span className="flex items-center gap-1.5">
+                    {activeView === 'home' ? (
+                      <>
+                        <Film className="w-3.5 h-3.5 text-[#00E5CC]" />
+                        <span>{language === 'en' ? 'Open Timeline Workstation' : 'Mở Bàn dựng Timeline (Workstation)'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Home className="w-3.5 h-3.5 text-[#00E5CC]" />
+                        <span>{language === 'en' ? 'Back to Home Hub' : 'Về màn hình Trang chủ (Back to Home)'}</span>
+                      </>
+                    )}
                   </span>
                 </button>
               </div>
-            )}
+            </>
+          )}
           </div>
         </div>
 
@@ -4681,7 +4916,11 @@ export default function App() {
                     if (e.key === 'Enter') setIsEditingProjectName(false);
                   }}
                   aria-label="Sửa tên dự án"
-                  className="px-2 py-0.5 text-xs bg-[#111114] border border-[#00E5CC] rounded text-white font-medium w-44 text-center"
+                  className={`px-2 py-0.5 text-xs rounded font-medium w-44 text-center border ${
+                    themeMode === 'light'
+                      ? 'bg-white border-[#00D2C4] text-[#0F172A]'
+                      : 'bg-[#111114] border-[#00E5CC] text-white'
+                  }`}
                 />
                 <button
                   type="button"
@@ -4700,7 +4939,11 @@ export default function App() {
                     ? 'Click to rename project (Auto-saved to LocalStorage)'
                     : 'Bấm để đổi tên dự án (Tự động lưu vào LocalStorage)'
                 }
-                className="flex items-center gap-1.5 text-xs font-semibold text-[#D4D4D8] hover:text-white px-2 py-0.5 rounded hover:bg-[#25252C] cursor-pointer"
+                className={`flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded cursor-pointer transition-colors ${
+                  themeMode === 'light'
+                    ? 'text-[#0F172A] hover:bg-[#F1F5F9] border border-transparent hover:border-[#CBD5E1]'
+                    : 'text-[#D4D4D8] hover:text-white hover:bg-[#25252C]'
+                }`}
               >
                 <span data-testid="top-header-project-title">
                   {projectName || (language === 'en' ? 'Enter project name' : 'Nhập tên dự án')}
@@ -4735,11 +4978,15 @@ export default function App() {
             }}
             title={uiText.switchThemeTitle}
             aria-label="Đổi giao diện Sáng / Tối"
-            className="flex items-center gap-1 px-2 py-1 rounded border text-[11px] font-semibold bg-[#222228] hover:bg-[#2C2C36] text-[#D4D4D8] hover:text-white border-[#32323A] transition-colors cursor-pointer"
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-semibold transition-all cursor-pointer ${
+              themeMode === 'light'
+                ? 'bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#0F172A] border-[#CBD5E1]'
+                : 'bg-[#1A1B22] hover:bg-[#242630] text-[#D1D5DB] hover:text-white border-[#2D303C] hover:border-[#383C48]'
+            }`}
           >
             {themeMode === 'light' ? (
               <>
-                <Sun className="w-3.5 h-3.5 text-[#F59E0B]" />
+                <Sun className="w-3.5 h-3.5 text-amber-500" />
                 <span className="hidden md:inline">
                   {language === 'en' ? 'Light' : 'Sáng'}
                 </span>
@@ -4767,10 +5014,14 @@ export default function App() {
                   : 'Chuyển đổi Bố cục / Chi tiết dự án'
               }
               aria-label="Chuyển đổi bố cục"
-              className={`p-1.5 rounded border transition-colors cursor-pointer ${
+              className={`p-1.5 rounded border transition-all cursor-pointer ${
                 inspectorMode === 'project_details' && activeView === 'workstation'
-                  ? 'bg-[#282830] text-[#00E5CC] border-[#00E5CC]/40'
-                  : 'bg-[#222228] text-[#D4D4D8] border-[#32323A] hover:text-white'
+                  ? themeMode === 'light'
+                    ? 'bg-[#CCFBF1] text-[#0F766E] border-[#00E5CC]'
+                    : 'bg-[#242630] text-[#00E5CC] border-[#00E5CC]/50'
+                  : themeMode === 'light'
+                  ? 'bg-[#F1F5F9] text-[#475569] border-[#CBD5E1] hover:text-[#0F172A] hover:bg-[#E2E8F0]'
+                  : 'bg-[#1A1B22] text-[#D1D5DB] border-[#2D303C] hover:text-white hover:border-[#383C48]'
               }`}
             >
               <Layout className="w-3.5 h-3.5" />
@@ -4782,7 +5033,11 @@ export default function App() {
             onClick={() => setIsShortcutsModalOpen(true)}
             title={uiText.shortcuts}
             aria-label="Phím tắt"
-            className="p-1.5 bg-[#222228] hover:bg-[#2C2C36] text-[#D4D4D8] hover:text-white border border-[#32323A] rounded cursor-pointer"
+            className={`p-1.5 rounded border transition-all cursor-pointer ${
+              themeMode === 'light'
+                ? 'bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#475569] hover:text-[#0F172A] border-[#CBD5E1]'
+                : 'bg-[#1A1B22] hover:bg-[#242630] text-[#D1D5DB] hover:text-white border-[#2D303C] hover:border-[#383C48]'
+            }`}
           >
             <Keyboard className="w-3.5 h-3.5" />
           </button>
@@ -4792,7 +5047,11 @@ export default function App() {
             onClick={() => setIsSettingsModalOpen(true)}
             title={uiText.settings}
             aria-label="Cài đặt hệ thống"
-            className="p-1.5 bg-[#222228] hover:bg-[#2C2C36] text-[#D4D4D8] hover:text-white border border-[#32323A] rounded cursor-pointer"
+            className={`p-1.5 rounded border transition-all cursor-pointer ${
+              themeMode === 'light'
+                ? 'bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#475569] hover:text-[#0F172A] border-[#CBD5E1]'
+                : 'bg-[#1A1B22] hover:bg-[#242630] text-[#D1D5DB] hover:text-white border-[#2D303C] hover:border-[#383C48]'
+            }`}
           >
             <Settings className="w-3.5 h-3.5" />
           </button>
@@ -4803,16 +5062,20 @@ export default function App() {
                 type="button"
                 onClick={handleExportTdoCutProject}
                 title={uiText.saveProjectJson}
-                className="hidden md:flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium bg-[#2B2B34] hover:bg-[#353542] text-[#E4E4E7] border border-[#3B3B48] rounded cursor-pointer"
+                className={`hidden md:flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded border transition-all cursor-pointer ${
+                  themeMode === 'light'
+                    ? 'bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#0F172A] border-[#CBD5E1]'
+                    : 'bg-[#1E2028] hover:bg-[#262832] text-[#E4E4E7] border-[#2E313C]'
+                }`}
               >
-                <Download className="w-3 h-3 text-[#00E5CC]" />
+                <Download className="w-3.5 h-3.5 text-[#00E5CC]" />
                 <span>{language === 'en' ? 'Save Project' : 'Lưu Dự án'}</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setIsExportModalOpen(true)}
-                className="flex items-center gap-1.5 px-3.5 py-1 text-xs font-bold bg-[#00E5CC] hover:bg-[#00F5DC] text-[#0A0E12] rounded transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-1 text-xs font-bold bg-[#00E5CC] hover:bg-[#00F5DC] active:bg-[#00D2C4] text-[#071013] rounded transition-all shadow-xs cursor-pointer"
               >
                 <Upload className="w-3.5 h-3.5" />
                 <span>{language === 'en' ? 'Export' : 'Xuất'}</span>
@@ -4827,19 +5090,38 @@ export default function App() {
         <HomeLauncherView
           projects={subProjects}
           activeProjectName={projectName}
-          onCreateNewProject={() => {
-            setProjectName(`TDO_CUT_Project_${subProjects.length + 1}`);
+          onCreateNewProject={async () => {
+            const newId = `project_${Date.now()}`;
+            const nextIdx = subProjects.length + 1;
+            const newName = language === 'en' ? `Project ${nextIdx}` : `Dự án ${nextIdx}`;
+            const newProj: StoredProject = {
+              id: newId,
+              name: newName,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              aspectRatio: '16:9',
+              durationSec: 0,
+              clips: [],
+              version: 1,
+            };
+            await saveProject(newProj);
+            setActiveProjectId(newId);
+            setProjectName(newName);
+            setAspectRatio('16:9');
+            commitClips([]);
+            setSubProjects((prev) => [newProj, ...prev]);
             setActiveView('workstation');
             showToast(
               language === 'en'
-                ? 'Created new project in TDO CUT Workstation!'
-                : 'Đã khởi tạo dự án mới trong bàn dựng TDO CUT!'
+                ? `Created new project "${newName}"!`
+                : `Đã khởi tạo dự án mới "${newName}"!`
             );
           }}
           onOpenProject={(sub) => {
+            setActiveProjectId(sub.id);
             commitClips(sub.clips.map((c) => ({ ...c })));
             setProjectName(sub.name);
-            setAspectRatio(sub.aspectRatio);
+            setAspectRatio((sub.aspectRatio as AspectRatioOption) || '16:9');
             setActiveView('workstation');
             showToast(
               language === 'en'
@@ -4847,7 +5129,8 @@ export default function App() {
                 : `Đã mở dự án "${sub.name}"!`
             );
           }}
-          onDeleteProject={(id) => {
+          onDeleteProject={async (id) => {
+            await setProjectTrashStatus(id, true);
             setSubProjects((prev) =>
               prev.map((s) => (s.id === id ? { ...s, isDeletedInTrash: true } : s))
             );
@@ -4857,7 +5140,8 @@ export default function App() {
                 : 'Đã chuyển dự án vào Thùng rác (lưu trữ 30 ngày)!'
             );
           }}
-          onRestoreProject={(id) => {
+          onRestoreProject={async (id) => {
+            await setProjectTrashStatus(id, false);
             setSubProjects((prev) =>
               prev.map((s) => (s.id === id ? { ...s, isDeletedInTrash: false } : s))
             );
@@ -4867,15 +5151,30 @@ export default function App() {
                 : 'Đã khôi phục dự án từ Thùng rác!'
             );
           }}
-          onDuplicateProject={(id) => {
-            const target = subProjects.find((s) => s.id === id);
-            if (!target) return;
-            const copy: SubProjectItem = {
-              ...target,
-              id: `sub-copy-${Date.now()}`,
-              name: `${target.name} (${language === 'en' ? 'Copy' : 'Bản sao'})`,
-              createdAt: language === 'en' ? 'Just now' : 'Vừa xong',
-            };
+          onPermanentDeleteProject={async (id) => {
+            await deleteProjectPermanently(id);
+            setSubProjects((prev) => prev.filter((s) => s.id !== id));
+            showToast(
+              language === 'en'
+                ? 'Permanently deleted project from database!'
+                : 'Đã xóa vĩnh viễn dự án khỏi hệ thống!'
+            );
+          }}
+          onEmptyTrash={async () => {
+            const trashList = subProjects.filter((s) => s.isDeletedInTrash);
+            for (const item of trashList) {
+              await deleteProjectPermanently(item.id).catch(() => {});
+            }
+            setSubProjects((prev) => prev.filter((s) => !s.isDeletedInTrash));
+            showToast(
+              language === 'en'
+                ? 'Emptied Trash completely!'
+                : 'Đã dọn sạch thùng rác thành công!'
+            );
+          }}
+          onDuplicateProject={async (id) => {
+            const copy = await duplicateDbProject(id, language === 'en' ? 'Copy' : 'Bản sao');
+            if (!copy) return;
             setSubProjects((prev) => [copy, ...prev]);
             showToast(
               language === 'en'
@@ -4883,10 +5182,23 @@ export default function App() {
                 : `Đã nhân bản dự án "${copy.name}"!`
             );
           }}
-          onRenameProject={(id, newName) => {
+          onRenameProject={async (id, newName) => {
+            const target = subProjects.find((s) => s.id === id);
+            if (target) {
+              await saveProject({
+                ...target,
+                name: newName,
+                updatedAt: new Date().toISOString(),
+                durationSec: target.clips.reduce((acc, c) => Math.max(acc, c.startTime + c.duration), 0),
+                version: 1,
+              });
+            }
             setSubProjects((prev) =>
               prev.map((s) => (s.id === id ? { ...s, name: newName } : s))
             );
+            if (activeProjectId === id) {
+              setProjectName(newName);
+            }
             showToast(
               language === 'en'
                 ? `Renamed project to "${newName}"!`
@@ -4916,7 +5228,7 @@ export default function App() {
               setSubCategoryFilter('bilingual');
               setBilingualSubtitles(true);
               handleGenerateAutoCaptions('bilingual', true);
-            } else if (tool === 'tts') {
+            } else if ((tool as string) === 'tts' || (tool as string) === 'tts_ai') {
               setTopLeftCategory('text');
               const existingTextClip = clips.find(
                 (c) => c.trackIndex === 2 || Boolean(c.subtitleText)
@@ -4954,7 +5266,8 @@ export default function App() {
             }
           }}
           onUseTemplatePreset={(tpl: HomeTemplatePreset) => {
-            setProjectName(tpl.name);
+            const tplName = tpl.name || (language === 'en' ? tpl.titleEn : tpl.titleVi);
+            setProjectName(tplName);
             setAspectRatio(tpl.aspectRatio);
             commitClips((prev) =>
               prev.map((c) =>
@@ -4972,8 +5285,8 @@ export default function App() {
             setActiveView('workstation');
             showToast(
               language === 'en'
-                ? `Applied template "${tpl.name}" (${tpl.aspectRatio}) to Timeline!`
-                : `Đã nạp mẫu "${tpl.name}" (${tpl.aspectRatio}) vào bàn dựng Timeline!`
+                ? `Applied template "${tplName}" (${tpl.aspectRatio}) to Timeline!`
+                : `Đã nạp mẫu "${tplName}" (${tpl.aspectRatio}) vào bàn dựng Timeline!`
             );
           }}
           onOpenSettings={() => setIsSettingsModalOpen(true)}
@@ -5013,20 +5326,28 @@ export default function App() {
       ) : (
         <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {/* UPPER HALF: 3 ZONES (Resource Pool | 60 FPS Preview Player | Context Inspector) */}
-          <div className="flex-[60] grid grid-cols-12 gap-1.5 p-1.5 min-h-0 overflow-hidden">
+          <div className="flex flex-col md:flex-[60] md:grid md:grid-cols-12 gap-1 md:gap-1.5 p-1 md:p-1.5 min-h-0 overflow-hidden shrink-0 md:shrink">
             {/* ZONE 1: TOP-LEFT RESOURCE PANEL (4 cols — 9 Tabs) */}
             <section
               aria-label="Kho Tài Nguyên và Công cụ AI"
               data-zone-focus={activeZoneFocus === 'resource_pool' ? 'active' : 'inactive'}
               onMouseDownCapture={() => setActiveZoneFocus('resource_pool')}
-              className={`col-span-4 flex flex-col bg-[#18181C] border rounded overflow-hidden min-h-0 transition-colors ${
-                activeZoneFocus === 'resource_pool'
-                  ? 'border-[#00E5CC]/60'
-                  : 'border-[#2B2B30]'
+              className={`hidden md:flex col-span-4 flex-col rounded overflow-hidden min-h-0 transition-colors border ${
+                themeMode === 'light'
+                  ? activeZoneFocus === 'resource_pool'
+                    ? 'bg-[#FFFFFF] border-[#00E5CC]'
+                    : 'bg-[#FFFFFF] border-[#E2E8F0]'
+                  : activeZoneFocus === 'resource_pool'
+                  ? 'bg-[#18181C] border-[#00E5CC]/60'
+                  : 'bg-[#18181C] border-[#2B2B30]'
               }`}
             >
               {/* Top 9 Category Icon Tabs (Bilingual VI / EN) */}
-              <div className="flex items-center justify-between px-1 py-1 bg-[#141418] border-b border-[#2B2B30] overflow-x-auto no-scrollbar shrink-0">
+              <div className={`flex items-center justify-between px-1 py-1 border-b overflow-x-auto no-scrollbar shrink-0 ${
+                themeMode === 'light'
+                  ? 'bg-[#F8FAFC] border-[#E2E8F0]'
+                  : 'bg-[#141418] border-[#2B2B30]'
+              }`}>
                 {(
                   [
                     {
@@ -5061,7 +5382,7 @@ export default function App() {
                     },
                     {
                       id: 'captions',
-                      label: language === 'en' ? 'Captions' : 'Chú thích',
+                      label: language === 'en' ? 'Captions' : 'Phụ đề',
                       icon: Subtitles,
                     },
                     {
@@ -5083,13 +5404,17 @@ export default function App() {
                       key={tab.id}
                       type="button"
                       onClick={() => setTopLeftCategory(tab.id)}
-                      className={`flex flex-col items-center gap-0.5 px-1 py-1 rounded text-[9px] transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                      className={`flex flex-col items-center gap-1 px-2.5 py-1.5 rounded-md text-[10px] font-medium transition-all whitespace-nowrap shrink-0 cursor-pointer ${
                         active
-                          ? 'text-[#00E5CC] font-semibold bg-[#22222A]'
-                          : 'text-[#9CA3AF] hover:text-white'
+                          ? themeMode === 'light'
+                            ? 'text-[#00A89A] font-semibold bg-[#E6FFFA] shadow-xs border border-[#99F6E4]'
+                            : 'text-[#00E5CC] font-semibold bg-[#1C1D24] shadow-xs border border-[#2A2C38]'
+                          : themeMode === 'light'
+                          ? 'text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9]'
+                          : 'text-[#9CA3AF] hover:text-white hover:bg-[#1A1B22]'
                       }`}
                     >
-                      <Icon className="w-3.5 h-3.5" />
+                      <Icon className={`w-3.5 h-3.5 ${active ? 'text-[#00E5CC]' : 'text-[#8E929E]'}`} />
                       <span>{tab.label}</span>
                     </button>
                   );
@@ -5099,14 +5424,22 @@ export default function App() {
               {/* Inner Split: Dynamic Context-Aware Far-Left Tree Sidebar + Content Area */}
               <div className="flex-1 flex min-h-0 overflow-hidden">
                 {/* Far-Left Tree Sidebar (Dynamically changes for each of the 9 tabs — never frozen!) */}
-                <div className="w-29 bg-[#141418] border-r border-[#2B2B30] p-1.5 flex flex-col space-y-2 text-[11px] shrink-0 overflow-y-auto no-scrollbar">
+                <div className={`w-29 border-r p-1.5 flex flex-col space-y-2 text-[11px] shrink-0 overflow-y-auto no-scrollbar ${
+                  themeMode === 'light'
+                    ? 'bg-[#F8FAFC] border-[#E2E8F0] text-[#0F172A]'
+                    : 'bg-[#141418] border-[#2B2B30] text-[#D4D4D8]'
+                }`}>
                   {topLeftCategory === 'media' ? (
                     <>
                       <div className="space-y-1">
                         <button
                           type="button"
                           onClick={() => setSidebarFolder('all')}
-                          className="w-full flex items-center justify-between px-2 py-1.5 rounded bg-[#23252C] text-[#00E5CC] font-semibold text-[11px] cursor-pointer"
+                          className={`w-full flex items-center justify-between px-2 py-1.5 rounded font-semibold text-[11px] cursor-pointer ${
+                            themeMode === 'light'
+                              ? 'bg-[#E2E8F0] text-[#0F172A]'
+                              : 'bg-[#23252C] text-[#00E5CC]'
+                          }`}
                         >
                           <span>Nhập</span>
                           <span className="text-[9px]">⌃</span>
@@ -5117,7 +5450,11 @@ export default function App() {
                           onClick={() => setSidebarFolder('all')}
                           className={`w-full text-left px-2 py-1.5 rounded whitespace-nowrap transition-colors cursor-pointer ${
                             sidebarFolder === 'all'
-                              ? 'bg-[#1F343A] text-[#00E5CC] font-semibold'
+                              ? themeMode === 'light'
+                                ? 'bg-[#CCFBF1] text-[#0F766E] font-semibold border border-[#5EEAD4]'
+                                : 'bg-[#1F343A] text-[#00E5CC] font-semibold'
+                              : themeMode === 'light'
+                              ? 'text-[#475569] hover:text-[#0F172A] hover:bg-[#E2E8F0]'
                               : 'text-[#D4D4D8] hover:text-white'
                           }`}
                         >
@@ -5129,7 +5466,11 @@ export default function App() {
                           onClick={() => setSidebarFolder('timeline')}
                           className={`w-full text-left px-2 py-1.5 rounded whitespace-nowrap transition-colors cursor-pointer ${
                             sidebarFolder === 'timeline'
-                              ? 'bg-[#1F343A] text-[#00E5CC] font-semibold'
+                              ? themeMode === 'light'
+                                ? 'bg-[#CCFBF1] text-[#0F766E] font-semibold border border-[#5EEAD4]'
+                                : 'bg-[#1F343A] text-[#00E5CC] font-semibold'
+                              : themeMode === 'light'
+                              ? 'text-[#475569] hover:text-[#0F172A] hover:bg-[#E2E8F0]'
                               : 'text-[#D4D4D8] hover:text-white'
                           }`}
                         >
@@ -5141,24 +5482,36 @@ export default function App() {
                           onClick={() => setSidebarFolder('subproject')}
                           className={`w-full flex items-center justify-between px-2 py-1.5 rounded whitespace-nowrap transition-colors cursor-pointer ${
                             sidebarFolder === 'subproject'
-                              ? 'bg-[#1F343A] text-[#00E5CC] font-semibold'
+                              ? themeMode === 'light'
+                                ? 'bg-[#CCFBF1] text-[#0F766E] font-semibold border border-[#5EEAD4]'
+                                : 'bg-[#1F343A] text-[#00E5CC] font-semibold'
+                              : themeMode === 'light'
+                              ? 'text-[#475569] hover:text-[#0F172A] hover:bg-[#E2E8F0]'
                               : 'text-[#D4D4D8] hover:text-white'
                           }`}
                         >
                           <span>Dự án con</span>
-                          <span className="text-[9px] font-mono bg-[#272730] px-1 rounded text-[#00E5CC]">
+                          <span className={`text-[9px] font-mono px-1 rounded ${
+                            themeMode === 'light' ? 'bg-[#E2E8F0] text-[#0F766E]' : 'bg-[#272730] text-[#00E5CC]'
+                          }`}>
                             {subProjects.length}
                           </span>
                         </button>
                       </div>
 
-                      <div className="space-y-1.5 pt-2 border-t border-[#23232B]">
+                      <div className={`space-y-1.5 pt-2 border-t ${
+                        themeMode === 'light' ? 'border-[#E2E8F0]' : 'border-[#23232B]'
+                      }`}>
                         <button
                           type="button"
                           onClick={() => setSidebarFolder('brand')}
                           className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-[10.5px] cursor-pointer ${
                             sidebarFolder === 'brand'
-                              ? 'bg-[#1F343A] text-[#00E5CC] font-semibold'
+                              ? themeMode === 'light'
+                                ? 'bg-[#CCFBF1] text-[#0F766E] font-semibold border border-[#5EEAD4]'
+                                : 'bg-[#1F343A] text-[#00E5CC] font-semibold'
+                              : themeMode === 'light'
+                              ? 'bg-white hover:bg-[#F1F5F9] text-[#334155] border border-[#CBD5E1]'
                               : 'bg-[#2A2B32] hover:bg-[#34353E] text-[#E4E4E7]'
                           }`}
                         >
@@ -5169,13 +5522,14 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => setIsMatrixModalOpen(true)}
-                          className="relative w-full flex items-center justify-between px-2 py-1.5 bg-[#2A2B32] hover:bg-[#34353E] rounded text-[#E4E4E7] text-[10.5px] cursor-pointer"
+                          className={`relative w-full flex items-center justify-between px-2 py-1.5 rounded text-[10.5px] cursor-pointer ${
+                            themeMode === 'light'
+                              ? 'bg-white hover:bg-[#F1F5F9] text-[#334155] border border-[#CBD5E1]'
+                              : 'bg-[#2A2B32] hover:bg-[#34353E] text-[#E4E4E7]'
+                          }`}
                         >
                           <span>Tạo</span>
                           <span className="text-[9px] text-[#9CA3AF]">▾</span>
-                          <span className="absolute -top-1 right-0.5 px-1 py-0.1 text-[8px] font-bold bg-[#00E5CC] text-[#090D12] rounded-xs leading-tight">
-                            AI
-                          </span>
                         </button>
 
                         <button
@@ -5183,7 +5537,11 @@ export default function App() {
                           onClick={() => setSidebarFolder('cloud')}
                           className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-[10.5px] cursor-pointer ${
                             sidebarFolder === 'cloud'
-                              ? 'bg-[#1F343A] text-[#00E5CC] font-semibold'
+                              ? themeMode === 'light'
+                                ? 'bg-[#CCFBF1] text-[#0F766E] font-semibold border border-[#5EEAD4]'
+                                : 'bg-[#1F343A] text-[#00E5CC] font-semibold'
+                              : themeMode === 'light'
+                              ? 'bg-white hover:bg-[#F1F5F9] text-[#334155] border border-[#CBD5E1]'
                               : 'bg-[#2A2B32] hover:bg-[#34353E] text-[#E4E4E7]'
                           }`}
                         >
@@ -5196,7 +5554,11 @@ export default function App() {
                           onClick={() => setSidebarFolder('library')}
                           className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-[10.5px] cursor-pointer ${
                             sidebarFolder === 'library'
-                              ? 'bg-[#1F343A] text-[#00E5CC] font-semibold'
+                              ? themeMode === 'light'
+                                ? 'bg-[#CCFBF1] text-[#0F766E] font-semibold border border-[#5EEAD4]'
+                                : 'bg-[#1F343A] text-[#00E5CC] font-semibold'
+                              : themeMode === 'light'
+                              ? 'bg-white hover:bg-[#F1F5F9] text-[#334155] border border-[#CBD5E1]'
                               : 'bg-[#2A2B32] hover:bg-[#34353E] text-[#E4E4E7]'
                           }`}
                         >
@@ -5219,7 +5581,7 @@ export default function App() {
                           : topLeftCategory === 'transitions'
                           ? 'Chuyển tiếp'
                           : topLeftCategory === 'captions'
-                          ? 'Phụ đề AI'
+                          ? 'Phụ đề (Subtitles)'
                           : topLeftCategory === 'filters'
                           ? 'Bộ lọc màu'
                           : 'Điều chỉnh'}
@@ -5267,7 +5629,7 @@ export default function App() {
                         ? [
                             { id: 'all', label: 'Phụ đề tự động' },
                             { id: 'bilingual', label: 'Song ngữ Việt-Anh' },
-                            { id: 'lyrics', label: 'Lời bài hát AI' },
+                            { id: 'lyrics', label: 'Lời bài hát (Lyrics)' },
                             { id: 'filler', label: 'Lọc từ thừa (Ờ, À)' },
                           ]
                         : topLeftCategory === 'filters'
@@ -5313,7 +5675,11 @@ export default function App() {
                           }}
                           className={`w-full text-left px-2 py-1.5 rounded transition-colors cursor-pointer ${
                             subCategoryFilter === item.id
-                              ? 'bg-[#1F343A] text-[#00E5CC] font-semibold'
+                              ? themeMode === 'light'
+                                ? 'bg-[#CCFBF1] text-[#0F766E] font-semibold border border-[#5EEAD4]'
+                                : 'bg-[#1F343A] text-[#00E5CC] font-semibold'
+                              : themeMode === 'light'
+                              ? 'text-[#475569] hover:text-[#0F172A] hover:bg-[#E2E8F0]'
                               : 'text-[#D4D4D8] hover:text-white hover:bg-[#22222A]'
                           }`}
                         >
@@ -5397,12 +5763,18 @@ export default function App() {
                       {/* Action Row: + Nhập, Ghi, Tìm kiếm, Filter Usage, Xóa mẫu */}
                       <div
                         data-no-marquee="true"
-                        className="flex items-center gap-1.5 p-2 border-b border-[#26262E] shrink-0"
+                        className={`flex items-center gap-1.5 p-2 border-b shrink-0 ${
+                          themeMode === 'light' ? 'border-[#E2E8F0] bg-[#FFFFFF]' : 'border-[#26262E] bg-transparent'
+                        }`}
                       >
                         <button
                           type="button"
                           onClick={() => mediaInputRef.current?.click()}
-                          className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold bg-[#25252D] hover:bg-[#30303B] text-white border border-[#383844] rounded whitespace-nowrap cursor-pointer"
+                          className={`flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded whitespace-nowrap cursor-pointer border ${
+                            themeMode === 'light'
+                              ? 'bg-white hover:bg-[#F1F5F9] text-[#0F172A] border-[#CBD5E1]'
+                              : 'bg-[#25252D] hover:bg-[#30303B] text-white border-[#383844]'
+                          }`}
                         >
                           <span className="w-3.5 h-3.5 rounded-full bg-[#00E5CC] text-[#090D12] flex items-center justify-center font-black text-[10px]">
                             +
@@ -5416,10 +5788,12 @@ export default function App() {
                           className={`flex items-center gap-1 px-2 py-1 text-[11px] font-medium border rounded whitespace-nowrap cursor-pointer ${
                             isRecordingMedia
                               ? 'bg-[#DC2626] text-white border-[#EF4444] animate-pulse'
+                              : themeMode === 'light'
+                              ? 'bg-white hover:bg-[#F1F5F9] text-[#334155] border-[#CBD5E1]'
                               : 'bg-[#25252D] hover:bg-[#30303B] text-[#D4D4D8] border-[#383844]'
                           }`}
                         >
-                          <Video className="w-3.5 h-3.5 text-[#D4D4D8]" />
+                          <Video className="w-3.5 h-3.5 text-[#00E5CC]" />
                           <span>{isRecordingMedia ? 'Đang ghi...' : 'Ghi'}</span>
                         </button>
 
@@ -5431,7 +5805,11 @@ export default function App() {
                             onChange={(e) => setSearchQuery(e.target.value)}
                             placeholder="Tìm kiếm tệp phư..."
                             aria-label="Tìm kiếm tệp phương tiện"
-                            className="w-full pl-6 pr-2 py-1 text-[11px] bg-[#121216] border border-[#2C2C34] rounded text-white placeholder-[#71717A]"
+                            className={`w-full pl-6 pr-2 py-1 text-[11px] rounded border ${
+                              themeMode === 'light'
+                                ? 'bg-white border-[#CBD5E1] text-[#0F172A] placeholder-[#94A3B8]'
+                                : 'bg-[#121216] border-[#2C2C34] text-white placeholder-[#71717A]'
+                            }`}
                           />
                         </div>
 
@@ -5441,7 +5819,11 @@ export default function App() {
                           onChange={(e) =>
                             setMediaFilterUsage(e.target.value as 'all' | 'used' | 'unused')
                           }
-                          className="px-1.5 py-1 text-[10px] bg-[#25252D] border border-[#383844] rounded text-[#D4D4D8]"
+                          className={`px-1.5 py-1 text-[10px] rounded border ${
+                            themeMode === 'light'
+                              ? 'bg-white border-[#CBD5E1] text-[#0F172A]'
+                              : 'bg-[#25252D] border-[#383844] text-[#D4D4D8]'
+                          }`}
                         >
                           <option value="all">Tất cả</option>
                           <option value="used">Đã dùng</option>
@@ -5453,7 +5835,11 @@ export default function App() {
                             type="button"
                             onClick={handleClearAllSampleData}
                             title="Xóa tất cả dữ liệu mẫu / Tạo dự án trắng"
-                            className="p-1 text-[#A1A1AA] hover:text-[#F87171] bg-[#25252D] rounded border border-[#383844] cursor-pointer"
+                            className={`p-1 rounded border cursor-pointer ${
+                              themeMode === 'light'
+                                ? 'bg-white hover:bg-rose-50 text-[#64748B] hover:text-[#EF4444] border-[#CBD5E1]'
+                                : 'bg-[#25252D] hover:text-[#F87171] text-[#A1A1AA] border-[#383844]'
+                            }`}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -5934,17 +6320,21 @@ export default function App() {
                         </div>
                       )}
 
-                      {/* Bottom AI Clipper Banner (100% Free Edition — No Trial Badge) */}
+                      {/* Bottom Auto Clipper Banner */}
                       <div
                         data-no-marquee="true"
-                        className="flex items-center justify-between gap-2 px-2.5 py-2 bg-[#1D2228] border-t border-[#2B313A] shrink-0"
+                        className={`flex items-center justify-between gap-2 px-2.5 py-2 border-t shrink-0 ${
+                          themeMode === 'light' ? 'bg-[#F8FAFC] border-[#E2E8F0]' : 'bg-[#1D2228] border-[#2B313A]'
+                        }`}
                       >
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <Sparkles className="w-3.5 h-3.5 text-[#00E5CC] shrink-0" />
+                          <Scissors className="w-3.5 h-3.5 text-[#00E5CC] shrink-0" />
                           <span className="text-[11px] font-semibold text-[#00E5CC] truncate">
-                            Công cụ cắt clip bằng AI
+                            Công cụ cắt clip tự động
                           </span>
-                          <span className="text-[10px] text-[#9CA3AF] truncate hidden xl:inline">
+                          <span className={`text-[10px] truncate hidden xl:inline ${
+                            themeMode === 'light' ? 'text-[#64748B]' : 'text-[#9CA3AF]'
+                          }`}>
                             Chọn tệp phương tiệ...
                           </span>
                         </div>
@@ -6338,9 +6728,8 @@ export default function App() {
                       >
                         <div className="flex items-center justify-between">
                           <span className="font-semibold text-[#00E5CC]">
-                            Phụ đề tự động AI (Auto Captions)
+                            Phụ đề tự động (Auto Captions)
                           </span>
-                          <span className="text-[10px] text-[#9CA3AF]">Faster-Whisper</span>
                         </div>
                         <label className="flex items-center gap-2 text-[11px] text-[#D4D4D8] cursor-pointer">
                           <input
@@ -6362,7 +6751,7 @@ export default function App() {
                         </label>
                         <button
                           type="button"
-                          onClick={handleGenerateAutoCaptions}
+                          onClick={() => handleGenerateAutoCaptions()}
                           className="w-full py-1.5 bg-[#00E5CC]/20 hover:bg-[#00E5CC] hover:text-black text-[#00E5CC] border border-[#00E5CC]/40 font-semibold rounded transition-colors cursor-pointer"
                         >
                           Tạo Phụ đề Tự động trên Timeline
@@ -6576,7 +6965,8 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 pb-6">
+                      {/* Stickers 4-Column Square Cards Grid (Image 4 - CapCut PC Style, Static Previews Without UI Lag) */}
+                      <div className="grid grid-cols-4 gap-2.5 pb-6">
                         {STICKER_CATALOG_ITEMS.filter((stk) => {
                           const matchesCat =
                             subCategoryFilter === 'all' ||
@@ -6637,7 +7027,13 @@ export default function App() {
                                         )
                                         .map((c) =>
                                           c.id === currentClip.id
-                                            ? { ...c, stickerType: 'none', stickerEmoji: undefined }
+                                            ? {
+                                                ...c,
+                                                stickerType: 'none',
+                                                stickerEmoji: undefined,
+                                                stickerText: '',
+                                                stickerSubText: '',
+                                              }
                                             : c
                                         )
                                     );
@@ -6646,105 +7042,71 @@ export default function App() {
                                   return;
                                 }
 
-                                // If current selected clip is already a dedicated sticker clip on Track 2+, update it in-place
-                                if (
-                                  currentClip &&
-                                  currentClip.trackIndex >= 2 &&
-                                  !currentClip.subtitleText &&
-                                  !currentClip.mediaUrl
-                                ) {
-                                  commitClips((prev) =>
-                                    prev.map((c) =>
-                                      c.id === currentClip.id
-                                        ? {
-                                            ...c,
-                                            name: `${stk.icon} ${displayLabel}`,
-                                            stickerType: stk.id,
-                                            stickerEmoji: stk.icon,
-                                            stickerText: stk.badgeText ?? c.stickerText ?? '',
-                                            stickerSubText: stk.badgeSubText ?? c.stickerSubText ?? '',
-                                            textColor: stk.badgeColor ?? c.textColor ?? '#FFFFFF',
-                                            textBgColor: stk.badgeBg ?? c.textBgColor,
-                                          }
-                                        : c
-                                    )
-                                  );
-                                  if (
-                                    playheadSec < currentClip.startTime ||
-                                    playheadSec >= currentClip.startTime + currentClip.duration
-                                  ) {
-                                    setPlayheadSec(currentClip.startTime);
-                                  }
-                                  showToast(`Đã cập nhật nhãn dán "${displayLabel}" trên Timeline!`);
-                                } else {
-                                  // Otherwise insert a new Sticker Clip on Track 3 at playheadSec so it immediately appears on Timeline & Preview Canvas
-                                  handlePushResourceIdsToTimeline([stk.uid], 3, playheadSec);
-                                }
+                                // Always create an independent, cleanly isolated sticker clip on Track 3 at playhead
+                                handlePushResourceIdsToTimeline([stk.uid], 3, playheadSec);
                               }}
                               onDoubleClick={() => {
                                 if (stk.id !== 'none') {
                                   handlePushResourceIdsToTimeline([stk.uid], 3, playheadSec);
                                 }
                               }}
-                              title={`${displayLabel} — Nhấp hoặc kéo thả để thêm vào dòng thời gian (Timeline)`}
-                              className={`p-2 rounded border flex items-center justify-between gap-1.5 text-left transition-all cursor-grab active:cursor-grabbing ${
-                                isStkSelected
-                                  ? 'bg-[#00E5CC]/15 border-2 border-[#00E5CC] text-[#00E5CC] font-semibold'
-                                  : 'bg-[#22222A] border-[#30303C] text-[#D4D4D8] hover:border-[#00E5CC]/50'
-                              }`}
+                              title={`${displayLabel} — Nhấp để gắn vào Timeline`}
+                              className="flex flex-col gap-1.5 group cursor-pointer"
                             >
-                              <div className="flex items-center gap-2 min-w-0 flex-1">
-                                {flagGraphicUrl ? (
-                                  <img
-                                    src={flagGraphicUrl}
-                                    alt={displayLabel}
-                                    className="w-7 h-5 object-cover rounded-[2px] shadow-xs shrink-0 animate-bounce"
-                                    style={{ animationDuration: '2.2s' }}
-                                  />
-                                ) : stk.badgeText ? (
-                                  <div className="flex flex-col min-w-0 flex-1 gap-0.5">
-                                    <span
+                              <div
+                                className={`relative aspect-square rounded-xl overflow-hidden border flex items-center justify-center p-2 transition-all ${
+                                  isStkSelected
+                                    ? 'border-2 border-[#00E5CC] shadow-lg shadow-[#00E5CC]/20 ring-1 ring-[#00E5CC] bg-[#1E1F26]'
+                                    : 'border-[#2C2D35] bg-[#1C1D24] hover:border-[#00E5CC]/60 hover:bg-[#22232B]'
+                                }`}
+                              >
+
+                                {/* Center: STATIC Sticker Graphic (Smooth, zero CPU/GPU lag) */}
+                                <div className="flex items-center justify-center select-none pointer-events-none max-w-full max-h-full">
+                                  {flagGraphicUrl ? (
+                                    <img
+                                      src={flagGraphicUrl}
+                                      alt={displayLabel}
+                                      className="w-10 h-7 object-cover rounded shadow-xs"
+                                    />
+                                  ) : stk.badgeText ? (
+                                    <div
                                       style={{
                                         backgroundColor: stk.badgeBg || '#E11D48',
                                         color: stk.badgeColor || '#FFFFFF',
-                                        animationDuration: '1.8s',
                                       }}
-                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-extrabold tracking-wide shadow-xs truncate max-w-full animate-pulse"
+                                      className="px-2 py-1 rounded text-[10px] font-extrabold tracking-wide shadow-xs truncate max-w-[90px] flex items-center gap-1"
                                     >
                                       <span>{stk.icon}</span>
                                       <span className="truncate">{stk.badgeText}</span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-3xl leading-none">
+                                      {stk.icon}
                                     </span>
-                                    <span className="text-[10px] text-[#A1A1AA] truncate">
-                                      {displayLabel}
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <span
-                                    className="text-xl leading-none shrink-0 inline-block animate-bounce"
-                                    style={{ animationDuration: '1.9s' }}
+                                  )}
+                                </div>
+
+                                {/* Bottom-Right Download / Add Icon (Image 4) */}
+                                {stk.id !== 'none' && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handlePushResourceIdsToTimeline([stk.uid], 3, playheadSec);
+                                    }}
+                                    title="Thêm nhãn dán này vào Timeline"
+                                    className="absolute bottom-1.5 right-1.5 w-5 h-5 rounded-full bg-black/60 hover:bg-[#00E5CC] hover:text-black text-white flex items-center justify-center transition-colors shadow-xs z-10 cursor-pointer"
                                   >
-                                    {stk.icon}
-                                  </span>
-                                )}
-                                {!stk.badgeText && (
-                                  <span className="text-[11px] leading-snug line-clamp-2">
-                                    {displayLabel}
-                                  </span>
+                                    <Download className="w-3 h-3" />
+                                  </button>
                                 )}
                               </div>
-                              {stk.id !== 'none' && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handlePushResourceIdsToTimeline([stk.uid], 3, playheadSec);
-                                  }}
-                                  title="Thêm nhãn dán này thành lớp mới trên Timeline"
-                                  className="w-5 h-5 rounded-full bg-[#00E5CC] text-[#071013] font-black text-xs flex items-center justify-center shrink-0 cursor-pointer"
-                                >
-                                  +
-                                </button>
-                              )}
+
+                              {/* Title underneath card */}
+                              <span className="text-[11px] text-[#D1D5DB] text-center truncate group-hover:text-white transition-colors px-0.5">
+                                {!stk.badgeText ? displayLabel : stk.badgeText}
+                              </span>
                             </div>
                           );
                         })}
@@ -6773,7 +7135,8 @@ export default function App() {
                           Chọn tất cả
                         </button>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 pb-6">
+                      {/* Visual Effects 4-Column Square Thumbnail Cards Grid (Image 3 - CapCut PC Style) */}
+                      <div className="grid grid-cols-4 gap-2.5 pb-6">
                         {VISUAL_EFFECT_CATALOG_ITEMS.filter(
                           (fx) =>
                             subCategoryFilter === 'all' ||
@@ -6815,16 +7178,32 @@ export default function App() {
                                   currentClip?.trackIndex === 0 ? currentClip.id : undefined
                                 );
                               }}
-                              className={`p-2.5 rounded border text-left transition-all cursor-grab active:cursor-grabbing ${
-                                isFxSelected
-                                  ? 'bg-[#00E5CC]/15 border-2 border-[#00E5CC] text-[#00E5CC] font-semibold'
-                                  : 'bg-[#22222A] border-[#30303C] text-[#D4D4D8] hover:border-[#00E5CC]/50'
-                              }`}
+                              title={`${fx.label} — Bấm để áp dụng hiệu ứng lên clip đang chọn`}
+                              className="flex flex-col gap-1.5 group cursor-pointer"
                             >
-                              <div className="flex items-center justify-between gap-1 mb-1">
-                                <span className="px-1.5 py-0.2 text-[9px] font-bold uppercase rounded bg-[#1F343A] text-[#00E5CC]">
+                              <div
+                                className={`relative aspect-square rounded-xl overflow-hidden border transition-all ${
+                                  isFxSelected
+                                    ? 'border-2 border-[#00E5CC] shadow-lg shadow-[#00E5CC]/25 ring-1 ring-[#00E5CC]'
+                                    : 'border-[#2C2D35] bg-[#1C1D24] hover:border-[#00E5CC]/60'
+                                }`}
+                              >
+                                {/* Effect Visual Texture Swatch */}
+                                <div
+                                  className="absolute inset-0 transition-transform duration-300 group-hover:scale-105"
+                                  style={{ background: fx.swatch }}
+                                />
+
+                                {/* Subtle Dark Vignette Overlay */}
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20" />
+
+
+                                {/* Category Badge Tag */}
+                                <div className="absolute top-1.5 right-1.5 px-1 py-0.2 rounded text-[8.5px] font-bold uppercase tracking-tight bg-black/60 text-[#D1D5DB] backdrop-blur-xs">
                                   {fx.badge}
-                                </span>
+                                </div>
+
+                                {/* Bottom-Right Download / Add Icon (Image 3) */}
                                 {fx.id !== 'none' && (
                                   <button
                                     type="button"
@@ -6841,15 +7220,18 @@ export default function App() {
                                         playheadSec
                                       );
                                     }}
-                                    className="px-1.5 py-0.5 text-[9px] font-bold bg-[#00E5CC] text-[#071013] rounded cursor-pointer"
+                                    title="Thêm hiệu ứng này vào Timeline"
+                                    className="absolute bottom-1.5 right-1.5 w-5 h-5 rounded-full bg-black/60 hover:bg-[#00E5CC] hover:text-black text-white flex items-center justify-center transition-colors shadow-xs z-10 cursor-pointer"
                                   >
-                                    + Track FX
+                                    <Download className="w-3 h-3" />
                                   </button>
                                 )}
                               </div>
-                              <div className="text-[11px] leading-snug line-clamp-2">
-                                ✨ {fx.label}
-                              </div>
+
+                              {/* Title underneath card (Image 3) */}
+                              <span className="text-[11px] text-[#D1D5DB] text-center truncate group-hover:text-white transition-colors px-0.5">
+                                {fx.label}
+                              </span>
                             </div>
                           );
                         })}
@@ -6895,7 +7277,7 @@ export default function App() {
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-4 gap-2.5 pb-6">
                         {TRANSITION_CATALOG_ITEMS.filter(
                           (tr) =>
                             subCategoryFilter === 'all' ||
@@ -6904,6 +7286,7 @@ export default function App() {
                         ).map((tr) => {
                           const isTrSelected =
                             selectedResourceIds.includes(tr.uid) ||
+                            selectedTransitionItem?.id === tr.id ||
                             (tr.id === 'none' &&
                               (currentClip?.transitionType || 'none') === 'none');
                           return (
@@ -6918,14 +7301,15 @@ export default function App() {
                                   duration: tr.dur,
                                   transitionType: tr.id,
                                 };
-                                e.dataTransfer.setData(
-                                  'application/x-trendopsis-drag',
-                                  JSON.stringify(payload)
-                                );
+                                const str = JSON.stringify(payload);
+                                e.dataTransfer.setData('application/x-trendopsis-drag', str);
+                                e.dataTransfer.setData('application/x-tdocut-drag', str);
+                                e.dataTransfer.setData('application/json', str);
                                 e.dataTransfer.effectAllowed = 'copyMove';
                               }}
                               onClick={() => {
                                 setSelectedResourceIds([tr.uid]);
+                                setSelectedTransitionItem({ id: tr.id, label: tr.label, dur: tr.dur });
                                 handleDropResourceOnTimeline(
                                   {
                                     kind: 'transition',
@@ -6938,21 +7322,69 @@ export default function App() {
                                   currentClip?.trackIndex === 0 ? currentClip.id : undefined
                                 );
                               }}
-                              className={`p-2.5 rounded border text-left transition-all cursor-grab active:cursor-grabbing ${
-                                isTrSelected
-                                  ? 'bg-[#00E5CC]/15 border-2 border-[#00E5CC] text-[#00E5CC] font-semibold'
-                                  : 'bg-[#22222A] border-[#30303C] text-[#D4D4D8] hover:border-[#00E5CC]/50'
-                              }`}
+                              title={`${tr.label} (${tr.dur}s) — Bấm để chọn/áp dụng hoặc kéo thả vào điểm nối giữa các clip`}
+                              className="flex flex-col gap-1.5 group cursor-pointer"
                             >
-                              <div className="flex items-center justify-between text-[9px] text-[#9CA3AF] mb-0.5">
-                                <span className="uppercase font-bold text-[#00E5CC]">
-                                  {tr.cat === 'all' ? 'Mặc định' : tr.cat.toUpperCase()}
-                                </span>
-                                <span className="font-mono">{tr.dur}s</span>
+                              <div
+                                className={`relative aspect-square rounded-xl overflow-hidden border transition-all ${
+                                  isTrSelected
+                                    ? 'border-2 border-[#00E5CC] shadow-lg shadow-[#00E5CC]/25 ring-1 ring-[#00E5CC]'
+                                    : 'border-[#2C2D35] bg-[#1C1D24] hover:border-[#00E5CC]/60 hover:bg-[#22232B]'
+                                }`}
+                              >
+                                {/* Transition Visual Gradient Swatch */}
+                                <div
+                                  className="absolute inset-0 transition-transform duration-300 group-hover:scale-105"
+                                  style={{ background: tr.swatch }}
+                                />
+
+                                {/* Subtle Dark Vignette Overlay */}
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20" />
+
+                                {/* Center: Transition Icon Graphic */}
+                                <div className="absolute inset-0 flex items-center justify-center select-none pointer-events-none">
+                                  <span className="text-2xl drop-shadow-md text-white/95">
+                                    {tr.icon}
+                                  </span>
+                                </div>
+
+                                {/* Top-Right Duration Badge Tag */}
+                                <div className="absolute top-1.5 right-1.5 px-1 py-0.2 rounded text-[8.5px] font-bold uppercase tracking-tight bg-black/60 text-[#D1D5DB] backdrop-blur-xs">
+                                  {tr.dur}s
+                                </div>
+
+                                {/* Bottom-Right Apply / Add Icon */}
+                                {tr.id !== 'none' && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedResourceIds([tr.uid]);
+                                      setSelectedTransitionItem({ id: tr.id, label: tr.label, dur: tr.dur });
+                                      handleDropResourceOnTimeline(
+                                        {
+                                          kind: 'transition',
+                                          name: tr.label,
+                                          duration: tr.dur,
+                                          transitionType: tr.id,
+                                        },
+                                        0,
+                                        playheadSec,
+                                        currentClip?.trackIndex === 0 ? currentClip.id : undefined
+                                      );
+                                    }}
+                                    title="Áp dụng chuyển tiếp này vào điểm nối clip"
+                                    className="absolute bottom-1.5 right-1.5 w-5 h-5 rounded-full bg-black/60 hover:bg-[#00E5CC] hover:text-black text-white flex items-center justify-center transition-colors shadow-xs z-10 cursor-pointer"
+                                  >
+                                    <Download className="w-3 h-3" />
+                                  </button>
+                                )}
                               </div>
-                              <div className="text-[11px] leading-snug line-clamp-2">
-                                ⋈ {tr.label}
-                              </div>
+
+                              {/* Title underneath card */}
+                              <span className="text-[11px] text-[#D1D5DB] text-center truncate group-hover:text-white transition-colors px-0.5">
+                                {tr.label}
+                              </span>
                             </div>
                           );
                         })}
@@ -6996,14 +7428,13 @@ export default function App() {
                         <div className="flex items-center justify-between">
                           <span className="font-semibold text-[#00E5CC]">
                             {subCategoryFilter === 'bilingual'
-                              ? 'Phụ đề Song Ngữ Việt - Anh Tự Động'
+                              ? 'Phụ đề Song Ngữ Việt - Anh'
                               : subCategoryFilter === 'lyrics'
-                              ? 'Nhận diện Lời Bài Hát Karaoke AI'
+                              ? 'Nhận diện Lời Bài Hát'
                               : subCategoryFilter === 'filler'
-                              ? 'Lọc Từ Thừa (Ờ, À) & Cắt Khoảng Lặng'
-                              : 'Phụ đề tự động AI (Auto Captions)'}
+                              ? 'Lọc Từ Thừa & Cắt Khoảng Lặng'
+                              : 'Phụ đề tự động (Auto Captions)'}
                           </span>
-                          <span className="text-[10px] text-[#9CA3AF]">Faster-Whisper</span>
                         </div>
                         <label className="flex items-center gap-2 text-[11px] text-[#D4D4D8] cursor-pointer">
                           <input
@@ -7036,9 +7467,9 @@ export default function App() {
                           <button
                             type="button"
                             onClick={() => handleGenerateAutoCaptions()}
-                            className="py-1.5 px-2 bg-[#00E5CC] text-[#090D12] font-bold rounded cursor-pointer"
+                            className="py-1.5 px-2 bg-[#00E5CC] text-[#090D12] font-bold rounded cursor-pointer hover:bg-[#00F5DC] transition-colors"
                           >
-                            Tạo Chú thích AI
+                            Tạo Phụ đề tự động
                           </button>
                           <button
                             type="button"
@@ -7388,11 +7819,11 @@ export default function App() {
 
                       {(
                         [
-                          { key: 'brightness', label: 'Độ sáng', min: -50, max: 50 },
-                          { key: 'contrast', label: 'Tương phản', min: -50, max: 50 },
-                          { key: 'saturation', label: 'Độ bão hòa', min: -50, max: 50 },
-                          { key: 'warmth', label: 'Nhiệt độ màu', min: -50, max: 50 },
-                          { key: 'vignette', label: 'Viền tối', min: 0, max: 80 },
+                          { key: 'brightness', label: 'Độ sáng', min: -100, max: 100 },
+                          { key: 'contrast', label: 'Tương phản', min: -100, max: 100 },
+                          { key: 'saturation', label: 'Độ bão hòa', min: -100, max: 100 },
+                          { key: 'warmth', label: 'Nhiệt độ màu', min: -100, max: 100 },
+                          { key: 'vignette', label: 'Viền tối', min: 0, max: 100 },
                         ] as const
                       ).map((slider) => (
                         <div
@@ -7466,7 +7897,7 @@ export default function App() {
             </section>
 
             {/* ZONE 2: CENTER REAL-TIME VIDEO PREVIEW PLAYER (5 cols) */}
-            <div className="col-span-5 min-h-0 overflow-hidden">
+            <div className="w-full h-[32vh] min-h-[190px] max-h-[290px] md:h-full md:max-h-none md:col-span-5 min-h-0 overflow-hidden shrink-0">
               <VideoPreviewCanvas
                 playheadSec={playheadSec}
                 totalDurationSec={totalTimelineDuration}
@@ -7690,18 +8121,26 @@ export default function App() {
             {/* ZONE 3: RIGHT CONTEXT-AWARE INSPECTOR PANEL (3 cols) */}
             <section
               aria-label="Bảng thuộc tính Inspector"
-              className="col-span-3 flex flex-col bg-[#18181C] border border-[#2B2B30] rounded overflow-hidden text-xs min-h-0"
+              className={`hidden md:flex col-span-3 flex-col border rounded overflow-hidden text-xs min-h-0 ${
+                themeMode === 'light'
+                  ? 'bg-[#FFFFFF] border-[#E2E8F0] text-[#0F172A]'
+                  : 'bg-[#18181C] border-[#2B2B30] text-[#EDEDF0]'
+              }`}
             >
               {inspectorMode === 'project_details' || !currentClip ? (
                 /* PROJECT DETAILS MODE (Chi tiết dự án + Sửa đổi Proxy/Color Space) */
                 <div className="flex flex-col h-full">
-                  <div className="flex items-center justify-between px-3 h-8 border-b border-[#2B2B30]">
+                  <div className={`flex items-center justify-between px-3 h-8 border-b ${
+                    themeMode === 'light' ? 'border-[#E2E8F0] bg-[#F8FAFC]' : 'border-[#2B2B30] bg-[#141418]'
+                  }`}>
                     <span className="font-semibold text-[#00E5CC]">Chi tiết</span>
                     {currentClip && (
                       <button
                         type="button"
                         onClick={() => setInspectorMode('clip')}
-                        className="text-[11px] text-[#9CA3AF] hover:text-white cursor-pointer"
+                        className={`text-[11px] cursor-pointer ${
+                          themeMode === 'light' ? 'text-[#64748B] hover:text-[#0F172A]' : 'text-[#9CA3AF] hover:text-white'
+                        }`}
                       >
                         Đóng
                       </button>
@@ -7709,44 +8148,44 @@ export default function App() {
                   </div>
                   <div className="flex-1 p-3.5 space-y-2.5 text-[11px] overflow-y-auto">
                     <div className="grid grid-cols-3 gap-2">
-                      <span className="text-[#71717A]">Tên:</span>
-                      <span className="col-span-2 text-white font-medium">
+                      <span className={themeMode === 'light' ? 'text-[#64748B]' : 'text-[#71717A]'}>Tên:</span>
+                      <span className={`col-span-2 font-medium ${themeMode === 'light' ? 'text-[#0F172A]' : 'text-white'}`}>
                         {projectName || (language === 'en' ? 'Enter project name' : 'Nhập tên dự án')}
                       </span>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
-                      <span className="text-[#71717A]">Đường dẫn:</span>
-                      <span className="col-span-2 text-[#A1A1AA] break-all font-mono text-[10px]">
-                        {projectName
-                          ? `C:/Users/PC/AppData/Local/TDOCut/User Data/Projects/${projectName}`
-                          : 'Chưa lưu dự án'}
+                      <span className={themeMode === 'light' ? 'text-[#64748B]' : 'text-[#71717A]'}>
+                        {language === 'en' ? 'Path:' : 'Đường dẫn:'}
+                      </span>
+                      <span className={`col-span-2 break-all font-mono text-[10px] ${themeMode === 'light' ? 'text-[#334155]' : 'text-[#A1A1AA]'}`}>
+                        {getProjectFullDirPath(projectName || 'Dự án 1')}
                       </span>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
-                      <span className="text-[#71717A]">Không gian màu:</span>
-                      <span className="col-span-2 font-mono text-white">{projectColorSpace}</span>
+                      <span className={themeMode === 'light' ? 'text-[#64748B]' : 'text-[#71717A]'}>Không gian màu:</span>
+                      <span className={`col-span-2 font-mono ${themeMode === 'light' ? 'text-[#0F172A]' : 'text-white'}`}>{projectColorSpace}</span>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
-                      <span className="text-[#71717A]">Proxy (Chống giật):</span>
+                      <span className={themeMode === 'light' ? 'text-[#64748B]' : 'text-[#71717A]'}>Proxy (Chống giật):</span>
                       <span className="col-span-2 font-mono text-[#00E5CC]">
                         {proxyEnabled ? 'Đã bật (540P H.264)' : 'Đã tắt'}
                       </span>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
-                      <span className="text-[#71717A]">Số clip Timeline:</span>
+                      <span className={themeMode === 'light' ? 'text-[#64748B]' : 'text-[#71717A]'}>Số clip Timeline:</span>
                       <span className="col-span-2 font-mono text-[#00E5CC]">
                         {videoClipsCount} video · {clips.filter((c) => c.trackIndex === 1).length}{' '}
                         audio · {clips.filter((c) => c.trackIndex === 2).length} text
                       </span>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
-                      <span className="text-[#71717A]">Tỷ lệ khung hình:</span>
-                      <span className="col-span-2 font-mono text-white">
+                      <span className={themeMode === 'light' ? 'text-[#64748B]' : 'text-[#71717A]'}>Tỷ lệ khung hình:</span>
+                      <span className={`col-span-2 font-mono ${themeMode === 'light' ? 'text-[#0F172A]' : 'text-white'}`}>
                         {aspectRatio === 'original' ? 'Tỉ lệ gốc' : aspectRatio} · 30.00 FPS
                       </span>
                     </div>
 
-                    <div className="pt-3 border-t border-[#2B2B30] space-y-2">
+                    <div className={`pt-3 border-t space-y-2 ${themeMode === 'light' ? 'border-[#E2E8F0]' : 'border-[#2B2B30]'}`}>
                       <div className="flex items-center justify-between gap-2">
                         <button
                           type="button"
@@ -7757,7 +8196,11 @@ export default function App() {
                             );
                             showToast('Đã cập nhật cấu hình Proxy & Không gian màu dự án!');
                           }}
-                          className="flex-1 py-1.5 px-3 bg-[#26262F] hover:bg-[#32323E] text-white border border-[#3A3A48] rounded font-medium cursor-pointer"
+                          className={`flex-1 py-1.5 px-3 rounded font-medium cursor-pointer border ${
+                            themeMode === 'light'
+                              ? 'bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#0F172A] border-[#CBD5E1]'
+                              : 'bg-[#26262F] hover:bg-[#32323E] text-white border-[#3A3A48]'
+                          }`}
                         >
                           Sửa đổi (Modify)
                         </button>
@@ -7780,14 +8223,20 @@ export default function App() {
                   (!currentClip.stickerType || currentClip.stickerType === 'none')) ? (
                 /* DEDICATED TEXT & SUBTITLE INSPECTOR MODE (Văn bản: Cơ bản | Bong bóng | Hiệu ứng | Đọc TTS) */
                 <div className="flex flex-col h-full">
-                  <div className="flex items-center justify-between px-3 h-8 bg-[#141418] border-b border-[#2B2B30] shrink-0">
+                  <div className={`flex items-center justify-between px-3 h-8 border-b shrink-0 ${
+                    themeMode === 'light' ? 'bg-[#F8FAFC] border-[#E2E8F0]' : 'bg-[#141418] border-[#2B2B30]'
+                  }`}>
                     <span className="font-semibold text-[#00E5CC]">Văn bản (Text Inspector)</span>
-                    <span className="text-[10px] font-mono text-[#9CA3AF] truncate max-w-28">
+                    <span className={`text-[10px] font-mono truncate max-w-28 ${
+                      themeMode === 'light' ? 'text-[#64748B]' : 'text-[#9CA3AF]'
+                    }`}>
                       {currentClip.name}
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-4 gap-1 p-1.5 bg-[#121216] border-b border-[#27272F] shrink-0">
+                  <div className={`grid grid-cols-4 gap-1 p-1.5 border-b shrink-0 ${
+                    themeMode === 'light' ? 'bg-[#F1F5F9] border-[#E2E8F0]' : 'bg-[#121216] border-[#27272F]'
+                  }`}>
                     {(
                       [
                         { id: 'basic', label: 'Cơ bản' },
@@ -7802,7 +8251,11 @@ export default function App() {
                         onClick={() => setTextSubTab(st.id)}
                         className={`py-1 text-[10px] font-medium rounded transition-colors cursor-pointer ${
                           textSubTab === st.id
-                            ? 'bg-[#26262F] text-[#00E5CC] font-semibold'
+                            ? themeMode === 'light'
+                              ? 'bg-white text-[#0F766E] font-semibold shadow-xs border border-[#5EEAD4]'
+                              : 'bg-[#26262F] text-[#00E5CC] font-semibold'
+                            : themeMode === 'light'
+                            ? 'text-[#64748B] hover:text-[#0F172A]'
                             : 'text-[#8E8E93] hover:text-white'
                         }`}
                       >
@@ -8078,7 +8531,7 @@ export default function App() {
 
                     {textSubTab === 'tts' && (
                       <div className="space-y-2.5">
-                        <div className="font-semibold text-white">Chuyển Văn Bản Thành Giọng Nói (AI TTS)</div>
+                        <div className="font-semibold text-white">Chuyển Văn Bản Thành Giọng Nói (TTS)</div>
                         <button
                           type="button"
                           onClick={() =>
@@ -8086,7 +8539,7 @@ export default function App() {
                           }
                           className="w-full py-2 px-3 bg-[#00E5CC] text-[#090D12] font-bold rounded cursor-pointer"
                         >
-                          🔊 Đọc Phụ đề bằng Giọng AI (TTS)
+                          🔊 Đọc Phụ đề (Text-to-Speech)
                         </button>
                       </div>
                     )}
@@ -8095,7 +8548,9 @@ export default function App() {
               ) : (
                 /* CLIP INSPECTOR MODE (6 Main Tabs: Video | Âm thanh | Tốc độ | Hiệu ứng động | Điều chỉnh | Lách BQ) */
                 <>
-                  <div className="flex items-center justify-between px-1 h-8 bg-[#141418] border-b border-[#2B2B30] overflow-x-auto no-scrollbar shrink-0">
+                  <div className={`flex items-center justify-between px-1 h-8 border-b overflow-x-auto no-scrollbar shrink-0 ${
+                    themeMode === 'light' ? 'bg-[#F8FAFC] border-[#E2E8F0]' : 'bg-[#141418] border-[#2B2B30]'
+                  }`}>
                     {(
                       [
                         { id: 'video', label: 'Video' },
@@ -8112,7 +8567,11 @@ export default function App() {
                         onClick={() => setInspectorTab(t.id)}
                         className={`px-1.5 py-1 text-[10.5px] font-medium whitespace-nowrap transition-colors cursor-pointer ${
                           inspectorTab === t.id
-                            ? 'text-[#00E5CC] border-b-2 border-[#00E5CC]'
+                            ? themeMode === 'light'
+                              ? 'text-[#0F766E] border-b-2 border-[#00D2C4] font-semibold'
+                              : 'text-[#00E5CC] border-b-2 border-[#00E5CC]'
+                            : themeMode === 'light'
+                            ? 'text-[#64748B] hover:text-[#0F172A]'
                             : 'text-[#9CA3AF] hover:text-white'
                         }`}
                       >
@@ -8126,7 +8585,9 @@ export default function App() {
                     {inspectorTab === 'video' && (
                       <>
                         {/* 4 Sub-tabs: Cơ bản | Xóa nền | Mặt nạ | Làm mịn */}
-                        <div className="grid grid-cols-4 gap-1 p-0.5 bg-[#121216] rounded border border-[#27272F]">
+                        <div className={`grid grid-cols-4 gap-1 p-0.5 rounded border ${
+                          themeMode === 'light' ? 'bg-[#F1F5F9] border-[#CBD5E1]' : 'bg-[#121216] border-[#27272F]'
+                        }`}>
                           {(
                             [
                               { id: 'basic', label: 'Cơ bản' },
@@ -8141,7 +8602,11 @@ export default function App() {
                               onClick={() => setVideoSubTab(st.id)}
                               className={`py-1 text-[10px] font-medium rounded transition-colors cursor-pointer ${
                                 videoSubTab === st.id
-                                  ? 'bg-[#26262F] text-white'
+                                  ? themeMode === 'light'
+                                    ? 'bg-white text-[#0F172A] shadow-xs'
+                                    : 'bg-[#26262F] text-white'
+                                  : themeMode === 'light'
+                                  ? 'text-[#64748B] hover:text-[#0F172A]'
                                   : 'text-[#8E8E93] hover:text-white'
                               }`}
                             >
@@ -8156,22 +8621,40 @@ export default function App() {
                             {Boolean(currentClip.stickerEmoji) && (
                               <div
                                 data-testid="sticker-inspector-editor"
-                                className="p-2.5 bg-[#121921] border border-[#00E5CC]/45 rounded space-y-2"
+                                className={`p-2.5 rounded space-y-2 border ${
+                                  themeMode === 'light'
+                                    ? 'bg-[#F8FAFC] border-[#00D2C4]/50'
+                                    : 'bg-[#121921] border-[#00E5CC]/45'
+                                }`}
                               >
                                 <div className="flex items-center justify-between">
                                   <span className="font-semibold text-[#00E5CC] flex items-center gap-1.5">
-                                    <span className="text-base leading-none">
-                                      {currentClip.stickerEmoji}
+                                    {extractFlagIsoCode(currentClip.stickerEmoji) ? (
+                                      <img
+                                        src={getFlagGraphicDataUrl(extractFlagIsoCode(currentClip.stickerEmoji)!)}
+                                        alt="Flag"
+                                        className="w-5 h-3.5 object-cover rounded shadow-xs"
+                                      />
+                                    ) : (
+                                      <span className="text-base leading-none">
+                                        {currentClip.stickerEmoji}
+                                      </span>
+                                    )}
+                                    <span className={themeMode === 'light' ? 'text-[#0F172A]' : 'text-[#00E5CC]'}>
+                                      Chỉnh sửa Nhãn dán &amp; Biểu tượng
                                     </span>
-                                    <span>Chỉnh sửa Nhãn dán &amp; Biểu tượng</span>
                                   </span>
-                                  <span className="text-[10px] font-mono text-[#A1A1AA]">
+                                  <span className={`text-[10px] font-mono ${
+                                    themeMode === 'light' ? 'text-[#64748B]' : 'text-[#A1A1AA]'
+                                  }`}>
                                     Tỷ lệ {Math.round(currentClip.scale ?? 100)}%
                                   </span>
                                 </div>
 
                                 <div className="space-y-1">
-                                  <label className="block text-[10px] text-[#A1A1AA]">
+                                  <label className={`block text-[10px] ${
+                                    themeMode === 'light' ? 'text-[#475569]' : 'text-[#A1A1AA]'
+                                  }`}>
                                     Văn bản trên Nhãn dán (Để trống nếu chỉ hiện Icon):
                                   </label>
                                   <input
@@ -8197,12 +8680,18 @@ export default function App() {
                                         `stk-text:${currentClip.id}`
                                       );
                                     }}
-                                    className="w-full px-2 py-1 text-[11px] bg-[#1D242E] border border-[#324152] focus:border-[#00E5CC] rounded text-white placeholder-[#71717A]"
+                                    className={`w-full px-2 py-1 text-[11px] rounded border ${
+                                      themeMode === 'light'
+                                        ? 'bg-white border-[#CBD5E1] text-[#0F172A] placeholder-[#94A3B8]'
+                                        : 'bg-[#1D242E] border-[#324152] focus:border-[#00E5CC] text-white placeholder-[#71717A]'
+                                    }`}
                                   />
                                 </div>
 
                                 <div className="space-y-1">
-                                  <label className="block text-[10px] text-[#A1A1AA]">
+                                  <label className={`block text-[10px] ${
+                                    themeMode === 'light' ? 'text-[#475569]' : 'text-[#A1A1AA]'
+                                  }`}>
                                     Dòng chữ phụ (Subtext):
                                   </label>
                                   <input
@@ -8213,13 +8702,21 @@ export default function App() {
                                     onChange={(e) =>
                                       updateSelectedClipProp('stickerSubText', e.target.value)
                                     }
-                                    className="w-full px-2 py-1 text-[11px] bg-[#1D242E] border border-[#324152] focus:border-[#00E5CC] rounded text-white placeholder-[#71717A]"
+                                    className={`w-full px-2 py-1 text-[11px] rounded border ${
+                                      themeMode === 'light'
+                                        ? 'bg-white border-[#CBD5E1] text-[#0F172A] placeholder-[#94A3B8]'
+                                        : 'bg-[#1D242E] border-[#324152] focus:border-[#00E5CC] text-white placeholder-[#71717A]'
+                                    }`}
                                   />
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-2 pt-0.5">
-                                  <label className="flex items-center justify-between gap-1 bg-[#1B222C] px-2 py-1 rounded border border-[#2C3746]">
-                                    <span className="text-[10px] text-[#D4D4D8]">Màu chữ</span>
+                                  <label className={`flex items-center justify-between gap-1 px-2 py-1 rounded border ${
+                                    themeMode === 'light'
+                                      ? 'bg-white border-[#CBD5E1] text-[#334155]'
+                                      : 'bg-[#1B222C] border-[#2C3746] text-[#D4D4D8]'
+                                  }`}>
+                                    <span className="text-[10px]">Màu chữ</span>
                                     <input
                                       type="color"
                                       value={currentClip.textColor || '#FFFFFF'}
@@ -8229,8 +8726,12 @@ export default function App() {
                                       className="w-5 h-4 bg-transparent border-0 cursor-pointer"
                                     />
                                   </label>
-                                  <label className="flex items-center justify-between gap-1 bg-[#1B222C] px-2 py-1 rounded border border-[#2C3746]">
-                                    <span className="text-[10px] text-[#D4D4D8]">Màu nền</span>
+                                  <label className={`flex items-center justify-between gap-1 px-2 py-1 rounded border ${
+                                    themeMode === 'light'
+                                      ? 'bg-white border-[#CBD5E1] text-[#334155]'
+                                      : 'bg-[#1B222C] border-[#2C3746] text-[#D4D4D8]'
+                                  }`}>
+                                    <span className="text-[10px]">Màu nền</span>
                                     <input
                                       type="color"
                                       value={currentClip.textBgColor || '#E11D48'}
@@ -9427,11 +9928,11 @@ export default function App() {
                         {adjustSubTab === 'basic' &&
                           (
                             [
-                              { key: 'brightness', label: 'Độ sáng', min: -50, max: 50 },
-                              { key: 'contrast', label: 'Tương phản', min: -50, max: 50 },
-                              { key: 'saturation', label: 'Bão hòa', min: -50, max: 50 },
-                              { key: 'warmth', label: 'Nhiệt độ màu', min: -50, max: 50 },
-                              { key: 'vignette', label: 'Viền tối', min: 0, max: 80 },
+                              { key: 'brightness', label: 'Độ sáng', min: -100, max: 100 },
+                              { key: 'contrast', label: 'Tương phản', min: -100, max: 100 },
+                              { key: 'saturation', label: 'Bão hòa', min: -100, max: 100 },
+                              { key: 'warmth', label: 'Nhiệt độ màu', min: -100, max: 100 },
+                              { key: 'vignette', label: 'Viền tối', min: 0, max: 100 },
                             ] as const
                           ).map((adj) => (
                             <div
@@ -9496,8 +9997,8 @@ export default function App() {
                               <span className="text-[#A1A1AA] w-20 shrink-0 truncate">Tông (Hue)</span>
                               <input
                                 type="range"
-                                min={-50}
-                                max={50}
+                                min={-100}
+                                max={100}
                                 value={currentClip.hslHue ?? 0}
                                 onChange={(e) =>
                                   updateSelectedClipProp('hslHue', Number(e.target.value))
@@ -9506,8 +10007,8 @@ export default function App() {
                               />
                               <NumericBoxWithSteppers
                                 value={currentClip.hslHue ?? 0}
-                                min={-50}
-                                max={50}
+                                min={-100}
+                                max={100}
                                 step={1}
                                 widthClass="w-16"
                                 ariaLabel="Tông màu Hue"
@@ -9518,8 +10019,8 @@ export default function App() {
                               <span className="text-[#A1A1AA] w-20 shrink-0 truncate">Độ bão hòa</span>
                               <input
                                 type="range"
-                                min={-50}
-                                max={50}
+                                min={-100}
+                                max={100}
                                 value={currentClip.hslSat ?? 0}
                                 onChange={(e) =>
                                   updateSelectedClipProp('hslSat', Number(e.target.value))
@@ -9528,8 +10029,8 @@ export default function App() {
                               />
                               <NumericBoxWithSteppers
                                 value={currentClip.hslSat ?? 0}
-                                min={-50}
-                                max={50}
+                                min={-100}
+                                max={100}
                                 step={1}
                                 widthClass="w-16"
                                 ariaLabel="Độ bão hòa HSL"
@@ -9540,8 +10041,8 @@ export default function App() {
                               <span className="text-[#A1A1AA] w-20 shrink-0 truncate">Độ sáng</span>
                               <input
                                 type="range"
-                                min={-50}
-                                max={50}
+                                min={-100}
+                                max={100}
                                 value={currentClip.hslBri ?? 0}
                                 onChange={(e) =>
                                   updateSelectedClipProp('hslBri', Number(e.target.value))
@@ -9550,8 +10051,8 @@ export default function App() {
                               />
                               <NumericBoxWithSteppers
                                 value={currentClip.hslBri ?? 0}
-                                min={-50}
-                                max={50}
+                                min={-100}
+                                max={100}
                                 step={1}
                                 widthClass="w-16"
                                 ariaLabel="Độ sáng HSL"
@@ -9572,8 +10073,8 @@ export default function App() {
                               <span className="text-[#A1A1AA] w-20 shrink-0 truncate">Gamma:</span>
                               <input
                                 type="range"
-                                min={-40}
-                                max={40}
+                                min={-100}
+                                max={100}
                                 value={currentClip.contrast ?? 0}
                                 onChange={(e) =>
                                   updateSelectedClipProp('contrast', Number(e.target.value))
@@ -9582,8 +10083,8 @@ export default function App() {
                               />
                               <NumericBoxWithSteppers
                                 value={currentClip.contrast ?? 0}
-                                min={-40}
-                                max={40}
+                                min={-100}
+                                max={100}
                                 step={1}
                                 widthClass="w-16"
                                 ariaLabel="Cường độ Gamma"
@@ -9792,6 +10293,117 @@ export default function App() {
             </section>
           </div>
 
+          {/* MOBILE QUICK TRANSPORT & EDIT TOOLBAR (< md) */}
+          <div className={`flex md:hidden items-center justify-between px-2 py-1.5 border-y text-xs shrink-0 select-none ${
+            themeMode === 'light'
+              ? 'bg-[#F8FAFC] border-[#E2E8F0] text-[#0F172A]'
+              : 'bg-[#14151A] border-[#262730] text-[#D1D5DB]'
+          }`}>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={handleUndo}
+                disabled={historyPast.length === 0}
+                title="Hoàn tác (Undo)"
+                className={`p-1.5 rounded transition-all cursor-pointer ${
+                  themeMode === 'light'
+                    ? 'bg-[#E2E8F0] hover:bg-[#CBD5E1] text-[#0F172A] disabled:opacity-30'
+                    : 'bg-[#1F2028] hover:bg-[#2A2B36] text-[#D1D5DB] disabled:opacity-30'
+                }`}
+              >
+                <Undo2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={handleRedo}
+                disabled={historyFuture.length === 0}
+                title="Làm lại (Redo)"
+                className={`p-1.5 rounded transition-all cursor-pointer ${
+                  themeMode === 'light'
+                    ? 'bg-[#E2E8F0] hover:bg-[#CBD5E1] text-[#0F172A] disabled:opacity-30'
+                    : 'bg-[#1F2028] hover:bg-[#2A2B36] text-[#D1D5DB] disabled:opacity-30'
+                }`}
+              >
+                <Redo2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsPlaying((p) => !p)}
+                title={isPlaying ? 'Tạm dừng (Play/Pause)' : 'Phát (Play/Pause)'}
+                className="p-1.5 px-2.5 rounded-full bg-[#00E5CC] text-[#071013] font-bold flex items-center gap-1 cursor-pointer shadow-xs active:scale-95 transition-transform"
+              >
+                {isPlaying ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+              </button>
+              <span className="font-mono text-[10px] text-[#A1A1AA] ml-1">
+                {formatTimecode(playheadSec)}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  commitClips((prev) => splitClipAtPlayhead(prev, playheadSec, selectedClipId));
+                  showToast(language === 'en' ? 'Split clip at Playhead!' : 'Đã tách clip tại Playhead!');
+                }}
+                className={`flex items-center gap-1 px-2 py-1 rounded border text-[11px] font-semibold cursor-pointer transition-all ${
+                  themeMode === 'light'
+                    ? 'bg-[#FFFFFF] hover:bg-[#F1F5F9] text-[#0F172A] border-[#CBD5E1]'
+                    : 'bg-[#1F2028] hover:bg-[#2A2B36] text-[#D1D5DB] border-[#2D303B]'
+                }`}
+              >
+                <Scissors className="w-3 h-3 text-[#00E5CC]" />
+                <span>{language === 'en' ? 'Split' : 'Tách'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDeleteMediaCardsAndClips()}
+                disabled={!selectedClipId}
+                className={`flex items-center gap-1 px-2 py-1 rounded border text-[11px] font-semibold cursor-pointer transition-all ${
+                  themeMode === 'light'
+                    ? 'bg-[#FEE2E2] hover:bg-[#FECACA] text-[#DC2626] border-[#FCA5A5] disabled:opacity-30'
+                    : 'bg-[#1F2028] hover:bg-[#2A2B36] text-[#FCA5A5] hover:text-[#EF4444] border-[#2D303B] disabled:opacity-30'
+                }`}
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>{language === 'en' ? 'Delete' : 'Xóa'}</span>
+              </button>
+
+              {currentClip ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateSelectedClipProp('flipH', !currentClip.flipH);
+                    showToast('Đã lật ngang khung hình!');
+                  }}
+                  title="Lật ngang (Mirror)"
+                  className={`p-1.5 rounded border cursor-pointer transition-all ${
+                    themeMode === 'light'
+                      ? 'bg-[#FFFFFF] hover:bg-[#F1F5F9] text-[#0F172A] border-[#CBD5E1]'
+                      : 'bg-[#1F2028] hover:bg-[#2A2B36] text-[#D1D5DB] border-[#2D303B]'
+                  }`}
+                >
+                  <FlipHorizontal2 className="w-3.5 h-3.5 text-[#00E5CC]" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setMobileBottomTab('text')}
+                  title="Thêm chữ nhanh"
+                  className={`flex items-center gap-1 px-2 py-1 rounded border text-[11px] font-semibold cursor-pointer transition-all ${
+                    themeMode === 'light'
+                      ? 'bg-[#FFFFFF] hover:bg-[#F1F5F9] text-[#0F172A] border-[#CBD5E1]'
+                      : 'bg-[#1F2028] hover:bg-[#2A2B36] text-[#D1D5DB] border-[#2D303B]'
+                  }`}
+                >
+                  <Type className="w-3 h-3 text-[#00E5CC]" />
+                  <span>+ Chữ</span>
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* LOWER HALF: ZONE 4 (CAPCUT PC MULTI-TRACK TIMELINE) */}
           <div
             data-zone-focus={activeZoneFocus === 'timeline' ? 'active' : 'inactive'}
@@ -9799,7 +10411,7 @@ export default function App() {
               setActiveZoneFocus('timeline');
               setSelectedResourceIds([]);
             }}
-            className="flex-[40] min-h-0 overflow-hidden"
+            className="flex-1 md:flex-[40] min-h-0 overflow-hidden"
           >
             <MultiTrackTimeline
               clips={clips}
@@ -9924,6 +10536,12 @@ export default function App() {
                 });
               }}
               onDropResourceOnTimeline={handleDropResourceOnTimeline}
+              onOpenTransitions={(clipId) => {
+                setTopLeftCategory('transitions');
+                setSelectedClipId(clipId);
+                setSelectedClipIds([clipId]);
+              }}
+              activeSelectedTransition={selectedTransitionItem}
               onAddTrackLayer={handleAddTrackLayer}
               onDeleteTrackLayer={handleDeleteTrackLayer}
               onMoveTrackOrder={handleMoveTrackOrder}
@@ -10081,18 +10699,20 @@ export default function App() {
                   setInspectorTab('video');
                   setVideoSubTab('cutout');
                   showToast('Đã bật Tách nền người tự động AI (Auto Cutout)!');
-                } else if (action === 'retouch') {
+                } else if (action === 'retouch' || action === 'enhance') {
                   commitClips((prev) =>
                     prev.map((c) =>
                       c.id === targetId
-                        ? { ...c, smoothSkin: 65, retouchBrighten: 45, retouchWhiteTeeth: 50 }
+                        ? { ...c, smoothSkin: 65, retouchBrighten: 45, retouchWhiteTeeth: 50, protectSkinTone: true }
                         : c
                     )
                   );
                   setInspectorMode('clip');
                   setInspectorTab('video');
                   setVideoSubTab('enhance');
-                  showToast('Đã bật Làm đẹp & Mịn da mặt AI (Retouch)!');
+                  showToast('Đã bật Làm đẹp & Mịn da mặt AI (Retouch / Face Enhance)!');
+                } else if (action === 'voice_clean') {
+                  handleRemoveDeadAirSilence();
                 } else if (action === 'hd_upscale') {
                   commitClips((prev) =>
                     prev.map((c) =>
@@ -10333,8 +10953,407 @@ export default function App() {
               onRemoveDeadAirSilence={handleRemoveDeadAirSilence}
               onSyncClipsToBeats={handleSyncVideoClipsToBeats}
               language={language}
+              themeMode={themeMode}
             />
           </div>
+
+          {/* MOBILE BOTTOM TAB NAVIGATION BAR (< md) */}
+          <nav
+            aria-label="Điều hướng nhanh trên điện thoại"
+            className={`flex md:hidden items-center justify-around px-1 py-1.5 border-t shrink-0 z-30 select-none ${
+              themeMode === 'light'
+                ? 'bg-[#FFFFFF] border-[#E2E8F0] text-[#0F172A]'
+                : 'bg-[#131418] border-[#24262E] text-[#D1D5DB]'
+            }`}
+          >
+            {(
+              [
+                { id: 'media', label: language === 'en' ? 'Media' : 'Phương tiện', icon: Film },
+                { id: 'text', label: language === 'en' ? 'Text' : 'Văn bản', icon: Type },
+                { id: 'stickers', label: language === 'en' ? 'Stickers' : 'Nhãn dán', icon: Smile },
+                { id: 'effects', label: language === 'en' ? 'Effects' : 'Hiệu ứng', icon: Sparkles },
+                { id: 'transitions', label: language === 'en' ? 'Transitions' : 'Chuyển cảnh', icon: ArrowRightLeft },
+              ] as const
+            ).map((tab) => {
+              const TabIcon = tab.icon;
+              const isActive = mobileBottomTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    setMobileBottomTab((prev) => (prev === tab.id ? null : tab.id));
+                  }}
+                  className={`flex flex-col items-center justify-center py-1 px-2 rounded-lg transition-all cursor-pointer min-w-[52px] ${
+                    isActive
+                      ? 'text-[#00E5CC] bg-[#00E5CC]/15 font-bold'
+                      : 'hover:text-[#00E5CC]'
+                  }`}
+                >
+                  <TabIcon className="w-4 h-4 mb-0.5" />
+                  <span className="text-[10px] leading-tight font-medium">{tab.label}</span>
+                </button>
+              );
+            })}
+
+            {/* Mobile Xuất (Export) Button */}
+            <button
+              type="button"
+              onClick={() => setIsExportModalOpen(true)}
+              className="flex flex-col items-center justify-center py-1 px-2.5 rounded-lg bg-[#00E5CC] hover:bg-[#00F5DC] active:bg-[#00D2C4] text-[#071013] font-bold shadow-xs cursor-pointer active:scale-95 transition-transform"
+            >
+              <Upload className="w-4 h-4 mb-0.5" />
+              <span className="text-[10px] leading-tight">{language === 'en' ? 'Export' : 'Xuất'}</span>
+            </button>
+          </nav>
+
+          {/* MOBILE RESOURCE BOTTOM SHEET DRAWER (< md) */}
+          {mobileBottomTab && (
+            <div className="fixed inset-0 z-50 md:hidden flex flex-col justify-end">
+              <div
+                className="absolute inset-0 bg-black/60 backdrop-blur-xs animate-in fade-in"
+                onClick={() => setMobileBottomTab(null)}
+              />
+              <div
+                className={`relative z-10 w-full h-[60vh] max-h-[85vh] rounded-t-2xl border-t shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-200 ${
+                  themeMode === 'light'
+                    ? 'bg-[#FFFFFF] border-[#CBD5E1] text-[#0F172A]'
+                    : 'bg-[#181920] border-[#2E313C] text-white'
+                }`}
+              >
+                {/* Drawer Header */}
+                <div className="flex items-center justify-between px-4 py-2.5 border-b border-inherit shrink-0">
+                  <div className="flex items-center gap-2 font-bold text-sm">
+                    {mobileBottomTab === 'media' && <Film className="w-4 h-4 text-[#00E5CC]" />}
+                    {mobileBottomTab === 'text' && <Type className="w-4 h-4 text-[#00E5CC]" />}
+                    {mobileBottomTab === 'stickers' && <Smile className="w-4 h-4 text-[#00E5CC]" />}
+                    {mobileBottomTab === 'effects' && <Sparkles className="w-4 h-4 text-[#00E5CC]" />}
+                    {mobileBottomTab === 'transitions' && <ArrowRightLeft className="w-4 h-4 text-[#00E5CC]" />}
+                    <span>
+                      {mobileBottomTab === 'media' && (language === 'en' ? 'Media Library' : 'Thư viện Phương tiện')}
+                      {mobileBottomTab === 'text' && (language === 'en' ? 'Add Text & Subtitles' : 'Thêm Văn bản & Phụ đề')}
+                      {mobileBottomTab === 'stickers' && (language === 'en' ? 'Stickers & Emojis' : 'Kho Nhãn dán & Biểu tượng')}
+                      {mobileBottomTab === 'effects' && (language === 'en' ? 'Visual Effects' : 'Kho Hiệu ứng Video')}
+                      {mobileBottomTab === 'transitions' && (language === 'en' ? 'Transitions' : 'Kho Chuyển tiếp')}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMobileBottomTab(null)}
+                    className="p-1 rounded-full bg-black/10 dark:bg-white/10 hover:bg-black/20 text-current cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Drawer Content */}
+                <div className="flex-1 overflow-y-auto p-3">
+                  {/* TAB 1: MEDIA */}
+                  {mobileBottomTab === 'media' && (
+                    <div className="space-y-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          mediaInputRef.current?.click();
+                          setMobileBottomTab(null);
+                        }}
+                        className="w-full py-2.5 px-3 bg-[#00E5CC] hover:bg-[#00F5DC] active:bg-[#00D2C4] text-[#071013] font-bold rounded-lg flex items-center justify-center gap-2 text-xs cursor-pointer shadow-xs active:scale-98 transition-transform"
+                      >
+                        <Upload className="w-4 h-4" />
+                        <span>{language === 'en' ? 'Upload Media from Device' : 'Tải lên Tệp từ Thiết bị / Điện thoại'}</span>
+                      </button>
+
+                      <div className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wider">
+                        {language === 'en' ? 'Project Media Clips' : 'Tệp trong dự án'} ({filteredMediaCards.length})
+                      </div>
+
+                      {filteredMediaCards.length === 0 ? (
+                        <div className="p-6 text-center text-xs text-[#9CA3AF] border border-dashed border-[#343440] rounded-lg">
+                          Chưa có tệp phương tiện nào. Bấm nút phía trên để tải lên!
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2.5">
+                          {filteredMediaCards.map((card) => (
+                            <div
+                              key={card.id}
+                              onClick={() => {
+                                handlePushCardToTimeline(card);
+                                setMobileBottomTab(null);
+                              }}
+                              className={`p-2.5 rounded-lg border hover:border-[#00E5CC] cursor-pointer flex flex-col gap-1 active:scale-98 transition-all ${
+                                themeMode === 'light'
+                                  ? 'bg-[#F8FAFC] hover:bg-[#F1F5F9] border-[#CBD5E1]'
+                                  : 'bg-[#14151A] hover:bg-[#1E2028] border-[#2D303B]'
+                              }`}
+                            >
+                              <div className={`h-16 rounded flex items-center justify-center text-xs ${
+                                themeMode === 'light' ? 'bg-[#EDF2F7] text-[#64748B]' : 'bg-[#22242C] text-[#A1A1AA]'
+                              }`}>
+                                <Video className="w-6 h-6 text-[#00E5CC]" />
+                              </div>
+                              <span className={`text-xs font-semibold truncate ${
+                                themeMode === 'light' ? 'text-[#0F172A]' : 'text-white'
+                              }`}>{card.name}</span>
+                              <span className={`text-[10px] ${
+                                themeMode === 'light' ? 'text-[#64748B]' : 'text-[#A1A1AA]'
+                              }`}>{card.timeLabel || `${card.duration.toFixed(1)}s`}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* TAB 2: TEXT */}
+                  {mobileBottomTab === 'text' && (
+                    <div className="space-y-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newId = `txt-${Date.now()}`;
+                          const defaultTxt = language === 'en' ? 'Default Text' : 'Văn bản mẫu';
+                          commitClips((prev) => [
+                            ...prev,
+                            {
+                              id: newId,
+                              name: defaultTxt,
+                              filePath: '',
+                              trackIndex: 2,
+                              startTime: Number(playheadSec.toFixed(2)),
+                              duration: 3.5,
+                              sourceIn: 0,
+                              speed: 1.0,
+                              volume: 100,
+                              flipH: false,
+                              cropRatio: 1.0,
+                              subtitleText: defaultTxt,
+                              fontSize: 32,
+                              textColor: '#FFFFFF',
+                              textStrokeColor: '#000000',
+                              colorHex: '#A45A49',
+                            },
+                          ]);
+                          setSelectedClipId(newId);
+                          showToast('Đã thêm chữ vào Timeline!');
+                          setMobileBottomTab(null);
+                        }}
+                        className="w-full py-2.5 px-3 bg-[#00E5CC] hover:bg-[#00F5DC] active:bg-[#00D2C4] text-[#071013] font-bold rounded-lg flex items-center justify-center gap-2 text-xs cursor-pointer shadow-xs active:scale-98 transition-transform"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>{language === 'en' ? '+ Add Default Text' : '+ Thêm Văn bản Mặc định'}</span>
+                      </button>
+
+                      <div className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wider">
+                        {language === 'en' ? 'Preset Text Templates' : 'Mẫu chữ có sẵn'}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { label: 'Tiêu đề lớn (Title)', text: 'TIÊU ĐỀ NỔI BẬT', size: 38, col: '#FACC15' },
+                          { label: 'Phụ đề ngắn', text: 'Nhập nội dung phụ đề...', size: 24, col: '#FFFFFF' },
+                          { label: 'Chữ Neon Cyberpunk', text: 'CYBERPUNK 2077', size: 34, col: '#22D3EE' },
+                          { label: 'Chữ 3D Kim loại', text: 'SUPER SALE 50%', size: 34, col: '#FDE047' },
+                          { label: 'Thông báo Đỏ', text: '🔴 HOT TRENDING', size: 28, col: '#EF4444' },
+                          { label: 'Hashtag Xanh', text: '#TDO_CUT #VIRAL', size: 28, col: '#00E5CC' },
+                        ].map((tpl, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => {
+                              const newId = `txt-tpl-${Date.now()}`;
+                              commitClips((prev) => [
+                                ...prev,
+                                {
+                                  id: newId,
+                                  name: tpl.label,
+                                  filePath: '',
+                                  trackIndex: 2,
+                                  startTime: Number(playheadSec.toFixed(2)),
+                                  duration: 4.0,
+                                  sourceIn: 0,
+                                  speed: 1.0,
+                                  volume: 100,
+                                  flipH: false,
+                                  cropRatio: 1.0,
+                                  subtitleText: tpl.text,
+                                  fontSize: tpl.size,
+                                  textColor: tpl.col,
+                                  textStrokeColor: '#000000',
+                                  colorHex: '#A45A49',
+                                },
+                              ]);
+                              setSelectedClipId(newId);
+                              showToast(`Đã thêm: ${tpl.label}!`);
+                              setMobileBottomTab(null);
+                            }}
+                            className={`p-3 rounded-lg border hover:border-[#00E5CC] text-left cursor-pointer flex flex-col gap-1 active:scale-98 transition-all ${
+                              themeMode === 'light'
+                                ? 'bg-[#F8FAFC] hover:bg-[#F1F5F9] border-[#CBD5E1]'
+                                : 'bg-[#14151A] hover:bg-[#1E2028] border-[#2D303B]'
+                            }`}
+                          >
+                            <span className={`text-[10px] font-medium ${
+                              themeMode === 'light' ? 'text-[#64748B]' : 'text-[#9CA3AF]'
+                            }`}>{tpl.label}</span>
+                            <span className="text-xs font-bold truncate" style={{ color: tpl.col }}>{tpl.text}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 3: STICKERS */}
+                  {mobileBottomTab === 'stickers' && (
+                    <div className="space-y-3">
+                      <input
+                        type="text"
+                        value={stickerSearchQuery}
+                        onChange={(e) => setStickerSearchQuery(e.target.value)}
+                        placeholder={language === 'en' ? 'Search stickers & flags...' : 'Tìm kiếm nhãn dán, cờ...'}
+                        className={`w-full px-3 py-2 rounded-lg text-xs border ${
+                          themeMode === 'light'
+                            ? 'bg-[#F8FAFC] border-[#CBD5E1] text-[#0F172A] placeholder-[#94A3B8]'
+                            : 'bg-[#121216] border-[#2D303C] text-white placeholder-[#71717A]'
+                        }`}
+                      />
+
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                        {[
+                          { id: 'all', label: 'Tất cả' },
+                          { id: 'cta', label: '🔔 CTA & Viral' },
+                          { id: 'faces', label: '😀 Biểu cảm' },
+                          { id: 'flags', label: '🇻🇳 Cờ thế giới' },
+                        ].map((cat) => (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => setSubCategoryFilter(cat.id)}
+                            className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap cursor-pointer transition-all ${
+                              subCategoryFilter === cat.id
+                                ? 'bg-[#00E5CC] text-black font-bold'
+                                : themeMode === 'light'
+                                ? 'bg-[#F1F5F9] text-[#475569] hover:text-[#0F172A]'
+                                : 'bg-[#22242C] text-[#D1D5DB] hover:text-white'
+                            }`}
+                          >
+                            {cat.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-2 pb-4">
+                        {STICKER_CATALOG_ITEMS.filter((stk) => {
+                          if (stk.id === 'none') return false;
+                          const matchesCat = subCategoryFilter === 'all' || stk.cat === subCategoryFilter;
+                          const matchesQuery =
+                            !stickerSearchQuery.trim() ||
+                            stk.label.toLowerCase().includes(stickerSearchQuery.trim().toLowerCase()) ||
+                            (stk.labelEn || '').toLowerCase().includes(stickerSearchQuery.trim().toLowerCase());
+                          return matchesCat && matchesQuery;
+                        })
+                          .slice(0, 60)
+                          .map((stk) => (
+                            <button
+                              key={stk.uid}
+                              type="button"
+                              onClick={() => {
+                                handlePushResourceIdsToTimeline([stk.uid], 3, playheadSec);
+                                showToast(`Đã thêm nhãn dán ${stk.label}!`);
+                                setMobileBottomTab(null);
+                              }}
+                              className={`p-2 rounded-lg border hover:border-[#00E5CC] flex flex-col items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer ${
+                                themeMode === 'light'
+                                  ? 'bg-[#F8FAFC] hover:bg-[#F1F5F9] border-[#CBD5E1]'
+                                  : 'bg-[#14151A] hover:bg-[#1E2028] border-[#2D303B]'
+                              }`}
+                            >
+                              <span className="text-2xl leading-none">{stk.icon}</span>
+                              <span className={`text-[10px] truncate w-full text-center ${
+                                themeMode === 'light' ? 'text-[#475569]' : 'text-[#A1A1AA]'
+                              }`}>{stk.label}</span>
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 4: EFFECTS */}
+                  {mobileBottomTab === 'effects' && (
+                    <div className="space-y-3">
+                      <div className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wider">
+                        {language === 'en' ? 'Visual Effects Catalog' : 'Kho Hiệu ứng Video & Cơ thể'}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 pb-4">
+                        {VISUAL_EFFECT_CATALOG_ITEMS.slice(0, 27).map((fx) => (
+                          <button
+                            key={fx.uid}
+                            type="button"
+                            onClick={() => {
+                              handlePushResourceIdsToTimeline([fx.uid], 0, playheadSec);
+                              showToast(`Đã áp dụng: ${fx.label}!`);
+                              setMobileBottomTab(null);
+                            }}
+                            className={`p-2.5 rounded-lg border hover:border-[#00E5CC] flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer text-center ${
+                              themeMode === 'light'
+                                ? 'bg-[#F8FAFC] hover:bg-[#F1F5F9] border-[#CBD5E1]'
+                                : 'bg-[#14151A] hover:bg-[#1E2028] border-[#2D303B]'
+                            }`}
+                          >
+                            <Sparkles className="w-5 h-5 text-[#00E5CC]" />
+                            <span className={`text-xs font-semibold truncate w-full ${
+                              themeMode === 'light' ? 'text-[#0F172A]' : 'text-white'
+                            }`}>{fx.label}</span>
+                            <span className={`text-[9px] truncate w-full ${
+                              themeMode === 'light' ? 'text-[#64748B]' : 'text-[#A1A1AA]'
+                            }`}>{fx.badge}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 5: TRANSITIONS */}
+                  {mobileBottomTab === 'transitions' && (
+                    <div className="space-y-3">
+                      <div className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wider">
+                        {language === 'en' ? 'Transitions' : 'Chuyển cảnh thông dụng'}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 pb-4">
+                        {[
+                          { id: 'crossfade', name: 'Hòa tan (Crossfade)' },
+                          { id: 'wipe_left', name: 'Gạt sang trái (Wipe)' },
+                          { id: 'wipe_right', name: 'Gạt sang phải' },
+                          { id: 'slide_left', name: 'Trượt trái (Slide)' },
+                          { id: 'zoom_in', name: 'Phóng to (Zoom In)' },
+                          { id: 'fade_black', name: 'Mờ đen (Fade to Black)' },
+                        ].map((tr) => (
+                          <button
+                            key={tr.id}
+                            type="button"
+                            onClick={() => {
+                              handlePushResourceIdsToTimeline([`trans-${tr.id}`], 0, playheadSec);
+                              showToast(`Đã thêm chuyển cảnh: ${tr.name}!`);
+                              setMobileBottomTab(null);
+                            }}
+                            className={`p-3 rounded-lg border hover:border-[#00E5CC] flex items-center gap-2 active:scale-95 transition-all cursor-pointer text-left ${
+                              themeMode === 'light'
+                                ? 'bg-[#F8FAFC] hover:bg-[#F1F5F9] border-[#CBD5E1]'
+                                : 'bg-[#14151A] hover:bg-[#1E2028] border-[#2D303B]'
+                            }`}
+                          >
+                            <ArrowRightLeft className="w-4 h-4 text-[#00E5CC] shrink-0" />
+                            <span className={`text-xs font-semibold truncate ${
+                              themeMode === 'light' ? 'text-[#0F172A]' : 'text-white'
+                            }`}>{tr.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </main>
       )}
 

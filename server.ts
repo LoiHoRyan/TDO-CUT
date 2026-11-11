@@ -275,6 +275,17 @@ async function startServer() {
   }, 5 * 60 * 1000);
 
   let ffmpegAvailableCache: boolean | null = null;
+  app.get('/api/app-info', (_req: express.Request, res: express.Response) => {
+    const cwd = process.cwd().replace(/\\/g, '/');
+    res.json({
+      appName: 'TDO CUT',
+      version: '1.0.0',
+      workspaceDir: cwd,
+      projectsDir: `${cwd}/projects`,
+      exportsDir: `${cwd}/exports`,
+    });
+  });
+
   app.get('/api/health', async (_req: express.Request, res: express.Response) => {
     if (ffmpegAvailableCache !== null) {
       res.json({ ok: ffmpegAvailableCache, engine: 'ffmpeg' });
@@ -635,11 +646,11 @@ async function startServer() {
             vSegInputIndices.push(nextInputIdx++);
           });
 
-          // Add each overlay sprite / PNG as a single-frame input (decoded ONCE in memory via loop filter!)
+          // Add each overlay sprite / PNG as a loop-buffered input matching output framerate (decoded ONCE in memory)
           const ovInputIndices: number[] = [];
           const activeOverlays = includeOverlays ? overlayPaths : [];
           activeOverlays.forEach((ov) => {
-            ffArgs.push('-i', ov.path);
+            ffArgs.push('-framerate', String(safeFps), '-loop', '1', '-i', ov.path);
             ovInputIndices.push(nextInputIdx++);
           });
 
@@ -697,6 +708,10 @@ async function startServer() {
               (probed.colorTransfer === 'arib-std-b67' ||
                 probed.colorTransfer === 'smpte2084');
 
+            const userScale = Math.max(0.1, Math.min(5.0, (seg.scale ?? 100) / 100));
+            const userPosX = Math.round((seg.posX || 0) * scaleRatioX);
+            const userPosY = Math.round((seg.posY || 0) * scaleRatioY);
+
             if (isHdrInput) {
               const tin =
                 probed.colorTransfer === 'smpte2084' ? 'smpte2084' : 'arib-std-b67';
@@ -705,16 +720,28 @@ async function startServer() {
               const rin = probed.colorRange === 'pc' ? 'pc' : 'tv';
               vChain.push(
                 `zscale=tin=${tin}:pin=bt2020:min=${min}:rin=${rin}:t=bt709:p=bt709:m=bt709:r=tv`,
-                `scale=${safeW}:${safeH}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos+accurate_rnd+full_chroma_int`,
-                `pad=${safeW}:${safeH}:(ow-iw)/2:(oh-ih)/2:black`,
+                `scale='trunc(min(${safeW},iw*${userScale.toFixed(3)})/2)*2':'trunc(min(${safeH},ih*${userScale.toFixed(3)})/2)*2':force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos+accurate_rnd+full_chroma_int`,
+                `pad=${safeW}:${safeH}:'(ow-iw)/2+${userPosX}':'(oh-ih)/2+${userPosY}':black`,
+                `unsharp=5:5:0.6:5:5:0.0`,
                 `setsar=1`,
                 `format=yuv420p`
               );
             } else {
-              // SIMD-accelerated bicubic scaling preserves sharp edges & exact original SDR colors
+              // High-clarity Lanczos scaling with user scale + offset + studio unsharp mask
+              if (Math.abs(userScale - 1.0) > 0.01) {
+                vChain.push(
+                  `scale=${safeW}:${safeH}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos+accurate_rnd+full_chroma_int`,
+                  `scale='trunc(iw*${userScale.toFixed(3)}/2)*2':'trunc(ih*${userScale.toFixed(3)}/2)*2':flags=lanczos+accurate_rnd`,
+                  `pad=${safeW}:${safeH}:'(ow-iw)/2+${userPosX}':'(oh-ih)/2+${userPosY}':black`
+                );
+              } else {
+                vChain.push(
+                  `scale=${safeW}:${safeH}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos+accurate_rnd+full_chroma_int`,
+                  `pad=${safeW}:${safeH}:'(ow-iw)/2+${userPosX}':'(oh-ih)/2+${userPosY}':black`
+                );
+              }
               vChain.push(
-                `scale=${safeW}:${safeH}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos+accurate_rnd+full_chroma_int`,
-                `pad=${safeW}:${safeH}:(ow-iw)/2:(oh-ih)/2:black`,
+                `unsharp=5:5:0.6:5:5:0.0`,
                 `setsar=1`,
                 `format=yuv420p`
               );
@@ -816,10 +843,10 @@ async function startServer() {
               const scLbl = `[ov_sc_${k}]`;
               const scaleStep = needScale ? `,scale=${targetFw}:${targetFh}:flags=lanczos+accurate_rnd+full_chroma_int` : '';
               filterParts.push(
-                `[${inputIdx}:v]format=yuva420p${scaleStep}${scLbl}`
+                `[${inputIdx}:v]format=yuva420p,setpts=PTS-STARTPTS${scaleStep}${scLbl}`
               );
               filterParts.push(
-                `${currentVLabel}${scLbl}overlay=x=${ov.x}:y=${ov.y}:format=yuv420:enable='between(t,${sTime},${eTime})'${nextVLabel}`
+                `${currentVLabel}${scLbl}overlay=x=${ov.x}:y=${ov.y}:format=yuv420:eof_action=pass:enable='between(t,${sTime},${eTime})'${nextVLabel}`
               );
             }
             currentVLabel = nextVLabel;
@@ -891,22 +918,20 @@ async function startServer() {
               '2'
             );
           } else {
-            // CapCut Studio High-Profile H.264 + CABAC + In-Loop Deblocking + 8x8DCT + AQ-Mode 2 + AAC-LC 48kHz Stereo
+            // Studio Master High-Profile H.264 + CABAC + In-Loop Deblocking + 8x8DCT + AQ-Mode 2 + AAC-LC 48kHz Stereo 320k
             ffArgs.push(
               '-c:v',
               'libx264',
               '-preset',
-              'fast',
+              'medium',
               '-profile:v',
               'high',
               '-level:v',
               maxDim > 1920 ? '5.2' : '4.2',
-              '-b:v',
-              `${targetKbps}k`,
-              '-minrate',
-              `${minRateKbps}k`,
+              '-crf',
+              String(effectiveCrf),
               '-maxrate',
-              `${Math.round(targetKbps * 1.25)}k`,
+              `${Math.round(targetKbps * 1.35)}k`,
               '-bufsize',
               `${bufSizeKbps}k`,
               '-x264-params',
@@ -917,12 +942,18 @@ async function startServer() {
               String(safeFps),
               '-pix_fmt',
               'yuv420p',
+              '-color_primaries',
+              'bt709',
+              '-color_trc',
+              'bt709',
+              '-colorspace',
+              'bt709',
               '-video_track_timescale',
               '90000',
               '-c:a',
               'aac',
               '-b:a',
-              '256k',
+              '320k',
               '-ar',
               '48000',
               '-ac',

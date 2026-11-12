@@ -644,7 +644,15 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
     }
 
     if ((isPlaying || isExportPlaying) && vid.paused && !activeVideoClip.reversed) {
-      vid.play().catch(() => {});
+      const p = vid.play();
+      if (p !== undefined) {
+        p.catch((err: any) => {
+          if (err && err.name === 'NotAllowedError') {
+            vid.muted = true;
+            vid.play().catch(() => {});
+          }
+        });
+      }
     } else if ((!isPlaying && !isExportPlaying || activeVideoClip.reversed) && !vid.paused) {
       vid.pause();
     }
@@ -953,7 +961,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
         ? nextVid
         : null;
 
-      if (activeVidSource && activeVideoClip.mediaUrl) {
+      if (activeVidSource && activeVidSource.readyState >= 2 && activeVideoClip.mediaUrl) {
         try {
           const vw = Math.max(1, activeVidSource.videoWidth);
           const vh = Math.max(1, activeVidSource.videoHeight);
@@ -995,21 +1003,22 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
           ? lastValidVideoFrameCanvasRef.current
           : null;
 
-      const fallbackThumbImg =
-        !activeVidSource
-          ? getOrLoadMediaImage(
-              activeVideoClip.thumbnailUrl ||
-                activeVideoClip.thumbnailDataUrl ||
-                (isMainV1ImageClip ? activeVideoClip.mediaUrl : undefined)
-            )
-          : null;
+      const fallbackThumbImg = getOrLoadMediaImage(
+        activeVideoClip.thumbnailUrl ||
+          activeVideoClip.thumbnailDataUrl ||
+          (isMainV1ImageClip ? activeVideoClip.mediaUrl : undefined)
+      );
 
       const drawableMediaSource: CanvasImageSource | null =
-        activeVidSource
+        activeVidSource && activeVidSource.readyState >= 2
           ? activeVidSource
           : fallbackThumbImg
           ? fallbackThumbImg
-          : cachedVideoFrame;
+          : cachedVideoFrame
+          ? cachedVideoFrame
+          : activeVidSource && activeVidSource.readyState >= 1
+          ? activeVidSource
+          : null;
 
       const drawableMediaWidth =
         activeVidSource
@@ -3120,16 +3129,18 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
         data-player-video="true"
         style={{
           position: 'fixed',
-          top: 0,
-          left: 0,
-          width: 16,
-          height: 16,
-          opacity: 0.001,
+          bottom: 0,
+          right: 0,
+          width: 320,
+          height: 240,
+          opacity: 0.01,
           pointerEvents: 'none',
-          zIndex: -100,
+          zIndex: -1,
+          clipPath: 'circle(0% at 0 0)',
         }}
         playsInline={true}
         preload="auto"
+        muted={Boolean(videoTrackMuted || activeVideoClip?.muted)}
         onLoadedMetadata={(e) => {
           const vid = e.currentTarget;
           if (activeVideoClip) {
@@ -3140,12 +3151,18 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 ? Math.max(0, Math.min(rawOffset, Math.max(0, vid.duration - 0.04)))
                 : Math.max(0, rawOffset);
             try {
-              vid.currentTime = targetOffset;
+              vid.currentTime = Math.max(0.001, targetOffset);
             } catch {
               // Ignore initial seek error
             }
             if (isPlaying && !activeVideoClip.reversed && vid.paused) {
-              vid.play().catch(() => {});
+              const p = vid.play();
+              if (p !== undefined) {
+                p.catch(() => {
+                  vid.muted = true;
+                  vid.play().catch(() => {});
+                });
+              }
             }
           }
           if (
@@ -3171,21 +3188,24 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
         }}
         onLoadedData={() => setVideoFrameReadyTick((t) => t + 1)}
         onCanPlay={() => setVideoFrameReadyTick((t) => t + 1)}
+        onCanPlayThrough={() => setVideoFrameReadyTick((t) => t + 1)}
         onSeeked={() => setVideoFrameReadyTick((t) => t + 1)}
         onTimeUpdate={() => setVideoFrameReadyTick((t) => t + 1)}
+        onPlaying={() => setVideoFrameReadyTick((t) => t + 1)}
       />
       <video
         ref={nextVideoElRef}
         data-player-next-video="true"
         style={{
           position: 'fixed',
-          top: 0,
-          left: 0,
-          width: 16,
-          height: 16,
-          opacity: 0.001,
+          bottom: 0,
+          right: 0,
+          width: 320,
+          height: 240,
+          opacity: 0.01,
           pointerEvents: 'none',
-          zIndex: -100,
+          zIndex: -1,
+          clipPath: 'circle(0% at 0 0)',
         }}
         playsInline={true}
         muted
@@ -3193,25 +3213,31 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
         onLoadedMetadata={(e) => {
           if (nextVideoClip) {
             try {
-              e.currentTarget.currentTime = Math.max(0, nextVideoClip.sourceIn || 0);
+              e.currentTarget.currentTime = Math.max(0.001, nextVideoClip.sourceIn || 0);
             } catch {
               // Ignore seek error
             }
           }
+          setVideoFrameReadyTick((t) => t + 1);
         }}
+        onLoadedData={() => setVideoFrameReadyTick((t) => t + 1)}
+        onCanPlay={() => setVideoFrameReadyTick((t) => t + 1)}
+        onSeeked={() => setVideoFrameReadyTick((t) => t + 1)}
+        onTimeUpdate={() => setVideoFrameReadyTick((t) => t + 1)}
       />
       <video
         ref={pipVideoElRef}
         data-player-pip-video="true"
         style={{
           position: 'fixed',
-          top: 0,
-          left: 0,
-          width: 16,
-          height: 16,
-          opacity: 0.001,
+          bottom: 0,
+          right: 0,
+          width: 320,
+          height: 240,
+          opacity: 0.01,
           pointerEvents: 'none',
-          zIndex: -100,
+          zIndex: -1,
+          clipPath: 'circle(0% at 0 0)',
         }}
         playsInline={true}
         preload="auto"

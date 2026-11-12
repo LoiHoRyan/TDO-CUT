@@ -122,6 +122,7 @@ export interface MobileWorkstationProps {
   onApplyTransitionToAll: (type: TransitionType, dur: number) => void;
   onOpenCropModal: () => void;
   onToggleTrackMute: (trackIdx: number) => void;
+  onCaptureCover?: () => void;
   renderPlayer: () => React.ReactNode;
 }
 
@@ -215,6 +216,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
   onApplyTransitionToAll,
   onOpenCropModal,
   onToggleTrackMute,
+  onCaptureCover,
   renderPlayer,
 }) => {
   const isEn = language === 'en';
@@ -323,6 +325,33 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     }
   }, [transitionClip]);
 
+  // Play toggle with direct hardware video unlock to satisfy browser user gesture policy
+  const handlePlayToggle = () => {
+    const vids = document.querySelectorAll<HTMLVideoElement>('video[data-player-video="true"]');
+    vids.forEach((v) => {
+      if (v.paused && !isPlaying) {
+        const p = v.play();
+        if (p !== undefined) {
+          p.catch(() => {
+            v.muted = true;
+            v.play().catch(() => {});
+          });
+        }
+      }
+    });
+    onTogglePlay();
+  };
+
+  // Compute exact timestamp from clientX on timeline
+  const getTimeFromClientX = (clientX: number): number => {
+    const el = timelineScrollRef.current;
+    if (!el) return 0;
+    const rect = el.getBoundingClientRect();
+    const xInContent = clientX - rect.left + el.scrollLeft;
+    const targetSec = Math.max(0, Math.min(totalTimelineDuration, xInContent / pxPerSec));
+    return Number(targetSec.toFixed(2));
+  };
+
   // Handle Touch Scrubbing & Tap to Seek & 2-finger Pinch-to-zoom on Timeline
   const handleTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
     if ('touches' in e && e.touches.length === 2) {
@@ -336,7 +365,6 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       return;
     }
     if ('touches' in e && e.touches.length === 1 && wasPinchingTimeline.current) {
-      // Ignore intermediate single finger while multi-touch pinch is completing
       return;
     }
     if (isPlaying) {
@@ -355,20 +383,22 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       const t1 = e.touches[1];
       const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
       const ratio = dist / Math.max(10, timelinePinchStartDist.current);
-      const nextPx = Math.round(Math.max(8, Math.min(220, timelinePinchStartPx.current * ratio)));
+      const nextPx = Math.round(Math.max(12, Math.min(220, timelinePinchStartPx.current * ratio)));
       setPxPerSec(nextPx);
       return;
     }
     if (!isDraggingTimeline.current || wasPinchingTimeline.current) return;
     const clientX = 'touches' in e && e.touches[0] ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
     const deltaX = clientX - dragStartX.current;
-    if (Math.abs(deltaX) > 4) {
+    if (Math.abs(deltaX) > 3) {
       hasDragged.current = true;
     }
-    // Moving finger to right pulls past footage -> playhead decreases
-    const deltaSec = deltaX / pxPerSec;
-    const newSec = Math.max(0, Math.min(totalTimelineDuration, dragStartPlayhead.current - deltaSec));
-    onPlayheadChange(Number(newSec.toFixed(2)));
+    if (hasDragged.current) {
+      // Horizontal scrubbing: moving left pulls later footage forward, moving right pulls earlier footage
+      const deltaSec = deltaX / pxPerSec;
+      const newSec = Math.max(0, Math.min(totalTimelineDuration, dragStartPlayhead.current - deltaSec));
+      onPlayheadChange(Number(newSec.toFixed(2)));
+    }
   };
 
   const handleTouchEnd = (e: React.TouchEvent | React.MouseEvent) => {
@@ -383,7 +413,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
         hasDragged.current = false;
         return;
       }
-      if (!hasDragged.current && timelineScrollRef.current) {
+      if (!hasDragged.current) {
         const clientX =
           'changedTouches' in e && e.changedTouches && e.changedTouches[0]
             ? e.changedTouches[0].clientX
@@ -392,18 +422,28 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
             : (e as React.MouseEvent).clientX;
 
         if (typeof clientX === 'number' && !Number.isNaN(clientX)) {
-          const rect = timelineScrollRef.current.getBoundingClientRect();
-          const centerX = rect.left + rect.width / 2;
-          const deltaX = clientX - centerX;
-          const deltaSec = deltaX / pxPerSec;
-          const targetSec = Math.max(0, Math.min(totalTimelineDuration, playheadSec + deltaSec));
-          onPlayheadChange(Number(targetSec.toFixed(2)));
+          const targetSec = getTimeFromClientX(clientX);
+          onPlayheadChange(targetSec);
         }
       }
       isDraggingTimeline.current = false;
       hasDragged.current = false;
     }
   };
+
+  // Auto-scroll timeline to keep playhead in view during playback or scrubbing
+  useEffect(() => {
+    if (!timelineScrollRef.current) return;
+    const el = timelineScrollRef.current;
+    const playheadPx = playheadSec * pxPerSec;
+    const viewLeft = el.scrollLeft;
+    const viewRight = el.scrollLeft + el.clientWidth;
+    if (playheadPx > viewRight - 40) {
+      el.scrollLeft = Math.max(0, playheadPx - el.clientWidth + 60);
+    } else if (playheadPx < viewLeft + 20) {
+      el.scrollLeft = Math.max(0, playheadPx - 20);
+    }
+  }, [playheadSec, pxPerSec]);
 
   // Click on a Transition Seam button '|' between clip i and clip i+1
   const handleOpenTransitionSeam = (clipId: string, seamTime: number) => {
@@ -477,10 +517,11 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
             <button
               type="button"
               onClick={() => setIsFullCanvasMode(false)}
-              className="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md text-white border border-white/20 active:scale-95 shadow-lg text-xs font-semibold cursor-pointer"
+              title="Thu nhỏ về bàn dựng"
+              aria-label="Thu nhỏ về bàn dựng"
+              className="pointer-events-auto flex items-center justify-center w-8 h-8 rounded-full bg-black/60 backdrop-blur-md text-white border border-white/20 active:scale-95 shadow-lg cursor-pointer hover:bg-black/80"
             >
-              <Minimize2 className="w-3.5 h-3.5 text-[#00E5CC]" />
-              <span>Thu nhỏ</span>
+              <Minimize2 className="w-4 h-4 text-[#00E5CC]" />
             </button>
 
             <div className="flex items-center gap-2">
@@ -509,7 +550,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
               </button>
               <button
                 type="button"
-                onClick={onTogglePlay}
+                onClick={handlePlayToggle}
                 aria-label={isPlaying ? 'Tạm dừng' : 'Phát'}
                 className="w-9 h-9 rounded-full bg-[#00E5CC] text-[#071013] flex items-center justify-center active:scale-90 shadow-md transition-transform cursor-pointer"
               >
@@ -639,7 +680,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       {/* 2. REAL-TIME PLAYER CANVAS AREA (Edge-to-edge, full screen mobile canvas) */}
       <div
         className="flex-1 relative flex items-center justify-center min-h-0 overflow-hidden bg-black"
-        onClick={videoClips.length > 0 ? onTogglePlay : undefined}
+        onClick={videoClips.length > 0 ? handlePlayToggle : undefined}
       >
         <div className="w-full h-full flex items-center justify-center p-0">
           {videoClips.length === 0 ? (
@@ -668,20 +709,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
             </div>
           ) : (
             <div className="relative w-full h-full flex items-center justify-center">
-              {renderPlayer()}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsFullCanvasMode(true);
-                }}
-                title="Toàn màn hình canvas"
-                aria-label="Toàn màn hình canvas"
-                className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1 px-2 py-1 rounded-full bg-black/60 backdrop-blur-md text-white border border-white/20 active:scale-90 shadow-md cursor-pointer hover:bg-black/80"
-              >
-                <Maximize2 className="w-3 h-3 text-[#00E5CC]" />
-                <span className="text-[9px] font-semibold text-[#00E5CC]">Toàn canvas</span>
-              </button>
+              {!isFullCanvasMode && renderPlayer()}
             </div>
           )}
         </div>
@@ -693,22 +721,21 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
           isLight ? 'bg-white border-[#E2E8F0]' : 'bg-[#14151B] border-[#22242D]'
         }`}
       >
-        {/* Left: Fullscreen preview button (toggles full canvas view without timeline) */}
+        {/* Left: Fullscreen preview button (icon-only, toggles full canvas view without timeline) */}
         <button
           type="button"
           onClick={() => setIsFullCanvasMode(true)}
-          aria-label="Xem toàn màn hình canvas không có dòng thời gian"
+          aria-label="Toàn màn hình canvas"
           title="Toàn màn hình canvas"
-          className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 active:scale-95 border border-white/10 text-xs text-white/90 cursor-pointer transition-all"
+          className="w-8 h-8 rounded-full flex items-center justify-center bg-white/5 hover:bg-white/10 active:scale-90 border border-white/10 text-white cursor-pointer transition-all"
         >
-          <Maximize2 className="w-3.5 h-3.5 text-[#00E5CC]" />
-          <span className="text-[10px] font-semibold text-[#00E5CC]">Toàn canvas</span>
+          <Maximize2 className="w-4 h-4 text-[#00E5CC]" />
         </button>
 
         {/* Center: Large Electric Cyan Play / Pause Circle Button */}
         <button
           type="button"
-          onClick={onTogglePlay}
+          onClick={handlePlayToggle}
           aria-label={isPlaying ? 'Tạm dừng video' : 'Phát video'}
           className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer shadow-md active:scale-90 transition-transform bg-[#00E5CC] text-[#071013] hover:bg-[#00F5DC]"
         >
@@ -754,62 +781,71 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       >
         {/* Horizontal Timeline Container */}
         <div className="flex-1 flex min-h-0 relative">
-          {/* Left Column: Timecode header & Tắt tiếng & Ảnh bìa Buttons (CapCut Mobile style) */}
+          {/* Left Column: Timecode header & Ảnh bìa & Âm thanh Buttons (Vertically aligned with tracks) */}
           <div
-            className={`w-14 shrink-0 flex flex-col items-center justify-between py-1 border-r z-20 ${
+            className={`w-14 shrink-0 flex flex-col py-1 border-r z-20 space-y-1.5 ${
               isLight ? 'bg-white border-[#E2E8F0]' : 'bg-[#14151C] border-[#22242E]'
             }`}
           >
-            {/* Quick-jump to 00:00:00:00 timecode */}
-            <button
-              type="button"
-              onClick={() => onPlayheadChange(0)}
-              title="Nhấn để về đầu 00:00"
-              className="font-mono text-[7px] leading-tight text-center text-[#00E5CC] font-bold px-0.5 py-0.5 rounded active:scale-95 cursor-pointer"
-            >
-              <div>{formatTimecode(playheadSec).slice(3, 8)}</div>
-              <div className="text-[6.5px] text-[#64748B] font-normal">{formatTimecode(totalTimelineDuration).slice(3, 8)}</div>
-            </button>
-
-            {/* Tắt / Bật tiếng video chính */}
-            <button
-              type="button"
-              onClick={() => onToggleTrackMute(0)}
-              title={trackMuted[0] ? 'Bật tiếng video' : 'Tắt tiếng video'}
-              className="flex flex-col items-center justify-center p-0.5 cursor-pointer active:scale-95 transition-transform"
-            >
-              <div
-                className={`w-7 h-7 rounded-lg border flex items-center justify-center shadow-xs transition-colors ${
-                  trackMuted[0]
-                    ? 'border-rose-500/50 bg-rose-500/15 text-rose-400'
-                    : 'border-white/10 bg-black/40 text-[#94A3B8] hover:text-[#00E5CC]'
-                }`}
+            {/* Quick-jump to 00:00:00:00 timecode (Ruler height h-4) */}
+            <div className="h-4 flex items-center justify-center shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  onPlayheadChange(0);
+                  if (timelineScrollRef.current) timelineScrollRef.current.scrollLeft = 0;
+                }}
+                title="Nhấn để về đầu 00:00"
+                className="font-mono text-[7px] leading-tight text-center text-[#00E5CC] font-bold px-0.5 py-0.5 rounded active:scale-95 cursor-pointer"
               >
-                {trackMuted[0] ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-              </div>
-              <span className="text-[7.5px] leading-tight text-center text-[#94A3B8] mt-0.5 font-medium">
-                {trackMuted[0] ? 'Tắt tiếng' : 'Âm thanh'}
-              </span>
-            </button>
+                <div>{formatTimecode(playheadSec).slice(3, 8)}</div>
+                <div className="text-[6.5px] text-[#64748B] font-normal">{formatTimecode(totalTimelineDuration).slice(3, 8)}</div>
+              </button>
+            </div>
 
-            {/* Đặt ảnh bìa clip */}
-            <button
-              type="button"
-              onClick={() => onExitToHome()}
-              title="Đặt ảnh bìa clip"
-              className="flex flex-col items-center justify-center p-0.5 cursor-pointer active:scale-95 transition-transform"
-            >
-              <div className="w-7 h-7 rounded-lg border border-[#00E5CC]/70 overflow-hidden flex items-center justify-center bg-black/40 shadow-xs">
-                {coverDataUrl ? (
-                  <img src={coverDataUrl} alt="Cover" className="w-full h-full object-cover" />
-                ) : (
-                  <ImageIcon className="w-3.5 h-3.5 text-[#00E5CC]" />
-                )}
-              </div>
-              <span className="text-[7.5px] leading-tight text-center text-[#94A3B8] mt-0.5 font-medium">
-                Ảnh bìa
-              </span>
-            </button>
+            {/* Đặt ảnh bìa clip (Track 0 height h-12, aligned with video track) */}
+            <div className="h-12 flex items-center justify-center shrink-0">
+              <button
+                type="button"
+                onClick={() => onCaptureCover?.()}
+                title="Chụp khung hình hiện tại làm Ảnh bìa dự án"
+                className="flex flex-col items-center justify-center p-0.5 cursor-pointer active:scale-95 transition-transform"
+              >
+                <div className="w-7 h-7 rounded-lg border border-[#00E5CC]/70 overflow-hidden flex items-center justify-center bg-black/40 shadow-xs">
+                  {coverDataUrl ? (
+                    <img src={coverDataUrl} alt="Cover" className="w-full h-full object-cover" />
+                  ) : (
+                    <ImageIcon className="w-3.5 h-3.5 text-[#00E5CC]" />
+                  )}
+                </div>
+                <span className="text-[7.5px] leading-tight text-center text-[#94A3B8] mt-0.5 font-medium">
+                  Ảnh bìa
+                </span>
+              </button>
+            </div>
+
+            {/* Tắt / Bật tiếng video chính & Âm thanh (Track 1 height h-10, aligned with audio track) */}
+            <div className="h-10 flex items-center justify-center shrink-0">
+              <button
+                type="button"
+                onClick={() => onToggleTrackMute(0)}
+                title={trackMuted[0] ? 'Bật tiếng video' : 'Tắt tiếng video'}
+                className="flex flex-col items-center justify-center p-0.5 cursor-pointer active:scale-95 transition-transform"
+              >
+                <div
+                  className={`w-7 h-7 rounded-lg border flex items-center justify-center shadow-xs transition-colors ${
+                    trackMuted[0]
+                      ? 'border-rose-500/50 bg-rose-500/15 text-rose-400'
+                      : 'border-white/10 bg-black/40 text-[#94A3B8] hover:text-[#00E5CC]'
+                  }`}
+                >
+                  {trackMuted[0] ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5 text-[#00E5CC]" />}
+                </div>
+                <span className="text-[7.5px] leading-tight text-center text-[#94A3B8] mt-0.5 font-medium">
+                  {trackMuted[0] ? 'Tắt tiếng' : 'Âm thanh'}
+                </span>
+              </button>
+            </div>
           </div>
 
           {/* Touch-Scrollable Horizontal Tracks Strip */}
@@ -821,42 +857,46 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
             onMouseDown={handleTouchStart}
             onMouseMove={handleTouchMove}
             onMouseUp={handleTouchEnd}
-            className="flex-1 overflow-x-hidden relative cursor-ew-resize py-1 flex flex-col justify-between"
+            className="flex-1 overflow-x-auto scrollbar-none relative py-1 flex flex-col justify-start"
+            style={{ WebkitOverflowScrolling: 'touch' }}
           >
-            {/* Fixed Center White Playhead Vertical Cursor (Accurately aligned at 50% of the track container) */}
-            <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex flex-col items-center">
-              <div className="w-2.5 h-2.5 bg-white rotate-45 -mt-0.5 shadow-md border border-black/20" />
-              <div className="w-[2px] flex-1 bg-white shadow-[0_0_8px_rgba(255,255,255,0.85)]" />
-            </div>
-
-            {/* Inner Timeline Tracks Content translated based on stationary center playhead */}
+            {/* Inner Timeline Tracks Content starting right next to the left header buttons */}
             <div
               style={{
-                transform: `translateX(${
-                  containerWidth > 0
-                    ? containerWidth / 2 - playheadSec * pxPerSec
-                    : 160 - playheadSec * pxPerSec
-                }px)`,
-                width: `${Math.max((totalTimelineDuration + 20) * pxPerSec + (containerWidth || 360), 800)}px`,
+                width: `${Math.max((totalTimelineDuration + 8) * pxPerSec + 120, 600)}px`,
+                minWidth: '100%',
               }}
-              className="relative space-y-1.5 select-none"
+              className="relative space-y-1.5 select-none pl-0.5 pr-16"
             >
-              {/* TIMELINE RULER STRIP (CapCut mobile ticks and timecode markers with visible-range virtualization) */}
-              <div className="h-4 relative border-b border-white/10 select-none pointer-events-none">
+              {/* White Playhead Vertical Line Indicator */}
+              <div
+                style={{
+                  left: `${playheadSec * pxPerSec}px`,
+                }}
+                className="absolute inset-y-0 -translate-x-1/2 z-30 pointer-events-none flex flex-col items-center"
+              >
+                <div className="w-2.5 h-2.5 bg-white rotate-45 -mt-0.5 shadow-md border border-black/20" />
+                <div className="w-[2px] flex-1 bg-white shadow-[0_0_8px_rgba(255,255,255,0.85)]" />
+              </div>
+
+              {/* TIMELINE RULER STRIP */}
+              <div
+                onClick={(e) => {
+                  const targetSec = getTimeFromClientX(e.clientX);
+                  onPlayheadChange(targetSec);
+                }}
+                className="h-4 relative border-b border-white/10 select-none cursor-pointer"
+              >
                 {(() => {
-                  const halfSec = Math.ceil((containerWidth > 0 ? containerWidth / 2 : 180) / Math.max(1, pxPerSec)) + 4;
-                  const minSec = Math.max(0, Math.floor(playheadSec - halfSec));
-                  const maxSec = Math.min(Math.ceil(totalTimelineDuration) + 15, Math.ceil(playheadSec + halfSec));
-                  const count = Math.max(0, maxSec - minSec + 1);
-                  return Array.from({ length: count }).map((_, i) => {
-                    const sec = minSec + i;
+                  const maxSec = Math.ceil(totalTimelineDuration) + 12;
+                  return Array.from({ length: maxSec + 1 }).map((_, sec) => {
                     const leftPos = sec * pxPerSec;
                     const isMajor = pxPerSec >= 50 ? true : pxPerSec >= 24 ? sec % 2 === 0 : sec % 5 === 0;
                     return (
                       <div
                         key={sec}
                         style={{ left: `${leftPos}px` }}
-                        className="absolute top-0 bottom-0 flex flex-col items-center"
+                        className="absolute top-0 bottom-0 flex flex-col items-center pointer-events-none"
                       >
                         <div className={`w-[1px] ${isMajor ? 'h-2 bg-white/40' : 'h-1 bg-white/20'}`} />
                         {isMajor && (
@@ -871,7 +911,13 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
               </div>
 
               {/* TRACK 0: MAIN VIDEO CLIP STRIP */}
-              <div className="h-12 relative flex items-center">
+              <div
+                onClick={(e) => {
+                  const targetSec = getTimeFromClientX(e.clientX);
+                  onPlayheadChange(targetSec);
+                }}
+                className="h-12 relative flex items-center"
+              >
                 {videoClips.length === 0 ? (
                   <div
                     onClick={(e) => {
@@ -909,6 +955,8 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                             onClick={(e) => {
                               e.stopPropagation();
                               onSelectClip(clip.id);
+                              const targetSec = getTimeFromClientX(e.clientX);
+                              onPlayheadChange(targetSec);
                             }}
                             className={`absolute h-11 rounded-lg overflow-hidden border flex items-center px-1.5 transition-all cursor-pointer shadow-xs ${
                               isSelected
@@ -1007,7 +1055,13 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
               </div>
 
               {/* TRACK 1: AUDIO WAVEFORM STRIP */}
-              <div className="h-6 relative flex items-center">
+              <div
+                onClick={(e) => {
+                  const targetSec = getTimeFromClientX(e.clientX);
+                  onPlayheadChange(targetSec);
+                }}
+                className="h-10 relative flex items-center"
+              >
                 {audioClips.length > 0 ? (
                   audioClips.map((clip) => {
                     const clipLeft = clip.startTime * pxPerSec;
@@ -1022,10 +1076,12 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                         onClick={(e) => {
                           e.stopPropagation();
                           onSelectClip(clip.id);
+                          const targetSec = getTimeFromClientX(e.clientX);
+                          onPlayheadChange(targetSec);
                         }}
-                        className="absolute h-5 rounded bg-[#0284C7]/30 border border-[#0284C7] px-1 flex items-center gap-1 text-[8.5px] font-semibold text-[#38BDF8] truncate cursor-pointer"
+                        className="absolute h-7 rounded-md bg-[#0284C7]/30 border border-[#0284C7] px-2 flex items-center gap-1.5 text-[9px] font-semibold text-[#38BDF8] truncate cursor-pointer shadow-xs"
                       >
-                        <Music className="w-2.5 h-2.5 shrink-0" />
+                        <Music className="w-3 h-3 shrink-0" />
                         <span className="truncate">{clip.name}</span>
                       </div>
                     );
@@ -1037,11 +1093,14 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                       e.stopPropagation();
                       setActiveDrawer('audio');
                     }}
-                    style={{ left: `${playheadSec * pxPerSec}px` }}
-                    className="absolute h-5 px-2 rounded-full border border-dashed border-[#38BDF8] text-[#38BDF8] bg-[#0284C7]/10 flex items-center gap-1 text-[9px] font-bold cursor-pointer"
+                    style={{
+                      left: '0px',
+                      width: `${Math.max(160, totalTimelineDuration * pxPerSec)}px`,
+                    }}
+                    className="absolute h-7 px-3 rounded-md border border-dashed border-[#38BDF8]/60 text-[#38BDF8] bg-[#0284C7]/10 hover:bg-[#0284C7]/20 flex items-center gap-1.5 text-[9.5px] font-bold cursor-pointer transition-colors shadow-xs"
                   >
-                    <Plus className="w-2.5 h-2.5" />
-                    <span>+ Thêm âm thanh</span>
+                    <Plus className="w-3.5 h-3.5 text-[#38BDF8] shrink-0" />
+                    <span>Thêm âm thanh</span>
                   </button>
                 )}
               </div>
@@ -1063,6 +1122,8 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                         onClick={(e) => {
                           e.stopPropagation();
                           onSelectClip(clip.id);
+                          const targetSec = getTimeFromClientX(e.clientX);
+                          onPlayheadChange(targetSec);
                         }}
                         className={`absolute h-5 rounded-full border px-2 flex items-center gap-1 text-[8.5px] font-bold truncate cursor-pointer transition-all ${
                           isSelected
@@ -1095,6 +1156,8 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                         onClick={(e) => {
                           e.stopPropagation();
                           onSelectClip(clip.id);
+                          const targetSec = getTimeFromClientX(e.clientX);
+                          onPlayheadChange(targetSec);
                         }}
                         className={`absolute h-5 rounded-full border px-2 flex items-center gap-1 text-[8.5px] font-bold truncate cursor-pointer transition-all ${
                           isSelected

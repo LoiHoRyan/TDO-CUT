@@ -5498,8 +5498,10 @@ export default function App() {
               [trackIdx]: !prev[trackIdx],
             }));
           }}
+          onCaptureCover={handleCaptureCover}
           renderPlayer={() => (
             <VideoPreviewCanvas
+              canvasRefExternal={previewCanvasRef}
               isMobile={true}
               hideTopBar={true}
               hideBottomControls={true}

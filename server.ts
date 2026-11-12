@@ -1,6 +1,7 @@
 import express from 'express';
+import http from 'node:http';
 import { createServer as createViteServer } from 'vite';
-import { spawn } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -262,9 +263,130 @@ function parseFfmpegTimeSec(stderrChunk: string): number | null {
   return Number.isFinite(total) && total >= 0 ? total : null;
 }
 
+function tryFreePort(port: number): boolean {
+  let freed = false;
+  try {
+    if (process.platform === 'win32') {
+      const output = execSync(`netstat -ano | findstr :${port}`, {
+        stdio: ['pipe', 'pipe', 'ignore'],
+      }).toString();
+      const lines = output.trim().split('\n');
+      for (const line of lines) {
+        const parts = line.trim().split(/\s+/);
+        const localAddr = parts[1] || '';
+        const state = parts[3];
+        const pid = parts[parts.length - 1];
+        const portRegex = new RegExp(`:${port}$`);
+        if (
+          portRegex.test(localAddr) &&
+          state === 'LISTENING' &&
+          pid &&
+          pid !== String(process.pid) &&
+          pid !== '0'
+        ) {
+          console.log(`[Server] Freeing port ${port} by terminating stale process PID ${pid}...`);
+          try {
+            execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore' });
+            freed = true;
+          } catch {
+            // Process may already have terminated
+          }
+        }
+      }
+    } else {
+      try {
+        const pids = execSync(`lsof -ti:${port}`, { stdio: ['pipe', 'pipe', 'ignore'] })
+          .toString()
+          .trim();
+        if (pids) {
+          for (const pid of pids.split('\n')) {
+            if (pid && pid !== String(process.pid)) {
+              execSync(`kill -9 ${pid}`, { stdio: 'ignore' });
+              freed = true;
+            }
+          }
+        }
+      } catch {
+        // Port not in use
+      }
+    }
+  } catch {
+    // Port not in use or netstat returned non-zero
+  }
+  if (freed) {
+    try {
+      if (process.platform === 'win32') {
+        execSync('ping 127.0.0.1 -n 1 -w 250 >nul', { stdio: 'ignore' });
+      } else {
+        execSync('sleep 0.25', { stdio: 'ignore' });
+      }
+    } catch {
+      // Ignore sleep error
+    }
+  }
+  return freed;
+}
+
+function startListening(
+  server: http.Server,
+  initialPort: number,
+  host = '0.0.0.0',
+  maxRetries = 10
+): Promise<number> {
+  return new Promise((resolve, reject) => {
+    let port = initialPort;
+    let retries = 0;
+    let retriedCurrentPort = false;
+
+    const onListening = () => {
+      server.removeListener('error', onError);
+      resolve(port);
+    };
+
+    const onError = (err: any) => {
+      if (err.code === 'EADDRINUSE') {
+        console.warn(`[Server] Port ${port} is already in use.`);
+        if (!retriedCurrentPort) {
+          retriedCurrentPort = true;
+          console.log(`[Server] Attempting to free port ${port} and retry...`);
+          const wasKilled = tryFreePort(port);
+          if (wasKilled) {
+            setTimeout(() => {
+              server.listen(port, host);
+            }, 250);
+            return;
+          }
+        }
+        if (retries < maxRetries) {
+          retries++;
+          port++;
+          retriedCurrentPort = false;
+          console.log(`[Server] Falling back to port ${port}...`);
+          tryFreePort(port);
+          server.listen(port, host);
+        } else {
+          server.removeListener('listening', onListening);
+          reject(err);
+        }
+      } else {
+        server.removeListener('listening', onListening);
+        reject(err);
+      }
+    };
+
+    server.on('error', onError);
+    server.on('listening', onListening);
+
+    tryFreePort(port);
+    tryFreePort(24678);
+    server.listen(port, host);
+  });
+}
+
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
+  const httpServer = http.createServer(app);
 
   // JSON Body Parser for PostgreSQL Project payloads & metadata
   app.use(express.json({ limit: '50mb' }));
@@ -1199,7 +1321,12 @@ async function startServer() {
 
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: {
+          server: httpServer,
+        },
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -1211,9 +1338,8 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`TDO CUT Server running on http://localhost:${PORT}`);
-  });
+  const actualPort = await startListening(httpServer, PORT, '0.0.0.0');
+  console.log(`TDO CUT Server running on http://localhost:${actualPort}`);
 }
 
 startServer();

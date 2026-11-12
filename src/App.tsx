@@ -984,7 +984,7 @@ export default function App() {
   // Zone 3: Right Context-Aware Inspector States
   const [inspectorMode, setInspectorMode] = useState<'clip' | 'project_details'>('clip');
   const [inspectorTab, setInspectorTab] = useState<
-    'video' | 'audio' | 'speed' | 'animation' | 'adjust' | 'antidetect'
+    'video' | 'audio' | 'speed' | 'animation' | 'adjust'
   >('video');
   const [textSubTab, setTextSubTab] = useState<'basic' | 'bubble' | 'effects' | 'tts'>('basic');
   const [videoSubTab, setVideoSubTab] = useState<'basic' | 'cutout' | 'mask' | 'enhance'>('basic');
@@ -2271,11 +2271,6 @@ export default function App() {
           if (next) {
             commitClips((prev) => packTrackClipsContiguously(prev, 0));
           }
-          showToast(
-            next
-              ? 'Đã BẬT Nam châm trục chính (Phím P) — Tự động khít các clip!'
-              : 'Đã TẮT Nam châm trục chính (Phím P) — Tự do tạo khoảng trống!'
-          );
           return next;
         });
       } else if (!e.ctrlKey && !e.metaKey && !e.altKey && e.code === 'KeyN') {
@@ -3484,7 +3479,7 @@ export default function App() {
     showToast(`Đang đọc giọng nói AI (Text-to-Speech): "${textToSpeak.slice(0, 28)}..."`);
   };
 
-  // Resize clip left/right edge by dragging handles
+  // Resize clip left/right edge by dragging handles (Strictly capped by original source media duration)
   const handleResizeClipEdge = (
     clipId: string,
     edge: 'left' | 'right',
@@ -3493,17 +3488,29 @@ export default function App() {
     commitClips((prev) => {
       const updated = prev.map((c) => {
         if (c.id !== clipId) return c;
+        const speed = c.speed && c.speed > 0 ? c.speed : 1.0;
+        const effectiveSourceDur =
+          c.sourceDuration && c.sourceDuration > 0
+            ? c.sourceDuration
+            : (c.trackIndex === 0 ? c.duration : Infinity);
+        const maxTimelineDur = Math.max(0.4, (effectiveSourceDur - (c.sourceIn || 0)) / speed);
+
         if (edge === 'left') {
           const maxDelta = c.duration - 0.4;
-          const clamped = Math.max(-c.startTime, Math.min(maxDelta, deltaSec));
+          const minLeftDelta =
+            c.sourceDuration && c.sourceDuration > 0
+              ? -(c.sourceIn || 0) / speed
+              : -Infinity;
+          const clamped = Math.max(-c.startTime, minLeftDelta, Math.min(maxDelta, deltaSec));
           return {
             ...c,
             startTime: Number((c.startTime + clamped).toFixed(2)),
-            sourceIn: Number(Math.max(0, c.sourceIn + clamped * c.speed).toFixed(2)),
+            sourceIn: Number(Math.max(0, (c.sourceIn || 0) + clamped * speed).toFixed(2)),
             duration: Number((c.duration - clamped).toFixed(2)),
           };
         } else {
-          const newDur = Math.max(0.4, Number((c.duration + deltaSec).toFixed(2)));
+          const desiredDur = Number((c.duration + deltaSec).toFixed(2));
+          const newDur = Math.max(0.4, Math.min(maxTimelineDur, desiredDur));
           return { ...c, duration: newDur };
         }
       });
@@ -4703,8 +4710,8 @@ export default function App() {
         className="hidden"
       />
 
-      {/* TOP TDO CUT APPLICATION TITLE BAR (Desktop or Home Hub) */}
-      {(!isMobile || activeView !== 'workstation') && (
+      {/* TOP TDO CUT APPLICATION TITLE BAR (Desktop Workstation only, hidden on Home page) */}
+      {activeView !== 'home' && !isMobile && (
         <header className={`flex items-center justify-between px-3 h-11 border-b shrink-0 z-30 select-none ${
           themeMode === 'light'
             ? 'bg-[#FFFFFF] border-[#E2E8F0] text-[#0F172A]'
@@ -4950,23 +4957,14 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => {
-                    setActiveView(activeView === 'home' ? 'workstation' : 'home');
+                    setActiveView('home');
                     setIsTopMenuOpen(false);
                   }}
                   className="w-full px-3 py-1.5 text-left text-[#00E5CC] hover:bg-[#00E5CC]/15 font-semibold cursor-pointer"
                 >
                   <span className="flex items-center gap-1.5">
-                    {activeView === 'home' ? (
-                      <>
-                        <Film className="w-3.5 h-3.5 text-[#00E5CC]" />
-                        <span>{language === 'en' ? 'Open Timeline Workstation' : 'Mở Bàn dựng Timeline (Workstation)'}</span>
-                      </>
-                    ) : (
-                      <>
-                        <Home className="w-3.5 h-3.5 text-[#00E5CC]" />
-                        <span>{language === 'en' ? 'Back to Home Hub' : 'Về màn hình Trang chủ (Back to Home)'}</span>
-                      </>
-                    )}
+                    <Home className="w-3.5 h-3.5 text-[#00E5CC]" />
+                    <span>{language === 'en' ? 'Back to Home Hub' : 'Về màn hình Trang chủ (Back to Home)'}</span>
                   </span>
                 </button>
               </div>
@@ -4975,10 +4973,9 @@ export default function App() {
           </div>
         </div>
 
-        {/* Center Inline Editable Project Title (Hidden on Home Screen Launcher) */}
+        {/* Center Inline Editable Project Title */}
         <div className="flex items-center gap-2">
-          {activeView !== 'home' &&
-            (isEditingProjectName ? (
+          {isEditingProjectName ? (
               <div className="flex items-center gap-1">
                 <input
                   type="text"
@@ -5024,7 +5021,7 @@ export default function App() {
                   {projectName || (language === 'en' ? 'Enter project name' : 'Nhập tên dự án')}
                 </span>
               </button>
-            ))}
+            )}
 
           {statusToast && (
             <span className="px-2 py-0.5 text-[10px] font-medium bg-[#00E5CC]/15 text-[#00E5CC] border border-[#00E5CC]/30 rounded animate-pulse">
@@ -5076,32 +5073,30 @@ export default function App() {
             )}
           </button>
 
-          {activeView !== 'home' && (
-            <button
-              type="button"
-              onClick={() => {
-                setActiveView('workstation');
-                setInspectorMode((m) => (m === 'clip' ? 'project_details' : 'clip'));
-              }}
-              title={
-                language === 'en'
-                  ? 'Toggle Layout / Project Info'
-                  : 'Chuyển đổi Bố cục / Chi tiết dự án'
-              }
-              aria-label="Chuyển đổi bố cục"
-              className={`p-1.5 rounded border transition-all cursor-pointer ${
-                inspectorMode === 'project_details' && activeView === 'workstation'
-                  ? themeMode === 'light'
-                    ? 'bg-[#CCFBF1] text-[#0F766E] border-[#00E5CC]'
-                    : 'bg-[#242630] text-[#00E5CC] border-[#00E5CC]/50'
-                  : themeMode === 'light'
-                  ? 'bg-[#F1F5F9] text-[#475569] border-[#CBD5E1] hover:text-[#0F172A] hover:bg-[#E2E8F0]'
-                  : 'bg-[#1A1B22] text-[#D1D5DB] border-[#2D303C] hover:text-white hover:border-[#383C48]'
-              }`}
-            >
-              <Layout className="w-3.5 h-3.5" />
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveView('workstation');
+              setInspectorMode((m) => (m === 'clip' ? 'project_details' : 'clip'));
+            }}
+            title={
+              language === 'en'
+                ? 'Toggle Layout / Project Info'
+                : 'Chuyển đổi Bố cục / Chi tiết dự án'
+            }
+            aria-label="Chuyển đổi bố cục"
+            className={`p-1.5 rounded border transition-all cursor-pointer ${
+              inspectorMode === 'project_details' && activeView === 'workstation'
+                ? themeMode === 'light'
+                  ? 'bg-[#CCFBF1] text-[#0F766E] border-[#00E5CC]'
+                  : 'bg-[#242630] text-[#00E5CC] border-[#00E5CC]/50'
+                : themeMode === 'light'
+                ? 'bg-[#F1F5F9] text-[#475569] border-[#CBD5E1] hover:text-[#0F172A] hover:bg-[#E2E8F0]'
+                : 'bg-[#1A1B22] text-[#D1D5DB] border-[#2D303C] hover:text-white hover:border-[#383C48]'
+            }`}
+          >
+            <Layout className="w-3.5 h-3.5" />
+          </button>
 
           <button
             type="button"
@@ -5131,32 +5126,28 @@ export default function App() {
             <Settings className="w-3.5 h-3.5" />
           </button>
 
-          {activeView !== 'home' && (
-            <>
-              <button
-                type="button"
-                onClick={handleExportTdoCutProject}
-                title={uiText.saveProjectJson}
-                className={`hidden md:flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded border transition-all cursor-pointer ${
-                  themeMode === 'light'
-                    ? 'bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#0F172A] border-[#CBD5E1]'
-                    : 'bg-[#1E2028] hover:bg-[#262832] text-[#E4E4E7] border-[#2E313C]'
-                }`}
-              >
-                <Download className="w-3.5 h-3.5 text-[#00E5CC]" />
-                <span>{language === 'en' ? 'Save Project' : 'Lưu Dự án'}</span>
-              </button>
+          <button
+            type="button"
+            onClick={handleExportTdoCutProject}
+            title={uiText.saveProjectJson}
+            className={`hidden md:flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded border transition-all cursor-pointer ${
+              themeMode === 'light'
+                ? 'bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#0F172A] border-[#CBD5E1]'
+                : 'bg-[#1E2028] hover:bg-[#262832] text-[#E4E4E7] border-[#2E313C]'
+            }`}
+          >
+            <Download className="w-3.5 h-3.5 text-[#00E5CC]" />
+            <span>{language === 'en' ? 'Save Project' : 'Lưu Dự án'}</span>
+          </button>
 
-              <button
-                type="button"
-                onClick={() => setIsExportModalOpen(true)}
-                className="flex items-center gap-1.5 px-4 py-1 text-xs font-bold bg-[#00E5CC] hover:bg-[#00F5DC] active:bg-[#00D2C4] text-[#071013] rounded transition-all shadow-xs cursor-pointer"
-              >
-                <Upload className="w-3.5 h-3.5" />
-                <span>{language === 'en' ? 'Export' : 'Xuất'}</span>
-              </button>
-            </>
-          )}
+          <button
+            type="button"
+            onClick={() => setIsExportModalOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-1 text-xs font-bold bg-[#00E5CC] hover:bg-[#00F5DC] active:bg-[#00D2C4] text-[#071013] rounded transition-all shadow-xs cursor-pointer"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span>{language === 'en' ? 'Export' : 'Xuất'}</span>
+          </button>
         </div>
       </header>
       )}
@@ -5444,12 +5435,18 @@ export default function App() {
             const targetId = targetClipId || selectedClipId || (currentClip && currentClip.id) || (clips[0] && clips[0].id);
             if (!targetId) return;
             const commitKey = `clip:${targetId}:${String(key)}`;
-            commitClips((prev) =>
-              prev.map((c) => {
+            commitClips((prev) => {
+              const updated = prev.map((c) => {
                 if (c.id !== targetId) return c;
                 return { ...c, [key]: value };
-              }),
-              commitKey
+              });
+              const target = updated.find((c) => c.id === targetId);
+              if (target && target.trackIndex === 0 && (key === 'duration' || key === 'startTime')) {
+                return packTrackClipsContiguously(updated, 0);
+              }
+              return updated;
+            },
+            commitKey
             );
           }}
           onFlipHorizontal={() => {
@@ -8186,6 +8183,7 @@ export default function App() {
                 aspectRatio={aspectRatio}
                 previewQuality={previewQuality}
                 selectedClipId={selectedClipId}
+                selectedClip={currentClip}
                 activeVideoClip={activeVideoClip}
                 prevVideoClip={prevVideoClip}
                 nextVideoClip={nextVideoClip}
@@ -8826,7 +8824,7 @@ export default function App() {
                   </div>
                 </div>
               ) : (
-                /* CLIP INSPECTOR MODE (6 Main Tabs: Video | Âm thanh | Tốc độ | Hiệu ứng động | Điều chỉnh | Lách BQ) */
+                /* CLIP INSPECTOR MODE (5 Main Tabs: Video | Âm thanh | Tốc độ | Hiệu ứng động | Điều chỉnh) */
                 <>
                   <div className={`flex items-center justify-between px-1 h-8 border-b overflow-x-auto no-scrollbar shrink-0 ${
                     themeMode === 'light' ? 'bg-[#F8FAFC] border-[#E2E8F0]' : 'bg-[#141418] border-[#2B2B30]'
@@ -8838,7 +8836,6 @@ export default function App() {
                         { id: 'speed', label: 'Tốc độ' },
                         { id: 'animation', label: 'Hiệu ứng động' },
                         { id: 'adjust', label: 'Điều chỉnh' },
-                        { id: 'antidetect', label: 'Lách BQ' },
                       ] as const
                     ).map((t) => (
                       <button
@@ -9467,7 +9464,7 @@ export default function App() {
                                   }
                                   className="bg-[#222228] border border-[#30303A] rounded px-2 py-0.5 text-[11px] text-white"
                                 >
-                                  <option value="source-over">Bình thường (Normal)</option>
+                                  <option value="source-over">Bình thường (Không hòa trộn - 0%)</option>
                                   <option value="screen">Làm sáng (Screen)</option>
                                   <option value="multiply">Nhân màu (Multiply)</option>
                                   <option value="overlay">Hòa phủ (Overlay)</option>
@@ -9479,11 +9476,71 @@ export default function App() {
                                 </select>
                               </div>
 
+                              {/* Mức độ hòa trộn: Hiển thị 0% khi ở chế độ Bình thường (không hòa trộn) theo yêu cầu */}
                               <div className="flex items-center justify-between gap-1.5">
-                                <span className="text-[#A1A1AA] w-12 shrink-0">Độ mờ</span>
+                                <span className="text-[#A1A1AA] w-20 shrink-0 text-[11px]">
+                                  {currentClip.blendMode && currentClip.blendMode !== 'source-over'
+                                    ? 'Mức hòa trộn'
+                                    : 'Độ hòa trộn'}
+                                </span>
                                 <input
                                   type="range"
-                                  aria-label="Độ mờ Opacity"
+                                  aria-label="Độ hòa trộn"
+                                  min={0}
+                                  max={100}
+                                  value={
+                                    currentClip.blendMode && currentClip.blendMode !== 'source-over'
+                                      ? currentClip.opacity ?? 100
+                                      : 0
+                                  }
+                                  onChange={(e) => {
+                                    const val = Number(e.target.value);
+                                    if (val > 0 && (!currentClip.blendMode || currentClip.blendMode === 'source-over')) {
+                                      updateSelectedClipProp('blendMode', 'screen');
+                                    } else if (val === 0 && currentClip.blendMode && currentClip.blendMode !== 'source-over') {
+                                      updateSelectedClipProp('blendMode', 'source-over');
+                                    }
+                                    updateSelectedClipProp('opacity', val);
+                                  }}
+                                  className="flex-1 min-w-0 accent-[#00E5CC] h-1"
+                                />
+                                <NumericBoxWithSteppers
+                                  value={
+                                    currentClip.blendMode && currentClip.blendMode !== 'source-over'
+                                      ? currentClip.opacity ?? 100
+                                      : 0
+                                  }
+                                  min={0}
+                                  max={100}
+                                  step={1}
+                                  unit="%"
+                                  widthClass="w-16"
+                                  ariaLabel="Số Độ hòa trộn"
+                                  onChange={(val) => {
+                                    if (val > 0 && (!currentClip.blendMode || currentClip.blendMode === 'source-over')) {
+                                      updateSelectedClipProp('blendMode', 'screen');
+                                    } else if (val === 0) {
+                                      updateSelectedClipProp('blendMode', 'source-over');
+                                    }
+                                    updateSelectedClipProp('opacity', val);
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  title="Keyframe Độ hòa trộn"
+                                  onClick={() => handleToggleKeyframe('Hòa trộn')}
+                                  className="text-[#71717A] hover:text-[#00E5CC] cursor-pointer shrink-0"
+                                >
+                                  <Diamond className="w-3 h-3" />
+                                </button>
+                              </div>
+
+                              {/* Độ mờ đục (Opacity) tiêu chuẩn */}
+                              <div className="flex items-center justify-between gap-1.5">
+                                <span className="text-[#A1A1AA] w-20 shrink-0 text-[11px]">Độ mờ đục</span>
+                                <input
+                                  type="range"
+                                  aria-label="Độ mờ đục Opacity"
                                   min={0}
                                   max={100}
                                   value={currentClip.opacity ?? 100}
@@ -9499,13 +9556,13 @@ export default function App() {
                                   step={1}
                                   unit="%"
                                   widthClass="w-16"
-                                  ariaLabel="Số Độ mờ Opacity"
+                                  ariaLabel="Số Độ mờ đục Opacity"
                                   onChange={(val) => updateSelectedClipProp('opacity', val)}
                                 />
                                 <button
                                   type="button"
-                                  title="Keyframe Độ mờ (Opacity)"
-                                  onClick={() => handleToggleKeyframe('Độ mờ (Opacity)')}
+                                  title="Keyframe Độ mờ đục (Opacity)"
+                                  onClick={() => handleToggleKeyframe('Độ mờ đục (Opacity)')}
                                   className="text-[#71717A] hover:text-[#00E5CC] cursor-pointer shrink-0"
                                 >
                                   <Diamond className="w-3 h-3" />
@@ -10379,198 +10436,6 @@ export default function App() {
                         )}
                       </div>
                     )}
-
-                    {/* INSPECTOR TAB 6: MOTION TRACKING & ANTI-DETECT REUP ENGINE (Lách BQ) */}
-                    {inspectorTab === 'antidetect' && (
-                      <div className="space-y-2">
-                        {currentClip && (
-                          <label className="flex items-center justify-between p-2 bg-[#22222A] border border-[#FACC15]/40 rounded cursor-pointer">
-                            <span className="flex items-center gap-1.5 text-[#FACC15] font-medium">
-                              <Target className="w-3.5 h-3.5" />
-                              <span>Theo dõi chuyển động (Motion Tracking)</span>
-                            </span>
-                            <input
-                              type="checkbox"
-                              checked={Boolean(currentClip.motionTrackingEnabled)}
-                              onChange={(e) =>
-                                updateSelectedClipProp(
-                                  'motionTrackingEnabled',
-                                  e.target.checked
-                                )
-                              }
-                              className="accent-[#00E5CC]"
-                            />
-                          </label>
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            commitClips((prev) =>
-                              prev.map((c) =>
-                                c.trackIndex === 0 ? { ...c, flipH: !c.flipH } : c
-                              )
-                            );
-                            showToast('Đã áp dụng Lật ngang (Auto Mirror) toàn bộ Timeline!');
-                          }}
-                          className="w-full py-1.5 px-2.5 bg-[#22222A] hover:bg-[#2C2C38] text-white border border-[#343442] rounded text-left font-medium cursor-pointer"
-                        >
-                          ◧ Áp dụng Lật ngang toàn bộ Timeline (Auto Mirror)
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAspectRatio('9:16');
-                            setBlurredPadding916((v) => !v);
-                            showToast(
-                              'Đã bật khung 9:16 có nền mờ (Blurred Background Padding)!'
-                            );
-                          }}
-                          className={`w-full py-1.5 px-2.5 rounded border text-left font-medium cursor-pointer ${
-                            blurredPadding916
-                              ? 'bg-[#00E5CC]/15 border-[#00E5CC] text-[#00E5CC]'
-                              : 'bg-[#22222A] hover:bg-[#2C2C38] text-white border-[#343442]'
-                          }`}
-                        >
-                          📱 Khung 9:16 có nền mờ (Blurred Background Padding)
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            commitClips((prev) =>
-                              packTrackClipsContiguously(
-                                prev.map((c) =>
-                                  c.trackIndex === 0
-                                    ? {
-                                        ...c,
-                                        speed: 1.05,
-                                        scale: 104,
-                                        cropRatio: 1.04,
-                                        duration: Number(
-                                          Math.max(0.4, (c.duration * c.speed) / 1.05).toFixed(2)
-                                        ),
-                                      }
-                                    : c
-                                ),
-                                0
-                              )
-                            );
-                            showToast(
-                              'Đã biến đổi Tốc độ 1.05x + Phóng to 104% toàn bộ clip trên Timeline!'
-                            );
-                          }}
-                          className="w-full py-1.5 px-2.5 bg-[#22222A] hover:bg-[#2C2C38] text-white border border-[#343442] rounded text-left font-medium cursor-pointer"
-                        >
-                          ⚡ Biến đổi Tốc độ 1.05x + Phóng to 104% toàn bộ clip
-                        </button>
-
-                        <label className="flex items-center justify-between p-2 bg-[#222228] rounded cursor-pointer">
-                          <span>Đổi mã băm &amp; Metadata iPhone 16 Pro Max</span>
-                          <input
-                            type="checkbox"
-                            checked={antiDetect.spoofIphoneMeta}
-                            onChange={(e) => {
-                              pushUndoSnapshot(undefined, 'antidetect:spoof');
-                              setAntiDetect((p) => ({
-                                ...p,
-                                spoofIphoneMeta: e.target.checked,
-                              }));
-                            }}
-                            className="accent-[#00E5CC]"
-                          />
-                        </label>
-
-                        <label className="flex items-center justify-between p-2 bg-[#222228] rounded cursor-pointer">
-                          <span>Tiêm nhiễu hạt vi mô (Anti-Hash Micro-Grain)</span>
-                          <input
-                            type="checkbox"
-                            checked={antiDetect.injectMicroNoise}
-                            onChange={(e) => {
-                              pushUndoSnapshot(undefined, 'antidetect:noise');
-                              setAntiDetect((p) => ({
-                                ...p,
-                                injectMicroNoise: e.target.checked,
-                              }));
-                            }}
-                            className="accent-[#00E5CC]"
-                          />
-                        </label>
-
-                        {/* Hardware/Studio Encoder (hevc_nvenc / prores / h264_nvenc) & CRF + Preset Slow */}
-                        <div className="p-2.5 bg-[#121216] border border-[#2B2B34] rounded space-y-2 text-[11px]">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[#00E5CC] font-semibold">
-                              Cấu hình Encoder &amp; Chất lượng FFmpeg Studio
-                            </span>
-                            <span className="font-mono text-[10px] text-[#34D399]">
-                              -crf {antiDetect.crf ?? 18} -preset slow
-                            </span>
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="block text-[10px] text-[#A1A1AA]">
-                              Bộ mã hóa Video (Video Encoder):
-                            </label>
-                            <select
-                              aria-label="Cấu hình Encoder Lách BQ"
-                              value={antiDetect.gpuEncoder}
-                              onChange={(e) => {
-                                const enc = e.target.value as GpuEncoderOption;
-                                pushUndoSnapshot(undefined, 'antidetect:encoder');
-                                setAntiDetect((p) => ({
-                                  ...p,
-                                  gpuEncoder: enc,
-                                }));
-                                showToast(`Đã chọn bộ mã hóa Studio: ${enc}`);
-                              }}
-                              className="w-full px-2 py-1 bg-[#1E1E26] border border-[#343442] rounded text-[#00E5CC] font-mono text-[11px]"
-                            >
-                              <option value="hevc_nvenc">
-                                hevc_nvenc (NVIDIA HEVC H.265 — Siêu sắc nét)
-                              </option>
-                              <option value="prores">
-                                prores (Apple ProRes 422 HQ / 10-bit Studio)
-                              </option>
-                              <option value="h264_nvenc">
-                                h264_nvenc (NVIDIA NVENC H.264)
-                              </option>
-                              <option value="h264_qsv">
-                                h264_qsv (Intel QuickSync H.264)
-                              </option>
-                              <option value="h264_amf">h264_amf (AMD AMF H.264)</option>
-                              <option value="libx264">libx264 (CPU x264 Chuẩn)</option>
-                            </select>
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="block text-[10px] text-[#A1A1AA]">
-                              Chỉ số nén CRF &amp; Preset (-crf 18..20 -preset slow):
-                            </label>
-                            <select
-                              aria-label="Chỉ số CRF Lách BQ"
-                              value={antiDetect.crf ?? 18}
-                              onChange={(e) => {
-                                const crf = Number(e.target.value);
-                                pushUndoSnapshot(undefined, 'antidetect:crf');
-                                setAntiDetect((p) => ({
-                                  ...p,
-                                  crf,
-                                  preset: 'slow',
-                                }));
-                                showToast(`Đã cấu hình FFmpeg -crf ${crf} -preset slow!`);
-                              }}
-                              className="w-full px-2 py-1 bg-[#1E1E26] border border-[#343442] rounded text-white font-mono text-[11px]"
-                            >
-                              <option value={18}>-crf 18 -preset slow (Lossless Visual)</option>
-                              <option value={19}>-crf 19 -preset slow (Cinema Master)</option>
-                              <option value={20}>-crf 20 -preset slow (High Clarity)</option>
-                            </select>
-                          </div>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </>
               )}
@@ -10869,11 +10734,6 @@ export default function App() {
                   if (next) {
                     commitClips((prev) => packTrackClipsContiguously(prev, 0));
                   }
-                  showToast(
-                    next
-                      ? 'Đã BẬT Nam châm trục chính (Phím P) — Tự động khít các clip!'
-                      : 'Đã TẮT Nam châm trục chính (Phím P) — Tự do tạo khoảng trống!'
-                  );
                   return next;
                 });
               }}

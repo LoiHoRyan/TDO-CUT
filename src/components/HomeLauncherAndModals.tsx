@@ -374,26 +374,24 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
               <button
                 type="button"
                 onClick={onToggleTheme}
-                className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-normal border cursor-pointer transition-colors ${
+                title={isEn ? 'Switch Dark / Light Theme' : 'Chuyển đổi Giao diện Tối / Sáng'}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer transition-colors ${
                   themeMode === 'light'
                     ? 'bg-white hover:bg-[#F1F5F9] border-[#CBD5E1] text-[#0F172A]'
                     : 'bg-[#181A22] hover:bg-[#20232E] border-[#2B2E3C] text-[#D1D5DB] hover:text-white'
                 }`}
               >
                 {themeMode === 'light' ? (
-                  <Moon className="w-3.5 h-3.5 text-[#0284C7]" />
+                  <>
+                    <Sun className="w-3.5 h-3.5 text-amber-500" />
+                    <span>{isEn ? 'Light' : 'Sáng'}</span>
+                  </>
                 ) : (
-                  <Sun className="w-3.5 h-3.5 text-[#FBBF24]" />
+                  <>
+                    <Moon className="w-3.5 h-3.5 text-[#00E5CC]" />
+                    <span>{isEn ? 'Dark' : 'Tối'}</span>
+                  </>
                 )}
-                <span>
-                  {themeMode === 'light'
-                    ? isEn
-                      ? 'Dark'
-                      : 'Giao diện tối'
-                    : isEn
-                    ? 'Light'
-                    : 'Giao diện sáng'}
-                </span>
               </button>
             )}
             <button

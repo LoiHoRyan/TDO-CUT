@@ -92,6 +92,7 @@ interface VideoPreviewCanvasProps {
   aspectRatio: AspectRatioOption;
   previewQuality?: PreviewQualityOption;
   selectedClipId?: string | null;
+  selectedClip?: TimelineClip | null;
   activeVideoClip?: TimelineClip;
   prevVideoClip?: TimelineClip;
   nextVideoClip?: TimelineClip;
@@ -186,6 +187,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
   aspectRatio,
   previewQuality = 'full',
   selectedClipId,
+  selectedClip,
   activeVideoClip,
   prevVideoClip,
   nextVideoClip,
@@ -358,24 +360,11 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
     }
   };
 
-  // Dismiss the canvas scale/resize bounding box whenever clicking anywhere outside the canvas frame (e.g., Timeline, Inspector, Media panel, Transport bar)
+  // Keep the canvas scale/resize bounding box visible whenever a clip is selected on PC Timeline
   useEffect(() => {
-    const handleGlobalMouseDown = (e: MouseEvent) => {
-      const frameEl = canvasFrameRef.current;
-      if (!frameEl) return;
-      if (!frameEl.contains(e.target as Node)) {
-        setShowCanvasBoundingBox(false);
-        setIsSnappedToFrame(false);
-      }
-    };
-    window.addEventListener('mousedown', handleGlobalMouseDown, true);
-    return () => {
-      window.removeEventListener('mousedown', handleGlobalMouseDown, true);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!selectedClipId) {
+    if (selectedClipId) {
+      setShowCanvasBoundingBox(true);
+    } else {
       setShowCanvasBoundingBox(false);
       setIsSnappedToFrame(false);
     }
@@ -2640,13 +2629,16 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
   };
 
   const getActiveSelectedCanvasClip = (): TimelineClip | undefined => {
+    if (selectedClip && (!selectedClipId || selectedClip.id === selectedClipId)) {
+      return selectedClip;
+    }
     if (selectedClipId && activeClipsAtPlayhead && activeClipsAtPlayhead.length > 0) {
       const fromActive = activeClipsAtPlayhead.find((c) => c.id === selectedClipId);
       if (fromActive) return fromActive;
     }
     if (selectedClipId && activeSubtitleClip?.id === selectedClipId) return activeSubtitleClip;
     if (selectedClipId && activeOverlayClip?.id === selectedClipId) return activeOverlayClip;
-    return activeVideoClip || activeSubtitleClip || activeOverlayClip;
+    return selectedClip || activeVideoClip || activeSubtitleClip || activeOverlayClip;
   };
 
   // Mobile Touch Gestures on Canvas: Pinch-to-zoom & pan video, 1-finger drag reposition, tap to play
@@ -3108,19 +3100,69 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
     }
   };
 
+  useEffect(() => {
+    if (!draggingCanvasObj) return;
+    const onWindowMouseMove = (e: MouseEvent) => {
+      handleStageMouseMove(e as unknown as React.MouseEvent<HTMLDivElement>);
+    };
+    const onWindowMouseUp = () => {
+      handleCanvasMouseUp();
+    };
+    window.addEventListener('mousemove', onWindowMouseMove);
+    window.addEventListener('mouseup', onWindowMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onWindowMouseMove);
+      window.removeEventListener('mouseup', onWindowMouseUp);
+    };
+  }, [draggingCanvasObj]);
+
+  // Non-passive wheel event listener on canvas stage for smooth zoom with magnetic 100% snap
+  useEffect(() => {
+    const stageEl = stageRef.current;
+    if (!stageEl) return;
+    const handleNativeWheel = (e: WheelEvent) => {
+      const targetClip = getActiveSelectedCanvasClip();
+      if (!targetClip) return;
+      e.preventDefault();
+      const curScale = targetClip.scale ?? 100;
+      const step = e.deltaY < 0 ? 5 : -5;
+      const rawNextScale = Math.max(10, Math.min(500, curScale + step));
+      const snapped = snapPreviewScaleToFrame(
+        rawNextScale,
+        targetClip.posX || 0,
+        targetClip.posY || 0,
+        8,
+        24
+      );
+      setShowCanvasBoundingBox(true);
+      triggerSnapFrameFeedback(snapped.snappedScale);
+      applyClipTransform(
+        targetClip.id,
+        snapped.posX,
+        snapped.posY,
+        snapped.scale,
+        targetClip.rotation
+      );
+    };
+    stageEl.addEventListener('wheel', handleNativeWheel, { passive: false });
+    return () => {
+      stageEl.removeEventListener('wheel', handleNativeWheel);
+    };
+  }, [selectedClipId, selectedClip, activeVideoClip]);
+
   // Mouse wheel directly on Canvas zooms/resizes the active clip smoothly with magnetic 100% auto-snap
   const handleCanvasWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     const targetClip = getActiveSelectedCanvasClip();
     if (!targetClip) return;
     e.preventDefault();
     const curScale = targetClip.scale ?? 100;
-    const step = e.deltaY < 0 ? 6 : -6;
+    const step = e.deltaY < 0 ? 5 : -5;
     const rawNextScale = Math.max(10, Math.min(500, curScale + step));
     const snapped = snapPreviewScaleToFrame(
       rawNextScale,
       targetClip.posX || 0,
       targetClip.posY || 0,
-      7,
+      8,
       24
     );
     setShowCanvasBoundingBox(true);
@@ -3239,7 +3281,6 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
         onMouseMove={handleStageMouseMove}
         onMouseUp={handleCanvasMouseUp}
         onMouseLeave={handleCanvasMouseUp}
-        onWheel={handleCanvasWheel}
         data-keep-dark="true"
         className={`relative flex-1 w-full h-full overflow-hidden min-h-0 min-w-0 group ${
           isMobile || hideTopBar ? 'bg-black' : 'bg-[#0D0E12]'
@@ -3417,7 +3458,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                   ? 'scale(1.18)'
                   : 'scale(1)',
             }}
-            className={`relative flex items-center justify-center overflow-hidden transition-transform ${
+            className={`relative flex items-center justify-center transition-transform ${
               isMobile || hideTopBar
                 ? 'border-0 rounded-none shadow-none'
                 : 'shadow-lg rounded-md border border-[#27272D]'
@@ -3618,47 +3659,75 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
               </div>
             )}
 
-          {/* Thin White / Cyan Magnetic Snap Selection Frame & Resize Handles */}
-          {(showCanvasBoundingBox || isSnappedToFrame) && activeCanvasTarget && (
-            <div
-              className={`absolute inset-0 pointer-events-none transition-all ${
-                isSnappedToFrame
-                  ? 'border-2 border-[#00E5CC] shadow-[inset_0_0_18px_rgba(0,229,204,0.45),0_0_16px_rgba(0,229,204,0.65)]'
-                  : 'border border-white/85'
-              }`}
-            >
+          {/* Cyan Magnetic Snap Selection Frame & Corner + Edge Resize Handles */}
+          {(showCanvasBoundingBox || Boolean(selectedClipId) || isSnappedToFrame) && activeCanvasTarget && (() => {
+            const bBoxScale = (liveDragTransform?.clipId === activeCanvasTarget.id ? liveDragTransform.scale : activeCanvasTarget.scale) ?? 100;
+            const bBoxPosX = (liveDragTransform?.clipId === activeCanvasTarget.id ? liveDragTransform.posX : activeCanvasTarget.posX) || 0;
+            const bBoxPosY = (liveDragTransform?.clipId === activeCanvasTarget.id ? liveDragTransform.posY : activeCanvasTarget.posY) || 0;
+            const bBoxRot = (liveDragTransform?.clipId === activeCanvasTarget.id ? liveDragTransform.rotation : activeCanvasTarget.rotation) || 0;
 
-              {/* 4 Corner Handles (Drag to resize video scale) */}
+            const transX = bBoxPosX * (fittedBoxW / 1920);
+            const transY = bBoxPosY * (fittedBoxH / 1080);
+            const scaleFactor = bBoxScale / 100;
+
+            return (
               <div
-                onMouseDown={(e) => handleStartResizeHandle(e, 'nw')}
-                title="Kéo góc để thu phóng màn hình video (Tự động hít nam châm khi vừa khít 100%)"
-                className={`pointer-events-auto absolute -top-1.5 -left-1.5 w-2.5 h-2.5 rounded-full border border-black cursor-nwse-resize hover:scale-125 transition-transform ${
-                  isSnappedToFrame ? 'bg-[#00E5CC]' : 'bg-white'
+                style={{
+                  transform: `translate(${transX}px, ${transY}px) scale(${scaleFactor}) rotate(${bBoxRot}deg)`,
+                  transformOrigin: 'center center',
+                }}
+                className={`absolute inset-0 pointer-events-none transition-all ${
+                  isSnappedToFrame
+                    ? 'border-2 border-[#00E5CC] shadow-[inset_0_0_18px_rgba(0,229,204,0.45),0_0_16px_rgba(0,229,204,0.65)]'
+                    : 'border-2 border-[#00E5CC] shadow-[0_0_12px_rgba(0,229,204,0.35)]'
                 }`}
-              />
-              <div
-                onMouseDown={(e) => handleStartResizeHandle(e, 'ne')}
-                title="Kéo góc để thu phóng màn hình video (Tự động hít nam châm khi vừa khít 100%)"
-                className={`pointer-events-auto absolute -top-1.5 -right-1.5 w-2.5 h-2.5 rounded-full border border-black cursor-nesw-resize hover:scale-125 transition-transform ${
-                  isSnappedToFrame ? 'bg-[#00E5CC]' : 'bg-white'
-                }`}
-              />
-              <div
-                onMouseDown={(e) => handleStartResizeHandle(e, 'sw')}
-                title="Kéo góc để thu phóng màn hình video (Tự động hít nam châm khi vừa khít 100%)"
-                className={`pointer-events-auto absolute -bottom-1.5 -left-1.5 w-2.5 h-2.5 rounded-full border border-black cursor-nesw-resize hover:scale-125 transition-transform ${
-                  isSnappedToFrame ? 'bg-[#00E5CC]' : 'bg-white'
-                }`}
-              />
-              <div
-                onMouseDown={(e) => handleStartResizeHandle(e, 'se')}
-                title="Kéo góc để thu phóng màn hình video (Tự động hít nam châm khi vừa khít 100%)"
-                className={`pointer-events-auto absolute -bottom-1.5 -right-1.5 w-2.5 h-2.5 rounded-full border border-black cursor-nwse-resize hover:scale-125 transition-transform ${
-                  isSnappedToFrame ? 'bg-[#00E5CC]' : 'bg-white'
-                }`}
-              />
-            </div>
-          )}
+              >
+                {/* 4 Corner Round Handles */}
+                <div
+                  onMouseDown={(e) => handleStartResizeHandle(e, 'nw')}
+                  title="Kéo góc để thu phóng video (Tự động hít nam châm khi vừa khít 100%)"
+                  className="pointer-events-auto absolute -top-2 -left-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nwse-resize hover:scale-125 transition-transform"
+                />
+                <div
+                  onMouseDown={(e) => handleStartResizeHandle(e, 'ne')}
+                  title="Kéo góc để thu phóng video (Tự động hít nam châm khi vừa khít 100%)"
+                  className="pointer-events-auto absolute -top-2 -right-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nesw-resize hover:scale-125 transition-transform"
+                />
+                <div
+                  onMouseDown={(e) => handleStartResizeHandle(e, 'sw')}
+                  title="Kéo góc để thu phóng video (Tự động hít nam châm khi vừa khít 100%)"
+                  className="pointer-events-auto absolute -bottom-2 -left-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nesw-resize hover:scale-125 transition-transform"
+                />
+                <div
+                  onMouseDown={(e) => handleStartResizeHandle(e, 'se')}
+                  title="Kéo góc để thu phóng video (Tự động hít nam châm khi vừa khít 100%)"
+                  className="pointer-events-auto absolute -bottom-2 -right-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nwse-resize hover:scale-125 transition-transform"
+                />
+
+                {/* 4 Edge Anchor Handles */}
+                <div
+                  onMouseDown={(e) => handleStartResizeHandle(e, 'n')}
+                  title="Kéo cạnh trên để thu phóng video"
+                  className="pointer-events-auto absolute -top-1.5 left-1/2 -translate-x-1/2 w-6 h-2 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-ns-resize hover:scale-125 transition-transform"
+                />
+                <div
+                  onMouseDown={(e) => handleStartResizeHandle(e, 's')}
+                  title="Kéo cạnh dưới để thu phóng video"
+                  className="pointer-events-auto absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-6 h-2 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-ns-resize hover:scale-125 transition-transform"
+                />
+                <div
+                  onMouseDown={(e) => handleStartResizeHandle(e, 'w')}
+                  title="Kéo cạnh trái để thu phóng video"
+                  className="pointer-events-auto absolute top-1/2 -left-1.5 -translate-y-1/2 w-2 h-6 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-ew-resize hover:scale-125 transition-transform"
+                />
+                <div
+                  onMouseDown={(e) => handleStartResizeHandle(e, 'e')}
+                  title="Kéo cạnh phải để thu phóng video"
+                  className="pointer-events-auto absolute top-1/2 -right-1.5 -translate-y-1/2 w-2 h-6 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-ew-resize hover:scale-125 transition-transform"
+                />
+              </div>
+            );
+          })()}
 
           {/* Safe Area & Rule-of-Thirds Grid Overlay */}
           {showSafeArea && (

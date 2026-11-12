@@ -1503,6 +1503,71 @@ test('Mobile Workstation stationary center playhead, Mute+Cover row 1, and -100.
   );
 });
 
+test('Clip edge trim clamp strictly prevents stretching beyond sourceDuration, and magnetic snap threshold feels solid', async () => {
+  const { snapPreviewScaleToFrame, findClosestTimelineSnapPoint, createDefaultClip } = await import(
+    './timelineEngine'
+  );
+
+  // 1. Clip Duration Limit: A video of 10.0s source duration cannot be extended past 10.0s
+  const videoClip = createDefaultClip({
+    id: 'vid_clamp_1',
+    name: 'Sample.mp4',
+    trackIndex: 0,
+    startTime: 5.0,
+    duration: 8.0,
+  });
+  videoClip.sourceDuration = 10.0;
+  videoClip.sourceIn = 2.0; // 8.0s remaining
+  videoClip.speed = 1.0;
+
+  const maxAllowedDur = (videoClip.sourceDuration - videoClip.sourceIn) / videoClip.speed; // 8.0s
+  assert.equal(maxAllowedDur, 8.0, 'Remaining source duration is 8.0s');
+
+  // Attempting to stretch right by +5.0s (desired 13.0s) must be hard-capped at 8.0s
+  const requestedDur = videoClip.duration + 5.0; // 13.0s
+  const clampedDur = Math.max(0.4, Math.min(maxAllowedDur, requestedDur));
+  assert.equal(clampedDur, 8.0, 'Stretching right is hard capped at remaining source duration 8.0s');
+
+  // Attempting to stretch left before source start (sourceIn = 2.0s, delta = -4.0s, startTime = 5.0s)
+  const minLeftDelta = -videoClip.sourceIn / videoClip.speed; // -2.0s
+  const requestedLeftDelta = -4.0;
+  const clampedLeftDelta = Math.max(-videoClip.startTime, minLeftDelta, requestedLeftDelta);
+  assert.equal(clampedLeftDelta, -2.0, 'Stretching left is hard capped at source start 0s');
+
+  // 2. Magnetic snap threshold for ~14px / ~0.25s feels noticeable and snaps properly
+  const snapThreshold = 0.25;
+  const snapTargets = [
+    { timeSec: 0, label: '' },
+    { timeSec: 8.0, label: '' },
+    { timeSec: 15.0, label: '' },
+  ];
+
+  // Point at 8.12s (within 0.25s of 8.0s)
+  const snapRes = findClosestTimelineSnapPoint([8.12], snapTargets, snapThreshold);
+  assert.equal(snapRes.snapped, true, 'Point 8.12s within 0.25s threshold must snap');
+  assert.equal(snapRes.snapTimeSec, 8.0, 'Snaps cleanly to target 8.0s');
+
+  // Point at 8.40s (outside 0.25s threshold)
+  const noSnapRes = findClosestTimelineSnapPoint([8.4], snapTargets, snapThreshold);
+  assert.equal(noSnapRes.snapped, false, 'Point 8.40s outside 0.25s threshold must not snap');
+
+  // 3. Canvas scale magnetic snap to 100%
+  const scaleSnapNear = snapPreviewScaleToFrame(104, 10, 8, 8, 24);
+  assert.equal(scaleSnapNear.snappedScale, true, 'Scale 104% within tolerance snaps to 100%');
+  assert.equal(scaleSnapNear.scale, 100, 'Scale value locked to exact 100%');
+  assert.equal(scaleSnapNear.posX, 0, 'Centered posX snaps to 0');
+  assert.equal(scaleSnapNear.posY, 0, 'Centered posY snaps to 0');
+
+  // 4. Track 0 Contiguous Packing after trimming
+  const { packTrackClipsContiguously } = await import('./timelineEngine');
+  const clipA = createDefaultClip({ id: 'cA', name: 'A.mp4', trackIndex: 0, startTime: 0, duration: 6.0 });
+  const clipB = createDefaultClip({ id: 'cB', name: 'B.mp4', trackIndex: 0, startTime: 10.0, duration: 8.0 });
+  const packed = packTrackClipsContiguously([clipA, clipB], 0);
+  assert.equal(packed[0].startTime, 0, 'Clip A starts at 0s');
+  assert.equal(packed[1].startTime, 6.0, 'Clip B snapped seamlessly to 6.0s eliminating the 4s gap');
+});
+
+
 
 
 

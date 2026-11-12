@@ -511,7 +511,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
     return covered;
   };
 
-  // Build magnetic snap targets: ONLY 00:00, Playhead, and the rightmost edge of the very last clip at the end of the timeline (excluding Overlay tracks)
+  // Build magnetic snap targets: clip edges, 00:00, Playhead, markers, and end of timeline
   const buildTimelineSnapTargets = (
     sourceClips: TimelineClip[],
     excludeIds: Set<string>,
@@ -535,17 +535,21 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
 
     for (const c of sourceClips) {
       if (excludeIds.has(c.id)) continue;
+      const cStart = Number(c.startTime.toFixed(2));
+      const cEnd = Number((c.startTime + c.duration).toFixed(2));
+      targets.push({ timeSec: cStart, label: '' });
+      targets.push({ timeSec: cEnd, label: '' });
+
       // Exclude Overlay / PIP layers from timeline end snapping
       if (overlayTrackSet.has(c.trackIndex) || c.trackIndex >= 3) continue;
 
-      const cEnd = Number((c.startTime + c.duration).toFixed(2));
       if (cEnd > timelineLastClipRightEdge) {
         timelineLastClipRightEdge = cEnd;
       }
     }
 
     if (timelineLastClipRightEdge > 0) {
-      targets.unshift({
+      targets.push({
         timeSec: timelineLastClipRightEdge,
         label: '',
       });
@@ -629,7 +633,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
     let snappedAt: number | null = null;
 
     if ((autoSnapEdge || snapEnabled) && anchorOrig && hoveredTrackId !== 0) {
-      const snapThreshold = Math.min(0.55, Math.max(0.015, 16 / pixelsPerSecond));
+      const snapThreshold = Math.min(0.55, Math.max(0.25, 14 / pixelsPerSecond));
       const selectedSet = new Set(session.activeSelectedIds);
       const candidateEdges = [
         tentativeStartSec,
@@ -694,7 +698,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
     if (draggingPlayhead) {
       let targetSec = clientXToSeconds(e.clientX);
       if (autoSnapEdge || snapEnabled) {
-        const snapThreshold = Math.min(0.45, Math.max(0.015, 16 / pixelsPerSecond));
+        const snapThreshold = Math.min(0.45, Math.max(0.2, 14 / pixelsPerSecond));
         const snapTargets = buildTimelineSnapTargets(clips, new Set(), false);
         const snapRes = findClosestTimelineSnapPoint([targetSec], snapTargets, snapThreshold);
         if (snapRes.snapped && snapRes.snapTimeSec !== null) {
@@ -751,7 +755,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
       const targetClip = clips.find((c) => c.id === resizingState.clipId);
       if (targetClip) {
         const rawTotalDeltaSec = (e.clientX - resizingState.initialX) / pixelsPerSecond;
-        const snapThreshold = Math.min(0.55, Math.max(0.015, 18 / pixelsPerSecond));
+        const snapThreshold = Math.min(0.55, Math.max(0.25, 14 / pixelsPerSecond));
         const snapTargets = buildTimelineSnapTargets(
           clips,
           new Set([targetClip.id]),
@@ -760,9 +764,20 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
         let snappedAt: number | null = null;
 
         if (resizingState.edge === 'right') {
+          const speed = targetClip.speed && targetClip.speed > 0 ? targetClip.speed : 1.0;
+          const effectiveSourceDur =
+            targetClip.sourceDuration && targetClip.sourceDuration > 0
+              ? targetClip.sourceDuration
+              : (targetClip.trackIndex === 0 ? resizingState.origDuration : Infinity);
+          const maxAllowedDur = Math.max(0.4, (effectiveSourceDur - (targetClip.sourceIn || 0)) / speed);
+          const maxAllowedEnd = resizingState.origStartTime + maxAllowedDur;
+
           let desiredEnd = Math.max(
             resizingState.origStartTime + 0.1,
-            resizingState.origStartTime + resizingState.origDuration + rawTotalDeltaSec
+            Math.min(
+              maxAllowedEnd,
+              resizingState.origStartTime + resizingState.origDuration + rawTotalDeltaSec
+            )
           );
           if (autoSnapEdge || snapEnabled) {
             const snapRes = findClosestTimelineSnapPoint(
@@ -771,7 +786,10 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               snapThreshold
             );
             if (snapRes.snapped && snapRes.snapTimeSec !== null) {
-              desiredEnd = Math.max(resizingState.origStartTime + 0.1, snapRes.snapTimeSec);
+              desiredEnd = Math.max(
+                resizingState.origStartTime + 0.1,
+                Math.min(maxAllowedEnd, snapRes.snapTimeSec)
+              );
               snappedAt = snapRes.snapTimeSec;
             }
           }
@@ -782,9 +800,14 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             onResizeClipEdge(resizingState.clipId, 'right', stepDeltaSec);
           }
         } else {
+          const speed = targetClip.speed && targetClip.speed > 0 ? targetClip.speed : 1.0;
+          const minAllowedStart =
+            targetClip.sourceDuration && targetClip.sourceDuration > 0
+              ? Math.max(0, resizingState.origStartTime - (targetClip.sourceIn || 0) / speed)
+              : 0;
           const origEnd = resizingState.origStartTime + resizingState.origDuration;
           let desiredStart = Math.max(
-            0,
+            minAllowedStart,
             Math.min(origEnd - 0.1, resizingState.origStartTime + rawTotalDeltaSec)
           );
           if (autoSnapEdge || snapEnabled) {
@@ -794,7 +817,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               snapThreshold
             );
             if (snapRes.snapped && snapRes.snapTimeSec !== null) {
-              desiredStart = Math.max(0, Math.min(origEnd - 0.1, snapRes.snapTimeSec));
+              desiredStart = Math.max(minAllowedStart, Math.min(origEnd - 0.1, snapRes.snapTimeSec));
               snappedAt = snapRes.snapTimeSec;
             }
           }

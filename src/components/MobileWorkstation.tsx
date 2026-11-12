@@ -442,6 +442,142 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     }
   };
 
+  // Mobile Touch & Mouse Drag Trimming on Selected Clip Edge (Hard capped by source duration)
+  const touchTrimRef = useRef<{
+    clipId: string;
+    startX: number;
+    origDuration: number;
+    sourceDuration?: number;
+    sourceIn?: number;
+    speed?: number;
+    hasMoved: boolean;
+  } | null>(null);
+
+  const touchLeftTrimRef = useRef<{
+    clipId: string;
+    startX: number;
+    origStartTime: number;
+    origDuration: number;
+    sourceIn: number;
+    sourceDuration?: number;
+    speed: number;
+    hasMoved: boolean;
+  } | null>(null);
+
+  const handleRightHandleTouchStart = (clip: TimelineClip, e: React.TouchEvent) => {
+    e.stopPropagation();
+    isDraggingTimeline.current = false;
+    touchTrimRef.current = {
+      clipId: clip.id,
+      startX: e.touches[0].clientX,
+      origDuration: clip.duration,
+      sourceDuration: clip.sourceDuration,
+      sourceIn: clip.sourceIn || 0,
+      speed: clip.speed || 1.0,
+      hasMoved: false,
+    };
+  };
+
+  const handleRightHandleTouchMove = (e: React.TouchEvent) => {
+    if (!touchTrimRef.current) return;
+    e.stopPropagation();
+    const touch = e.touches[0];
+    const dx = touch.clientX - touchTrimRef.current.startX;
+    if (Math.abs(dx) > 3) {
+      touchTrimRef.current.hasMoved = true;
+    }
+    const deltaSec = dx / pxPerSec;
+    const speed = touchTrimRef.current.speed && touchTrimRef.current.speed > 0 ? touchTrimRef.current.speed : 1.0;
+    const effectiveSourceDur =
+      touchTrimRef.current.sourceDuration && touchTrimRef.current.sourceDuration > 0
+        ? touchTrimRef.current.sourceDuration
+        : touchTrimRef.current.origDuration;
+    const maxAllowedDur = Math.max(0.4, (effectiveSourceDur - (touchTrimRef.current.sourceIn || 0)) / speed);
+
+    const desiredDur = touchTrimRef.current.origDuration + deltaSec;
+    const clampedDur = Number(Math.max(0.4, Math.min(maxAllowedDur, desiredDur)).toFixed(2));
+    onUpdateClipProp('duration', clampedDur, touchTrimRef.current.clipId);
+  };
+
+  const handleRightHandleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchTrimRef.current) return;
+    e.stopPropagation();
+    touchTrimRef.current = null;
+  };
+
+  const handleRightHandleMouseDown = (clip: TimelineClip, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    isDraggingTimeline.current = false;
+    const startX = e.clientX;
+    const origDuration = clip.duration;
+    const speed = clip.speed && clip.speed > 0 ? clip.speed : 1.0;
+    const effectiveSourceDur =
+      clip.sourceDuration && clip.sourceDuration > 0
+        ? clip.sourceDuration
+        : origDuration;
+    const maxAllowedDur = Math.max(0.4, (effectiveSourceDur - (clip.sourceIn || 0)) / speed);
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - startX;
+      const deltaSec = dx / pxPerSec;
+      const desiredDur = origDuration + deltaSec;
+      const clampedDur = Number(Math.max(0.4, Math.min(maxAllowedDur, desiredDur)).toFixed(2));
+      onUpdateClipProp('duration', clampedDur, clip.id);
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
+  const handleLeftHandleTouchStart = (clip: TimelineClip, e: React.TouchEvent) => {
+    e.stopPropagation();
+    isDraggingTimeline.current = false;
+    touchLeftTrimRef.current = {
+      clipId: clip.id,
+      startX: e.touches[0].clientX,
+      origStartTime: clip.startTime,
+      origDuration: clip.duration,
+      sourceIn: clip.sourceIn || 0,
+      sourceDuration: clip.sourceDuration,
+      speed: clip.speed || 1.0,
+      hasMoved: false,
+    };
+  };
+
+  const handleLeftHandleTouchMove = (e: React.TouchEvent) => {
+    if (!touchLeftTrimRef.current) return;
+    e.stopPropagation();
+    const dx = e.touches[0].clientX - touchLeftTrimRef.current.startX;
+    if (Math.abs(dx) > 3) touchLeftTrimRef.current.hasMoved = true;
+    const deltaSec = dx / pxPerSec;
+    const speed = touchLeftTrimRef.current.speed;
+    const maxDelta = touchLeftTrimRef.current.origDuration - 0.4;
+    const minDelta = touchLeftTrimRef.current.sourceDuration ? -touchLeftTrimRef.current.sourceIn / speed : -Infinity;
+    const clampedDelta = Math.max(-touchLeftTrimRef.current.origStartTime, minDelta, Math.min(maxDelta, deltaSec));
+    const newStart = Number((touchLeftTrimRef.current.origStartTime + clampedDelta).toFixed(2));
+    const newDur = Number((touchLeftTrimRef.current.origDuration - clampedDelta).toFixed(2));
+    const newSourceIn = Number(Math.max(0, touchLeftTrimRef.current.sourceIn + clampedDelta * speed).toFixed(2));
+    onUpdateClipProp('startTime', newStart, touchLeftTrimRef.current.clipId);
+    onUpdateClipProp('duration', newDur, touchLeftTrimRef.current.clipId);
+    onUpdateClipProp('sourceIn', newSourceIn, touchLeftTrimRef.current.clipId);
+  };
+
+  const handleLeftHandleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchLeftTrimRef.current) return;
+    e.stopPropagation();
+    const hadMoved = touchLeftTrimRef.current.hasMoved;
+    touchLeftTrimRef.current = null;
+    if (!hadMoved) {
+      onTrimStartToPlayhead?.();
+    }
+  };
+
   // Mouse dragging on desktop with window listeners so mouse release is never lost
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
@@ -1026,14 +1162,17 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                           {/* Left Trim Handle when selected */}
                           {isSelected && (
                             <div
+                              onTouchStart={(e) => handleLeftHandleTouchStart(clip, e)}
+                              onTouchMove={handleLeftHandleTouchMove}
+                              onTouchEnd={handleLeftHandleTouchEnd}
+                              onTouchCancel={handleLeftHandleTouchEnd}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onTrimStartToPlayhead?.();
                               }}
-                              title="Kéo đầu clip tới điểm phát"
-                              className="absolute left-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-l-md"
+                              title="Kéo đầu clip để cắt ngắn video"
+                              className="absolute left-0 inset-y-0 w-4 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-l-md touch-none select-none"
                             >
-                              <div className="flex gap-0.5">
+                              <div className="flex gap-0.5 pointer-events-none">
                                 <div className="w-[1px] h-3 bg-black/80" />
                                 <div className="w-[1px] h-3 bg-black/80" />
                               </div>
@@ -1041,7 +1180,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                           )}
 
                           {/* Duration Badge & Title */}
-                          <div className="min-w-0 flex-1 z-10 pointer-events-none flex items-center justify-between pl-2 pr-2">
+                          <div className="min-w-0 flex-1 z-10 pointer-events-none flex items-center justify-between pl-3 pr-3">
                             <span className="text-[8px] font-mono font-bold bg-black/70 backdrop-blur-xs text-[#00E5CC] px-1 py-0.5 rounded shadow-xs">
                               {clip.duration.toFixed(1)}s
                             </span>
@@ -1050,17 +1189,21 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                             </span>
                           </div>
 
-                          {/* Right Trim Handle when selected */}
+                          {/* Right Trim Handle when selected (Supports Touch Drag Trim) */}
                           {isSelected && (
                             <div
+                              onTouchStart={(e) => handleRightHandleTouchStart(clip, e)}
+                              onTouchMove={handleRightHandleTouchMove}
+                              onTouchEnd={handleRightHandleTouchEnd}
+                              onTouchCancel={handleRightHandleTouchEnd}
+                              onMouseDown={(e) => handleRightHandleMouseDown(clip, e)}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onTrimEndToPlayhead?.();
                               }}
-                              title="Kéo đuôi clip tới điểm phát"
-                              className="absolute right-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-r-md"
+                              title="Chạm ngón tay kéo mép phải để thu ngắn video cắt bỏ đoạn thừa"
+                              className="absolute right-0 inset-y-0 w-4 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-r-md touch-none select-none active:bg-[#00E5CC]"
                             >
-                              <div className="flex gap-0.5">
+                              <div className="flex gap-0.5 pointer-events-none">
                                 <div className="w-[1px] h-3 bg-black/80" />
                                 <div className="w-[1px] h-3 bg-black/80" />
                               </div>
@@ -1168,7 +1311,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   className="absolute h-7 px-3 rounded-md border border-dashed border-[#38BDF8]/60 text-[#38BDF8] bg-[#0284C7]/10 hover:bg-[#0284C7]/20 flex items-center gap-1.5 text-[9.5px] font-bold cursor-pointer transition-colors shadow-xs"
                 >
                   <Plus className="w-3.5 h-3.5 text-[#38BDF8] shrink-0" />
-                  <span>{isEn ? '+ Add audio' : '+ Thêm âm thanh'}</span>
+                  <span>{isEn ? 'Add audio' : 'Thêm âm thanh'}</span>
                 </button>
               )}
             </div>
@@ -1187,9 +1330,9 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     setActiveDrawer('text');
                   }}
                   title="Mở thư viện văn bản"
-                  className="w-8 h-8 rounded-xl border border-[#F97316]/40 bg-[#F97316]/15 flex items-center justify-center text-[#FB923C] hover:bg-[#F97316]/30 cursor-pointer active:scale-95 transition-all shadow-xs"
+                  className="w-7 h-7 rounded-lg border border-[#F97316]/40 bg-[#F97316]/15 flex items-center justify-center text-[#FB923C] hover:bg-[#F97316]/30 cursor-pointer active:scale-95 transition-all shadow-xs"
                 >
-                  <Type className="w-4 h-4" />
+                  <Type className="w-3.5 h-3.5" />
                 </button>
               </div>
 
@@ -1235,7 +1378,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   className="absolute h-5 px-3 rounded-full border border-dashed border-[#F97316]/60 text-[#FB923C] bg-[#EA580C]/10 hover:bg-[#EA580C]/20 flex items-center gap-1.5 text-[8.5px] font-bold cursor-pointer transition-colors shadow-xs"
                 >
                   <Plus className="w-3 text-[#FB923C] shrink-0" />
-                  <span>{isEn ? '+ Add text' : '+ Thêm văn bản'}</span>
+                  <span>{isEn ? 'Add text' : 'Thêm văn bản'}</span>
                 </button>
               )}
             </div>

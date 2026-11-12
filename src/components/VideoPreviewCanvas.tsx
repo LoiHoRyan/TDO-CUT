@@ -571,15 +571,19 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
     }
   }, [playheadSec, isPlaying, activeOverlayClip, overlayTrackHidden, videoTrackMuted, loadedPipUrl]);
 
+  // Preload and cache active video clip thumbnail immediately to eliminate any black flicker
+  useEffect(() => {
+    if (activeVideoClip?.thumbnailUrl) {
+      getOrLoadMediaImage(activeVideoClip.thumbnailUrl);
+    }
+  }, [activeVideoClip?.thumbnailUrl]);
+
   // Continuous 60-FPS video frame repaint while playing a real video clip
   useEffect(() => {
     if ((!isPlaying && !exportDimensionsOverride) || !activeVideoClip?.mediaUrl) return;
     let rafId = 0;
     const loop = () => {
-      const vid = videoElRef.current;
-      if (vid && vid.readyState >= 2) {
-        setVideoFrameReadyTick((t) => (t + 1) % 1000000);
-      }
+      setVideoFrameReadyTick((t) => (t + 1) % 1000000);
       rafId = window.requestAnimationFrame(loop);
     };
     rafId = window.requestAnimationFrame(loop);
@@ -634,10 +638,10 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
         : Math.max(0, rawOffset);
 
     const isExportPlaying = vid.dataset.exportPlaying === 'true';
-    const seekTolerance = isPlaying || isExportPlaying ? 0.6 : 0.08;
-    if (Math.abs(vid.currentTime - targetOffset) > seekTolerance && (!isPlaying || targetOffset > 0.6 || vid.paused)) {
+    const seekTolerance = isPlaying || isExportPlaying ? 1.0 : 0.04;
+    if (Math.abs(vid.currentTime - targetOffset) > seekTolerance) {
       try {
-        vid.currentTime = targetOffset;
+        vid.currentTime = Math.max(0.001, targetOffset);
       } catch {
         // Ignore seek before metadata ready
       }
@@ -1297,16 +1301,22 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
         ctx.clip();
       }
 
-      if (drawableMediaSource) {
+      if (fallbackThumbImg) {
+        ctx.drawImage(fallbackThumbImg, -drawW / 2, -drawH / 2, drawW, drawH);
+      }
+      if (drawableMediaSource && drawableMediaSource !== fallbackThumbImg) {
         ctx.drawImage(drawableMediaSource, -drawW / 2, -drawH / 2, drawW, drawH);
+      }
+      if (drawableMediaSource || fallbackThumbImg) {
 
         // High-frequency crispness pass when Sharpen / AI Upscale / High-Res Export is active
-        if (totalSharpen > 10) {
+        const crispSource = drawableMediaSource || fallbackThumbImg;
+        if (totalSharpen > 10 && crispSource) {
           ctx.save();
           ctx.globalCompositeOperation = 'overlay';
           ctx.globalAlpha = Math.min(0.22, totalSharpen / 260);
           ctx.filter = 'contrast(145%) saturate(108%)';
-          ctx.drawImage(drawableMediaSource, -drawW / 2, -drawH / 2, drawW, drawH);
+          ctx.drawImage(crispSource, -drawW / 2, -drawH / 2, drawW, drawH);
           ctx.restore();
         }
 
@@ -2767,8 +2777,22 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
         );
       }
     } else if (!st.hasMoved && Date.now() - st.startTime < 350) {
-      // Tap without moving -> toggle play (suppress duplicate synthetic click)
+      // Tap without moving -> toggle play (synchronous video hardware unlock on user touch)
       if (e.cancelable) e.preventDefault();
+      const vid = videoElRef.current;
+      if (vid) {
+        if (!isPlaying) {
+          const p = vid.play();
+          if (p !== undefined) {
+            p.catch(() => {
+              vid.muted = true;
+              vid.play().catch(() => {});
+            });
+          }
+        } else {
+          vid.pause();
+        }
+      }
       onTogglePlay();
     }
     canvasTouchStateRef.current.isPinch = false;
@@ -3117,147 +3141,16 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
     <section
       ref={previewContainerRef}
       aria-label="Màn hình Xem Trước (Player)"
-      className={`flex flex-col h-full overflow-hidden select-none ${
+      className={`flex flex-col w-full h-full overflow-hidden select-none ${
         isMobile || hideTopBar
           ? 'bg-black border-0 rounded-none'
           : 'bg-[#18181C] border border-[#2B2B30] rounded'
       }`}
     >
-      {/* Offscreen <video> (double-buffered V1 + PIP overlay) and <audio> elements for real hardware media decoding & audio playback */}
-      <video
-        ref={videoElRef}
-        data-player-video="true"
-        style={{
-          position: 'fixed',
-          bottom: 0,
-          right: 0,
-          width: 320,
-          height: 240,
-          opacity: 0.01,
-          pointerEvents: 'none',
-          zIndex: -1,
-          clipPath: 'circle(0% at 0 0)',
-        }}
-        playsInline={true}
-        preload="auto"
-        muted={Boolean(videoTrackMuted || activeVideoClip?.muted)}
-        onLoadedMetadata={(e) => {
-          const vid = e.currentTarget;
-          if (activeVideoClip) {
-            const clipElapsed = Math.max(0, playheadSec - activeVideoClip.startTime);
-            const rawOffset = (activeVideoClip.sourceIn || 0) + clipElapsed * (activeVideoClip.speed || 1);
-            const targetOffset =
-              Number.isFinite(vid.duration) && vid.duration > 0
-                ? Math.max(0, Math.min(rawOffset, Math.max(0, vid.duration - 0.04)))
-                : Math.max(0, rawOffset);
-            try {
-              vid.currentTime = Math.max(0.001, targetOffset);
-            } catch {
-              // Ignore initial seek error
-            }
-            if (isPlaying && !activeVideoClip.reversed && vid.paused) {
-              const p = vid.play();
-              if (p !== undefined) {
-                p.catch(() => {
-                  vid.muted = true;
-                  vid.play().catch(() => {});
-                });
-              }
-            }
-          }
-          if (
-            vid.videoWidth > 0 &&
-            vid.videoHeight > 0 &&
-            activeVideoClip?.mediaUrl &&
-            lastAutoDetectedUrlRef.current !== activeVideoClip.mediaUrl
-          ) {
-            lastAutoDetectedUrlRef.current = activeVideoClip.mediaUrl;
-            const detected = detectAspectRatioFromDimensions(
-              vid.videoWidth,
-              vid.videoHeight
-            ) as AspectRatioOption;
-            // Record native dimensions on this specific clip only — never overwrite global aspectRatio
-            onDetectedClipDimensions?.(
-              activeVideoClip.id,
-              vid.videoWidth,
-              vid.videoHeight,
-              detected
-            );
-          }
-          setVideoFrameReadyTick((t) => t + 1);
-        }}
-        onLoadedData={() => setVideoFrameReadyTick((t) => t + 1)}
-        onCanPlay={() => setVideoFrameReadyTick((t) => t + 1)}
-        onCanPlayThrough={() => setVideoFrameReadyTick((t) => t + 1)}
-        onSeeked={() => setVideoFrameReadyTick((t) => t + 1)}
-        onTimeUpdate={() => setVideoFrameReadyTick((t) => t + 1)}
-        onPlaying={() => setVideoFrameReadyTick((t) => t + 1)}
-      />
-      <video
-        ref={nextVideoElRef}
-        data-player-next-video="true"
-        style={{
-          position: 'fixed',
-          bottom: 0,
-          right: 0,
-          width: 320,
-          height: 240,
-          opacity: 0.01,
-          pointerEvents: 'none',
-          zIndex: -1,
-          clipPath: 'circle(0% at 0 0)',
-        }}
-        playsInline={true}
-        muted
-        preload="auto"
-        onLoadedMetadata={(e) => {
-          if (nextVideoClip) {
-            try {
-              e.currentTarget.currentTime = Math.max(0.001, nextVideoClip.sourceIn || 0);
-            } catch {
-              // Ignore seek error
-            }
-          }
-          setVideoFrameReadyTick((t) => t + 1);
-        }}
-        onLoadedData={() => setVideoFrameReadyTick((t) => t + 1)}
-        onCanPlay={() => setVideoFrameReadyTick((t) => t + 1)}
-        onSeeked={() => setVideoFrameReadyTick((t) => t + 1)}
-        onTimeUpdate={() => setVideoFrameReadyTick((t) => t + 1)}
-      />
-      <video
-        ref={pipVideoElRef}
-        data-player-pip-video="true"
-        style={{
-          position: 'fixed',
-          bottom: 0,
-          right: 0,
-          width: 320,
-          height: 240,
-          opacity: 0.01,
-          pointerEvents: 'none',
-          zIndex: -1,
-          clipPath: 'circle(0% at 0 0)',
-        }}
-        playsInline={true}
-        preload="auto"
-        onLoadedData={() => setVideoFrameReadyTick((t) => t + 1)}
-        onSeeked={() => setVideoFrameReadyTick((t) => t + 1)}
-        onTimeUpdate={() => setVideoFrameReadyTick((t) => t + 1)}
-      />
       <audio
         ref={audioElRef}
         data-player-audio="true"
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          width: 16,
-          height: 16,
-          opacity: 0.001,
-          pointerEvents: 'none',
-          zIndex: -100,
-        }}
+        className="hidden"
         preload="auto"
       />
 
@@ -3528,6 +3421,128 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 : 'shadow-lg rounded-md border border-[#27272D]'
             }`}
           >
+            {/* Real Hardware Video Element - mounted in active viewport so GPU decodes at native rate without blackout */}
+            <video
+              ref={videoElRef}
+              data-player-video="true"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+                pointerEvents: 'none',
+                zIndex: 0,
+              }}
+              playsInline={true}
+              preload="auto"
+              muted={Boolean(videoTrackMuted || activeVideoClip?.muted)}
+              onLoadedMetadata={(e) => {
+                const vid = e.currentTarget;
+                if (activeVideoClip) {
+                  const clipElapsed = Math.max(0, playheadSec - activeVideoClip.startTime);
+                  const rawOffset = (activeVideoClip.sourceIn || 0) + clipElapsed * (activeVideoClip.speed || 1);
+                  const targetOffset =
+                    Number.isFinite(vid.duration) && vid.duration > 0
+                      ? Math.max(0, Math.min(rawOffset, Math.max(0, vid.duration - 0.04)))
+                      : Math.max(0, rawOffset);
+                  try {
+                    vid.currentTime = Math.max(0.001, targetOffset);
+                  } catch {
+                    // Ignore initial seek error
+                  }
+                  if (isPlaying && !activeVideoClip.reversed && vid.paused) {
+                    const p = vid.play();
+                    if (p !== undefined) {
+                      p.catch(() => {
+                        vid.muted = true;
+                        vid.play().catch(() => {});
+                      });
+                    }
+                  }
+                }
+                if (
+                  vid.videoWidth > 0 &&
+                  vid.videoHeight > 0 &&
+                  activeVideoClip?.mediaUrl &&
+                  lastAutoDetectedUrlRef.current !== activeVideoClip.mediaUrl
+                ) {
+                  lastAutoDetectedUrlRef.current = activeVideoClip.mediaUrl;
+                  const detected = detectAspectRatioFromDimensions(
+                    vid.videoWidth,
+                    vid.videoHeight
+                  ) as AspectRatioOption;
+                  onDetectedClipDimensions?.(
+                    activeVideoClip.id,
+                    vid.videoWidth,
+                    vid.videoHeight,
+                    detected
+                  );
+                }
+                setVideoFrameReadyTick((t) => t + 1);
+              }}
+              onLoadedData={() => setVideoFrameReadyTick((t) => t + 1)}
+              onCanPlay={() => setVideoFrameReadyTick((t) => t + 1)}
+              onCanPlayThrough={() => setVideoFrameReadyTick((t) => t + 1)}
+              onSeeked={() => setVideoFrameReadyTick((t) => t + 1)}
+              onTimeUpdate={() => setVideoFrameReadyTick((t) => t + 1)}
+              onPlaying={() => setVideoFrameReadyTick((t) => t + 1)}
+            />
+
+            {/* Pre-buffer Next Video Element for gapless concat */}
+            <video
+              ref={nextVideoElRef}
+              data-player-next-video="true"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+                pointerEvents: 'none',
+                opacity: 0,
+                zIndex: 0,
+              }}
+              playsInline={true}
+              muted
+              preload="auto"
+              onLoadedMetadata={(e) => {
+                if (nextVideoClip) {
+                  try {
+                    e.currentTarget.currentTime = Math.max(0.001, nextVideoClip.sourceIn || 0);
+                  } catch {
+                    // Ignore seek error
+                  }
+                }
+                setVideoFrameReadyTick((t) => t + 1);
+              }}
+              onLoadedData={() => setVideoFrameReadyTick((t) => t + 1)}
+              onCanPlay={() => setVideoFrameReadyTick((t) => t + 1)}
+              onSeeked={() => setVideoFrameReadyTick((t) => t + 1)}
+              onTimeUpdate={() => setVideoFrameReadyTick((t) => t + 1)}
+            />
+
+            {/* Dedicated PIP Overlay Video Element */}
+            <video
+              ref={pipVideoElRef}
+              data-player-pip-video="true"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+                pointerEvents: 'none',
+                opacity: 0,
+                zIndex: 0,
+              }}
+              playsInline={true}
+              preload="auto"
+              onLoadedData={() => setVideoFrameReadyTick((t) => t + 1)}
+              onSeeked={() => setVideoFrameReadyTick((t) => t + 1)}
+              onTimeUpdate={() => setVideoFrameReadyTick((t) => t + 1)}
+            />
+
             <canvas
               ref={canvasRef}
               width={canvasW}
@@ -3555,6 +3570,8 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 }
               }}
               style={{
+                position: 'relative',
+                zIndex: 1,
                 width: '100%',
                 height: '100%',
                 aspectRatio: useWideStageFill ? undefined : `${canvasW} / ${canvasH}`,

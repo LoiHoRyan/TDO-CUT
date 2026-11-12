@@ -329,7 +329,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
   const handlePlayToggle = () => {
     const vids = document.querySelectorAll<HTMLVideoElement>('video[data-player-video="true"]');
     vids.forEach((v) => {
-      if (v.paused && !isPlaying) {
+      if (!isPlaying) {
         const p = v.play();
         if (p !== undefined) {
           p.catch(() => {
@@ -337,6 +337,8 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
             v.play().catch(() => {});
           });
         }
+      } else {
+        v.pause();
       }
     });
     onTogglePlay();
@@ -679,7 +681,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
 
       {/* 2. REAL-TIME PLAYER CANVAS AREA (Edge-to-edge, full screen mobile canvas) */}
       <div
-        className="flex-1 relative flex items-center justify-center min-h-0 overflow-hidden bg-black"
+        className="flex-1 relative flex items-center justify-center min-h-0 overflow-hidden bg-black w-full"
         onClick={videoClips.length > 0 ? handlePlayToggle : undefined}
       >
         <div className="w-full h-full flex items-center justify-center p-0">

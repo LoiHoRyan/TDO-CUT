@@ -936,13 +936,16 @@ export default function App() {
   // Top Header Menu & Modals
   const [isTopMenuOpen, setIsTopMenuOpen] = useState(false);
   const topMenuContainerRef = useRef<HTMLDivElement | null>(null);
+  const topMenuPopoverRef = useRef<HTMLDivElement | null>(null);
+  const topMenuButtonRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
     if (!isTopMenuOpen) return;
     const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
-      if (
-        topMenuContainerRef.current &&
-        !topMenuContainerRef.current.contains(e.target as Node)
-      ) {
+      const target = e.target as Node;
+      if (topMenuButtonRef.current && topMenuButtonRef.current.contains(target)) {
+        return;
+      }
+      if (topMenuPopoverRef.current && !topMenuPopoverRef.current.contains(target)) {
         setIsTopMenuOpen(false);
       }
     };
@@ -4656,6 +4659,7 @@ export default function App() {
           {/* TDO CUT "Menu ▾" Dropdown */}
           <div ref={topMenuContainerRef} className="relative">
             <button
+              ref={topMenuButtonRef}
               type="button"
               onClick={() => setIsTopMenuOpen((o) => !o)}
               className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded cursor-pointer transition-all border ${
@@ -4671,10 +4675,12 @@ export default function App() {
             {isTopMenuOpen && (
               <>
                 <div
-                  className="fixed inset-0 z-40 bg-transparent"
+                  className="fixed inset-0 z-40 bg-black/10"
                   onClick={() => setIsTopMenuOpen(false)}
+                  onTouchStart={() => setIsTopMenuOpen(false)}
                 />
                 <div
+                  ref={topMenuPopoverRef}
                   onMouseLeave={() => setIsTopMenuOpen(false)}
                   className={`absolute left-0 top-9 w-64 rounded-lg shadow-2xl py-1.5 z-50 text-xs backdrop-blur-md border ${
                     themeMode === 'light'
@@ -5385,6 +5391,16 @@ export default function App() {
           onExitToHome={() => setActiveView('home')}
           onOpenExport={() => setIsExportModalOpen(true)}
           onAddMedia={() => mediaInputRef.current?.click()}
+          onTrimStartToPlayhead={() =>
+            commitClips((prev) =>
+              trimClipStartToPlayhead(prev, playheadSec, selectedClipId, snapEnabled)
+            )
+          }
+          onTrimEndToPlayhead={() =>
+            commitClips((prev) =>
+              trimClipEndToPlayhead(prev, playheadSec, selectedClipId, snapEnabled)
+            )
+          }
           onDropResource={handleDropResourceOnTimeline}
           onApplyTransitionToAll={(type, dur) => {
             commitClips((prev) =>
@@ -5415,6 +5431,7 @@ export default function App() {
           }}
           renderPlayer={() => (
             <VideoPreviewCanvas
+              hideBottomControls={true}
               playheadSec={playheadSec}
               totalDurationSec={totalTimelineDuration}
               fps={30}

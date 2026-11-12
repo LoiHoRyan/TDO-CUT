@@ -82,6 +82,7 @@ export const ASPECT_RATIO_PRESETS: Array<{
 ];
 
 interface VideoPreviewCanvasProps {
+  hideBottomControls?: boolean;
   playheadSec: number;
   totalDurationSec: number;
   fps: number;
@@ -173,6 +174,7 @@ const FILTER_PRESET_CSS: Record<string, string> = {
 };
 
 export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
+  hideBottomControls = false,
   playheadSec,
   totalDurationSec,
   fps,
@@ -3434,7 +3436,8 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
       </div>
 
       {/* Bottom Transport & Timecode Bar */}
-      <div className="flex items-center justify-between px-3 h-10 bg-[#15161A] border-t border-[#24262C] shrink-0 relative select-none">
+      {!hideBottomControls && (
+        <div className="flex items-center justify-between px-3 h-10 bg-[#15161A] border-t border-[#24262C] shrink-0 relative select-none">
         {/* Left: Double-click Editable Timecode */}
         <div className="flex items-center gap-1.5 font-mono text-xs tracking-tight whitespace-nowrap">
           {isEditingTimecode ? (
@@ -3658,6 +3661,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
           </button>
         </div>
       </div>
+      )}
     </section>
   );
 };

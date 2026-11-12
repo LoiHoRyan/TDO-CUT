@@ -348,67 +348,34 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
       </aside>
 
       {/* Center & Right Launcher Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-6">
-        {/* Mobile Top Category Pills (< md) */}
-        <div className="flex md:hidden items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 shrink-0">
-          {(
-            [
-              { id: 'home', label: isEn ? 'Home' : 'Trang chủ', icon: LayoutGrid },
-              { id: 'templates', label: isEn ? 'Templates' : 'Mẫu dựng', icon: LayoutTemplate },
-              { id: 'spaces', label: isEn ? 'Cloud' : 'Đám mây', icon: Cloud },
-              { id: 'ai_design', label: isEn ? 'Cover' : 'Ảnh bìa', icon: ImageIcon },
-              { id: 'trash', label: isEn ? 'Trash' : 'Thùng rác', icon: Trash2 },
-            ] as const
-          ).map((item) => {
-            const Icon = item.icon;
-            const active = navTab === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setNavTab(item.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
-                  active
-                    ? 'bg-[#00E5CC] text-[#071013]'
-                    : themeMode === 'light'
-                    ? 'bg-white border border-[#CBD5E1] text-[#334155]'
-                    : 'bg-[#181A22] border border-[#2B2E3C] text-[#A1A1AA]'
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5 shrink-0" />
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
+      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-4 md:space-y-6">
         {/* Top Launcher Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <img
               src="/assets/logo.png"
               alt="TDO CUT"
-              className="w-9 h-9 rounded-xl object-contain bg-white p-0.5 shadow-sm"
+              className="w-10 h-10 rounded-xl object-contain bg-white p-0.5 shadow-sm shrink-0"
             />
-            <div>
-              <h1 className={`text-base font-semibold tracking-tight ${
+            <div className="min-w-0 flex-1">
+              <h1 className={`text-base font-bold tracking-tight ${
                 themeMode === 'light' ? 'text-[#0F172A]' : 'text-white'
               }`}>
                 {isEn ? 'Projects' : 'Dự án'}
               </h1>
-              <p className="text-xs text-[#9CA3AF] leading-normal font-normal">
+              <p className="text-xs text-[#9CA3AF] leading-normal font-normal truncate sm:whitespace-normal">
                 {isEn
                   ? 'Start a new project or manage recent video edits'
                   : 'Khởi tạo dự án mới hoặc quản lý các bản dựng gần đây'}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
             {onToggleTheme && (
               <button
                 type="button"
                 onClick={onToggleTheme}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-normal border cursor-pointer transition-colors ${
+                className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-normal border cursor-pointer transition-colors ${
                   themeMode === 'light'
                     ? 'bg-white hover:bg-[#F1F5F9] border-[#CBD5E1] text-[#0F172A]'
                     : 'bg-[#181A22] hover:bg-[#20232E] border-[#2B2E3C] text-[#D1D5DB] hover:text-white'
@@ -445,7 +412,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
             <button
               type="button"
               onClick={activeProjectsList.length > 0 ? onBackToEditor : onCreateNewProject}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-[#00E5CC] hover:bg-[#00F5DC] text-[#090D12] rounded-lg cursor-pointer transition-colors shadow-xs"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-[#00E5CC] hover:bg-[#00F5DC] text-[#090D12] rounded-lg cursor-pointer transition-colors shadow-xs"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
               <span>{isEn ? 'Open Editor' : 'Mở trình dựng'}</span>
@@ -949,7 +916,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
             <div
               className={
                 viewMode === 'grid'
-                  ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4'
+                  ? 'grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 md:gap-4'
                   : 'flex flex-col gap-2'
               }
             >
@@ -972,7 +939,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                     {/* Project Cover Thumbnail */}
                     <div
                       onClick={() => !proj.isDeletedInTrash && onOpenProject(proj)}
-                      className={`h-28 p-3 flex flex-col justify-between cursor-pointer transition-colors ${
+                      className={`h-24 sm:h-28 p-2.5 sm:p-3 flex flex-col justify-between cursor-pointer transition-colors ${
                         themeMode === 'light'
                           ? 'bg-gradient-to-br from-[#E0F2FE] via-[#F0FDFA] to-[#CCFBF1] text-[#0F172A] border-b border-[#CBD5E1]'
                           : 'bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#0D9488] text-white/90'

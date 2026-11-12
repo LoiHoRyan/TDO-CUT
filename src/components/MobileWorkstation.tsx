@@ -433,19 +433,29 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     }
   };
 
-  // Auto-scroll timeline to keep playhead in view during playback or scrubbing
+  // Auto-scroll timeline smoothly to track playhead during playback without discrete jumps or touch fighting
   useEffect(() => {
     if (!timelineScrollRef.current) return;
+    if (isDraggingTimeline.current || isPinchingTimeline.current) return;
     const el = timelineScrollRef.current;
     const playheadPx = playheadSec * pxPerSec;
+
+    if (isPlaying) {
+      // Fluid, continuous forward gliding: track playhead at ~40% viewport without notchy steps
+      const targetScroll = playheadPx - el.clientWidth * 0.4;
+      el.scrollLeft = Math.max(0, targetScroll);
+      return;
+    }
+
+    // When paused / tapped: keep playhead visible comfortably
     const viewLeft = el.scrollLeft;
     const viewRight = el.scrollLeft + el.clientWidth;
-    if (playheadPx > viewRight - 40) {
-      el.scrollLeft = Math.max(0, playheadPx - el.clientWidth + 60);
-    } else if (playheadPx < viewLeft + 20) {
-      el.scrollLeft = Math.max(0, playheadPx - 20);
+    if (playheadPx > viewRight - 30) {
+      el.scrollLeft = Math.max(0, playheadPx - el.clientWidth * 0.5);
+    } else if (playheadPx < viewLeft + 30) {
+      el.scrollLeft = Math.max(0, playheadPx - el.clientWidth * 0.2);
     }
-  }, [playheadSec, pxPerSec]);
+  }, [playheadSec, pxPerSec, isPlaying]);
 
   // Click on a Transition Seam button '|' between clip i and clip i+1
   const handleOpenTransitionSeam = (clipId: string, seamTime: number) => {
@@ -528,7 +538,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
 
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-white/80 border border-white/10 text-[10px] font-mono">
-                <span>{aspectRatio}</span>
+                <span>{aspectRatio === 'original' ? (currentClip?.nativeAspectRatio || videoClips[0]?.nativeAspectRatio || 'Gốc') : aspectRatio}</span>
                 <span className="text-[#00E5CC] font-bold">{exportRes.toUpperCase()}</span>
               </div>
             </div>
@@ -1692,6 +1702,11 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
               {filteredStickers.map((stk) => {
                 const flagCode = stk.cat === 'flags' ? extractFlagIsoCode(stk.icon) : null;
                 const flagUrl = flagCode ? getFlagGraphicDataUrl(flagCode) : null;
+                const emojiMatch = stk.icon.match(/[\p{Emoji}\u200d]+/u);
+                const emojiPart = emojiMatch ? emojiMatch[0] : '✨';
+                const badgeText =
+                  stk.badgeText ||
+                  (stk.cat === 'cta' ? stk.icon.replace(/[\p{Emoji}\u200d]+/u, '').trim() : '');
 
                 return (
                   <button
@@ -1711,7 +1726,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                       );
                       setActiveDrawer(null);
                     }}
-                    className={`aspect-square rounded-2xl border p-2 flex flex-col items-center justify-center text-center cursor-pointer active:scale-90 transition-transform shadow-xs ${
+                    className={`aspect-square rounded-2xl border p-1.5 flex flex-col items-center justify-center text-center cursor-pointer active:scale-90 transition-transform shadow-xs ${
                       isLight
                         ? 'bg-[#F8FAFC] border-[#E2E8F0] hover:border-[#00E5CC]'
                         : 'bg-[#1E202B] border-[#2E3140] hover:border-[#00E5CC]'
@@ -1719,8 +1734,21 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   >
                     {flagUrl ? (
                       <img src={flagUrl} alt={stk.label} className="w-8 h-8 rounded object-cover shadow-xs" />
+                    ) : badgeText ? (
+                      <div className="flex flex-col items-center justify-center gap-0.5 max-w-full">
+                        <span className="text-lg leading-none">{emojiPart}</span>
+                        <span
+                          className="px-1.5 py-0.5 rounded text-[8px] font-black tracking-tight uppercase truncate max-w-[64px] leading-tight shadow-xs"
+                          style={{
+                            backgroundColor: stk.badgeBg || '#EF4444',
+                            color: '#FFFFFF',
+                          }}
+                        >
+                          {badgeText}
+                        </span>
+                      </div>
                     ) : (
-                      <span className="text-2xl">{stk.icon}</span>
+                      <span className="text-2xl leading-none">{stk.icon}</span>
                     )}
                     <span className="text-[9px] font-medium truncate w-full mt-1 leading-tight text-inherit">
                       {stk.label}
@@ -1760,11 +1788,27 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
               </button>
             </div>
 
+            {/* Direct Device / Google Drive Audio Picker Button */}
+            <div className="p-3 pb-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  onAddMedia('audio');
+                  setActiveDrawer(null);
+                }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#0284C7] to-[#00E5CC] text-white font-bold text-xs shadow-md active:scale-98 transition-transform cursor-pointer"
+              >
+                <FolderOpen className="w-4 h-4" />
+                <span>{isEn ? '📁 Pick Audio from Device / Google Drive' : '📁 Chọn tệp âm thanh từ thiết bị / Google Drive'}</span>
+              </button>
+            </div>
+
             {/* Category Tabs */}
             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar px-3 py-2 border-b border-inherit shrink-0">
               {(
                 [
                   { id: 'all', label: 'Tất cả' },
+                  { id: 'device', label: '📱 Bộ nhớ máy' },
                   { id: 'tiktok', label: '🔥 Viral TikTok' },
                   { id: 'bgm', label: '🎵 Nhạc nền BGM' },
                   { id: 'sfx', label: '⚡ Hiệu ứng SFX' },
@@ -1773,7 +1817,14 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                 <button
                   key={cat.id}
                   type="button"
-                  onClick={() => setAudioCategory(cat.id)}
+                  onClick={() => {
+                    if (cat.id === 'device') {
+                      onAddMedia('audio');
+                      setActiveDrawer(null);
+                    } else {
+                      setAudioCategory(cat.id);
+                    }
+                  }}
                   className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
                     audioCategory === cat.id
                       ? 'bg-[#00E5CC] text-[#071013]'
@@ -1970,14 +2021,20 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="grid grid-cols-5 gap-2 pt-4">
+            <div className="grid grid-cols-4 gap-2 pt-3 max-h-[50vh] overflow-y-auto">
               {(
                 [
-                  { id: '9:16', label: '9:16', sub: 'TikTok' },
+                  { id: 'original', label: 'Gốc', sub: 'Tự động' },
+                  { id: '9:16', label: '9:16', sub: 'TikTok/Reels' },
                   { id: '16:9', label: '16:9', sub: 'YouTube' },
                   { id: '1:1', label: '1:1', sub: 'Instagram' },
-                  { id: '4:3', label: '4:3', sub: 'TV' },
-                  { id: '21:9', label: '21:9', sub: 'Phim' },
+                  { id: '4:3', label: '4:3', sub: 'Cổ điển' },
+                  { id: '3:4', label: '3:4', sub: 'Chân dung' },
+                  { id: '21:9', label: '21:9', sub: 'Điện ảnh' },
+                  { id: '2.35:1', label: '2.35:1', sub: 'Scope' },
+                  { id: '1.85:1', label: '1.85:1', sub: 'Phim rạp' },
+                  { id: '2:1', label: '2:1', sub: 'Netflix' },
+                  { id: '5.8"', label: '5.8"', sub: 'Tràn viền' },
                 ] as const
               ).map((r) => (
                 <button
@@ -2199,30 +2256,42 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="py-3 space-y-3">
+            <div className="py-3 space-y-3.5 max-h-[60vh] overflow-y-auto pr-1">
               {[
-                { key: 'brightness', label: 'Độ sáng', min: -100, max: 100 },
-                { key: 'contrast', label: 'Tương phản', min: -100, max: 100 },
-                { key: 'saturation', label: 'Bão hòa', min: -100, max: 100 },
-                { key: 'warmth', label: 'Nhiệt độ màu', min: -100, max: 100 },
-              ].map((adj) => (
-                <div key={adj.key} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-[#94A3B8]">{adj.label}</span>
-                    <span className="font-mono text-[#00E5CC]">
-                      {(currentClip[adj.key as keyof TimelineClip] as number) ?? 0}
-                    </span>
+                { key: 'brightness', label: 'Độ sáng (Brightness)', min: -50, max: 50 },
+                { key: 'contrast', label: 'Độ tương phản (Contrast)', min: -50, max: 50 },
+                { key: 'saturation', label: 'Độ bão hòa màu (Saturation)', min: -50, max: 50 },
+                { key: 'warmth', label: 'Nhiệt độ màu (Warmth / Temp)', min: -50, max: 50 },
+                { key: 'tint', label: 'Sắc thái màu (Tint)', min: -50, max: 50 },
+                { key: 'highlight', label: 'Vùng sáng (Highlights)', min: -50, max: 50 },
+                { key: 'shadow', label: 'Vùng tối (Shadows)', min: -50, max: 50 },
+                { key: 'sharpen', label: 'Độ sắc nét (Sharpen)', min: 0, max: 100 },
+                { key: 'vignette', label: 'Viền tối góc (Vignette)', min: 0, max: 100 },
+                { key: 'opacity', label: 'Độ mờ đục (Opacity)', min: 0, max: 100, defaultVal: 100 },
+                { key: 'hslHue', label: 'Tông màu HSL (Hue)', min: -50, max: 50 },
+                { key: 'hslSat', label: 'Độ bão hòa HSL (Sat)', min: -50, max: 50 },
+                { key: 'hslBri', label: 'Độ sáng HSL (Lightness)', min: -50, max: 50 },
+              ].map((adj) => {
+                const currentVal = (currentClip[adj.key as keyof TimelineClip] as number) ?? adj.defaultVal ?? 0;
+                return (
+                  <div key={adj.key} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-[#94A3B8]">{adj.label}</span>
+                      <span className="font-mono text-[#00E5CC] font-bold">
+                        {currentVal}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={adj.min}
+                      max={adj.max}
+                      value={currentVal}
+                      onChange={(e) => onUpdateClipProp(adj.key, Number(e.target.value))}
+                      className="w-full accent-[#00E5CC] h-1.5 cursor-pointer"
+                    />
                   </div>
-                  <input
-                    type="range"
-                    min={adj.min}
-                    max={adj.max}
-                    value={(currentClip[adj.key as keyof TimelineClip] as number) ?? 0}
-                    onChange={(e) => onUpdateClipProp(adj.key, Number(e.target.value))}
-                    className="w-full accent-[#00E5CC] h-1.5 cursor-pointer"
-                  />
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

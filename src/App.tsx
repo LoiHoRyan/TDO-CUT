@@ -2877,6 +2877,9 @@ export default function App() {
     }
 
     const firstVideoItem = newMediaItems.find((m) => m.type === 'video' && m.nativeAspectRatio);
+    if (firstVideoItem?.nativeAspectRatio) {
+      setAspectRatio(firstVideoItem.nativeAspectRatio as AspectRatioOption);
+    }
 
     setMediaCards((prev) => [...newMediaItems, ...prev]);
     commitClips((prev) => {
@@ -5529,6 +5532,23 @@ export default function App() {
               antiDetectSpoof={antiDetect.spoofIphoneMeta}
               onTogglePlay={() => setIsPlaying((p) => !p)}
               onAspectRatioChange={setAspectRatio}
+              onDetectedClipDimensions={(clipId, width, height, detectedRatio) => {
+                setClips((prev) =>
+                  prev.map((c) =>
+                    c.id === clipId && (!c.mediaWidth || !c.mediaHeight || !c.nativeAspectRatio)
+                      ? {
+                          ...c,
+                          mediaWidth: c.mediaWidth || width,
+                          mediaHeight: c.mediaHeight || height,
+                          nativeAspectRatio: c.nativeAspectRatio || detectedRatio,
+                        }
+                      : c
+                  )
+                );
+                if (aspectRatio === 'original') {
+                  setAspectRatio(detectedRatio);
+                }
+              }}
               onStepFrame={(delta) =>
                 setPlayheadSec((s) => Math.max(0, s + delta / 30))
               }

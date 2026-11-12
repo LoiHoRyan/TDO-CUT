@@ -82,6 +82,8 @@ export const ASPECT_RATIO_PRESETS: Array<{
 ];
 
 interface VideoPreviewCanvasProps {
+  isMobile?: boolean;
+  hideTopBar?: boolean;
   hideBottomControls?: boolean;
   playheadSec: number;
   totalDurationSec: number;
@@ -174,6 +176,8 @@ const FILTER_PRESET_CSS: Record<string, string> = {
 };
 
 export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
+  isMobile = false,
+  hideTopBar = false,
   hideBottomControls = false,
   playheadSec,
   totalDurationSec,
@@ -775,8 +779,8 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
   };
 
   const { width: canvasW, height: canvasH } = getCanvasDimensions();
-  const availW = Math.max(120, stageSize.w - 16);
-  const availH = Math.max(90, stageSize.h - 16);
+  const availW = Math.max(120, stageSize.w - (isMobile || hideTopBar ? 0 : 16));
+  const availH = Math.max(90, stageSize.h - (isMobile || hideTopBar ? 0 : 16));
   const containedStageRect = computeObjectFitContainRect(availW, availH, canvasW, canvasH);
   const useWideStageFill = false;
   const fittedBoxW = Math.max(64, containedStageRect.width);
@@ -2624,6 +2628,144 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
     return activeVideoClip || activeSubtitleClip || activeOverlayClip;
   };
 
+  // Mobile Touch Gestures on Canvas: Pinch-to-zoom & pan video, 1-finger drag reposition, tap to play
+  const canvasTouchStateRef = useRef<{
+    isPinch: boolean;
+    initialPinchDist: number;
+    initialScale: number;
+    initialPosX: number;
+    initialPosY: number;
+    initialCenterX: number;
+    initialCenterY: number;
+    targetClipId?: string;
+    targetClipRotation?: number;
+    startX: number;
+    startY: number;
+    startTime: number;
+    hasMoved: boolean;
+  }>({
+    isPinch: false,
+    initialPinchDist: 0,
+    initialScale: 100,
+    initialPosX: 0,
+    initialPosY: 0,
+    initialCenterX: 0,
+    initialCenterY: 0,
+    startX: 0,
+    startY: 0,
+    startTime: 0,
+    hasMoved: false,
+  });
+
+  const handleCanvasTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    const target = getActiveSelectedCanvasClip();
+    if (e.touches.length === 2) {
+      // 2 fingers: Pinch to zoom video scale + pan
+      const t0 = e.touches[0];
+      const t1 = e.touches[1];
+      const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+      const cx = (t0.clientX + t1.clientX) / 2;
+      const cy = (t0.clientY + t1.clientY) / 2;
+      canvasTouchStateRef.current = {
+        isPinch: true,
+        initialPinchDist: Math.max(10, dist),
+        initialScale: target?.scale ?? 100,
+        initialPosX: target?.posX ?? 0,
+        initialPosY: target?.posY ?? 0,
+        initialCenterX: cx,
+        initialCenterY: cy,
+        targetClipId: target?.id,
+        targetClipRotation: target?.rotation ?? 0,
+        startX: cx,
+        startY: cy,
+        startTime: Date.now(),
+        hasMoved: false,
+      };
+      if (target) {
+        onSelectClipFromCanvas?.(target.id);
+        setShowCanvasBoundingBox(true);
+      }
+    } else if (e.touches.length === 1) {
+      // 1 finger: Drag video position or Tap to play
+      const t0 = e.touches[0];
+      canvasTouchStateRef.current = {
+        isPinch: false,
+        initialPinchDist: 0,
+        initialScale: target?.scale ?? 100,
+        initialPosX: target?.posX ?? 0,
+        initialPosY: target?.posY ?? 0,
+        initialCenterX: t0.clientX,
+        initialCenterY: t0.clientY,
+        targetClipId: target?.id,
+        targetClipRotation: target?.rotation ?? 0,
+        startX: t0.clientX,
+        startY: t0.clientY,
+        startTime: Date.now(),
+        hasMoved: false,
+      };
+    }
+  };
+
+  const handleCanvasTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    const st = canvasTouchStateRef.current;
+    if (e.touches.length === 2 && st.isPinch && st.targetClipId) {
+      if (e.cancelable) e.preventDefault();
+      const t0 = e.touches[0];
+      const t1 = e.touches[1];
+      const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+      const cx = (t0.clientX + t1.clientX) / 2;
+      const cy = (t0.clientY + t1.clientY) / 2;
+
+      const scaleRatio = dist / Math.max(10, st.initialPinchDist);
+      const newScale = Math.round(Math.max(15, Math.min(500, st.initialScale * scaleRatio)));
+
+      const dx = cx - st.initialCenterX;
+      const dy = cy - st.initialCenterY;
+      const scaleRatioX = canvasW / Math.max(120, fittedBoxW);
+      const scaleRatioY = canvasH / Math.max(90, fittedBoxH);
+      const nextX = Math.round(st.initialPosX + dx * scaleRatioX);
+      const nextY = Math.round(st.initialPosY + dy * scaleRatioY);
+
+      st.hasMoved = true;
+      scheduleDragTransformUpdate(st.targetClipId, nextX, nextY, newScale, st.targetClipRotation);
+    } else if (e.touches.length === 1 && !st.isPinch && st.targetClipId) {
+      const t0 = e.touches[0];
+      const dx = t0.clientX - st.startX;
+      const dy = t0.clientY - st.startY;
+      if (Math.hypot(dx, dy) > 8) {
+        if (e.cancelable) e.preventDefault();
+        st.hasMoved = true;
+        const scaleRatioX = canvasW / Math.max(120, fittedBoxW);
+        const scaleRatioY = canvasH / Math.max(90, fittedBoxH);
+        const nextX = Math.round(st.initialPosX + dx * scaleRatioX);
+        const nextY = Math.round(st.initialPosY + dy * scaleRatioY);
+        scheduleDragTransformUpdate(st.targetClipId, nextX, nextY, st.initialScale, st.targetClipRotation);
+      }
+    }
+  };
+
+  const handleCanvasTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    const st = canvasTouchStateRef.current;
+    if (st.hasMoved && st.targetClipId) {
+      const finalDrag = pendingDragTransformRef.current;
+      if (finalDrag) {
+        applyClipTransform(
+          finalDrag.clipId,
+          finalDrag.posX,
+          finalDrag.posY,
+          finalDrag.scale,
+          finalDrag.rotation
+        );
+      }
+    } else if (!st.hasMoved && Date.now() - st.startTime < 350) {
+      // Tap without moving -> toggle play (suppress duplicate synthetic click)
+      if (e.cancelable) e.preventDefault();
+      onTogglePlay();
+    }
+    canvasTouchStateRef.current.isPinch = false;
+    canvasTouchStateRef.current.hasMoved = false;
+  };
+
   // Direct Canvas Mouse Dragging: Hit-test Text/Subtitle, Sticker, Overlay PIP, or Main Video to select, move, resize, or rotate
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -2966,14 +3108,27 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
     <section
       ref={previewContainerRef}
       aria-label="Màn hình Xem Trước (Player)"
-      className="flex flex-col h-full bg-[#18181C] border border-[#2B2B30] rounded overflow-hidden select-none"
+      className={`flex flex-col h-full overflow-hidden select-none ${
+        isMobile || hideTopBar
+          ? 'bg-black border-0 rounded-none'
+          : 'bg-[#18181C] border border-[#2B2B30] rounded'
+      }`}
     >
       {/* Offscreen <video> (double-buffered V1 + PIP overlay) and <audio> elements for real hardware media decoding & audio playback */}
       <video
         ref={videoElRef}
         data-player-video="true"
-        className="fixed -left-[9999px] -top-[9999px] w-px h-px opacity-0 pointer-events-none"
-        playsInline
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: 16,
+          height: 16,
+          opacity: 0.001,
+          pointerEvents: 'none',
+          zIndex: -100,
+        }}
+        playsInline={true}
         preload="auto"
         onLoadedMetadata={(e) => {
           const vid = e.currentTarget;
@@ -3022,8 +3177,17 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
       <video
         ref={nextVideoElRef}
         data-player-next-video="true"
-        className="fixed -left-[9999px] -top-[9999px] w-px h-px opacity-0 pointer-events-none"
-        playsInline
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: 16,
+          height: 16,
+          opacity: 0.001,
+          pointerEvents: 'none',
+          zIndex: -100,
+        }}
+        playsInline={true}
         muted
         preload="auto"
         onLoadedMetadata={(e) => {
@@ -3039,8 +3203,17 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
       <video
         ref={pipVideoElRef}
         data-player-pip-video="true"
-        className="fixed -left-[9999px] -top-[9999px] w-px h-px opacity-0 pointer-events-none"
-        playsInline
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: 16,
+          height: 16,
+          opacity: 0.001,
+          pointerEvents: 'none',
+          zIndex: -100,
+        }}
+        playsInline={true}
         preload="auto"
         onLoadedData={() => setVideoFrameReadyTick((t) => t + 1)}
         onSeeked={() => setVideoFrameReadyTick((t) => t + 1)}
@@ -3049,72 +3222,83 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
       <audio
         ref={audioElRef}
         data-player-audio="true"
-        className="fixed -left-[9999px] -top-[9999px] w-px h-px opacity-0 pointer-events-none"
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: 16,
+          height: 16,
+          opacity: 0.001,
+          pointerEvents: 'none',
+          zIndex: -100,
+        }}
         preload="auto"
       />
 
-      {/* Top Player Header Bar + ≡ Hamburger Menu */}
-      <div className="flex items-center justify-between px-3 h-7 border-b border-[#2B2B30] shrink-0 relative">
-        <span className="text-[11px] font-medium text-[#D4D4D8] truncate">
-          Trình phát-Dòng thời gian 01
-        </span>
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-[#00E5CC]" />
-          <button
-            type="button"
-            onClick={() => setShowPlayerMenu((v) => !v)}
-            title="Menu Màn hình Player (≡)"
-            className="p-1 text-[#8E8E93] hover:text-white rounded cursor-pointer"
-          >
-            <Menu className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        {/* CapCut PC Player ≡ Dropdown Menu */}
-        {showPlayerMenu && (
-          <div className="absolute top-7 right-2 z-40 w-60 bg-[#1F212A] border border-[#363948] rounded-md shadow-2xl py-1 text-xs text-[#E4E4E7]">
+      {/* Top Player Header Bar + ≡ Hamburger Menu (Desktop only, hidden on mobile for edge-to-edge canvas) */}
+      {!hideTopBar && !isMobile && (
+        <div className="flex items-center justify-between px-3 h-7 border-b border-[#2B2B30] shrink-0 relative">
+          <span className="text-[11px] font-medium text-[#D4D4D8] truncate">
+            Trình phát-Dòng thời gian 01
+          </span>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#00E5CC]" />
             <button
               type="button"
-              onClick={() => {
-                onExportStillFrame?.();
-                setShowPlayerMenu(false);
-              }}
-              className="w-full px-3 py-1.5 text-left hover:bg-[#2B2E3B] flex items-center gap-2 cursor-pointer"
+              onClick={() => setShowPlayerMenu((v) => !v)}
+              title="Menu Màn hình Player (≡)"
+              className="p-1 text-[#8E8E93] hover:text-white rounded cursor-pointer"
             >
-              <Camera className="w-3.5 h-3.5 text-[#00E5CC]" />
-              <span>Export still frame (Chụp ảnh tĩnh .PNG)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowScopes((s) => !s);
-                setShowPlayerMenu(false);
-              }}
-              className="w-full px-3 py-1.5 text-left hover:bg-[#2B2E3B] flex items-center justify-between cursor-pointer"
-            >
-              <span className="flex items-center gap-2">
-                <Activity className="w-3.5 h-3.5 text-[#00E5CC]" />
-                <span>Show scopes (Biểu đồ sóng màu)</span>
-              </span>
-              {showScopes && <span className="text-[#00E5CC] font-bold">✓</span>}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowSafeArea((s) => !s);
-                setShowPlayerMenu(false);
-              }}
-              className="w-full px-3 py-1.5 text-left hover:bg-[#2B2E3B] flex items-center justify-between cursor-pointer"
-            >
-              <span className="flex items-center gap-2">
-                <Grid className="w-3.5 h-3.5 text-[#00E5CC]" />
-                <span>Show safe area (Khung TikTok &amp; Lưới)</span>
-              </span>
-              {showSafeArea && <span className="text-[#00E5CC] font-bold">✓</span>}
+              <Menu className="w-3.5 h-3.5" />
             </button>
           </div>
-        )}
-      </div>
+
+          {/* CapCut PC Player ≡ Dropdown Menu */}
+          {showPlayerMenu && (
+            <div className="absolute top-7 right-2 z-40 w-60 bg-[#1F212A] border border-[#363948] rounded-md shadow-2xl py-1 text-xs text-[#E4E4E7]">
+              <button
+                type="button"
+                onClick={() => {
+                  onExportStillFrame?.();
+                  setShowPlayerMenu(false);
+                }}
+                className="w-full px-3 py-1.5 text-left hover:bg-[#2B2E3B] flex items-center gap-2 cursor-pointer"
+              >
+                <Camera className="w-3.5 h-3.5 text-[#00E5CC]" />
+                <span>Export still frame (Chụp ảnh tĩnh .PNG)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowScopes((s) => !s);
+                  setShowPlayerMenu(false);
+                }}
+                className="w-full px-3 py-1.5 text-left hover:bg-[#2B2E3B] flex items-center justify-between cursor-pointer"
+              >
+                <span className="flex items-center gap-2">
+                  <Activity className="w-3.5 h-3.5 text-[#00E5CC]" />
+                  <span>Show scopes (Biểu đồ sóng màu)</span>
+                </span>
+                {showScopes && <span className="text-[#00E5CC] font-bold">✓</span>}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSafeArea((s) => !s);
+                  setShowPlayerMenu(false);
+                }}
+                className="w-full px-3 py-1.5 text-left hover:bg-[#2B2E3B] flex items-center justify-between cursor-pointer"
+              >
+                <span className="flex items-center gap-2">
+                  <Grid className="w-3.5 h-3.5 text-[#00E5CC]" />
+                  <span>Show safe area (Khung TikTok &amp; Lưới)</span>
+                </span>
+                {showSafeArea && <span className="text-[#00E5CC] font-bold">✓</span>}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Main Canvas Stage with Direct Mouse Drag, Wheel Resize, and Right-Click Context Menu */}
       <div
@@ -3136,7 +3320,9 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
         onMouseLeave={handleCanvasMouseUp}
         onWheel={handleCanvasWheel}
         data-keep-dark="true"
-        className="relative flex-1 w-full h-full bg-[#0D0E12] overflow-hidden min-h-0 min-w-0 group"
+        className={`relative flex-1 w-full h-full overflow-hidden min-h-0 min-w-0 group ${
+          isMobile || hideTopBar ? 'bg-black' : 'bg-[#0D0E12]'
+        }`}
       >
         {/* Right-Click Context Menu on Video Canvas */}
         {canvasContextMenu && (
@@ -3293,7 +3479,9 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setShowCanvasBoundingBox(false);
           }}
-          className="absolute inset-2 flex items-center justify-center overflow-hidden"
+          className={`absolute flex items-center justify-center overflow-hidden ${
+            isMobile || hideTopBar ? 'inset-0' : 'inset-2'
+          }`}
         >
           <div
             ref={canvasFrameRef}
@@ -3308,13 +3496,21 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                   ? 'scale(1.18)'
                   : 'scale(1)',
             }}
-            className="relative flex items-center justify-center shadow-lg rounded-md overflow-hidden border border-[#27272D] transition-transform"
+            className={`relative flex items-center justify-center overflow-hidden transition-transform ${
+              isMobile || hideTopBar
+                ? 'border-0 rounded-none shadow-none'
+                : 'shadow-lg rounded-md border border-[#27272D]'
+            }`}
           >
             <canvas
               ref={canvasRef}
               width={canvasW}
               height={canvasH}
               onMouseDown={handleCanvasMouseDown}
+              onTouchStart={handleCanvasTouchStart}
+              onTouchMove={handleCanvasTouchMove}
+              onTouchEnd={handleCanvasTouchEnd}
+              onTouchCancel={handleCanvasTouchEnd}
               onDoubleClick={() => {
                 const target = getActiveSelectedCanvasClip();
                 if (target && (target.subtitleText || target.stickerEmoji || target.trackIndex === 2)) {
@@ -3337,8 +3533,9 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 height: '100%',
                 aspectRatio: useWideStageFill ? undefined : `${canvasW} / ${canvasH}`,
                 objectFit: useWideStageFill ? 'fill' : 'contain',
+                touchAction: 'none',
               }}
-              className="w-full h-full block cursor-move"
+              className="w-full h-full block cursor-move select-none"
             />
 
             {/* Inline On-Canvas Text Input Overlay (Double-click text or sticker on canvas) */}

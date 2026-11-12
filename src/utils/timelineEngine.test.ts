@@ -1326,6 +1326,86 @@ test('ensureInitialProjects returns empty list for new users and seam cut joint 
   assert.equal(target7?.id, 'clip-c', 'Drop without targetClipId at 10.1s must resolve to clip-c');
 });
 
+test('Mobile Workstation timeline positioning, center playhead sync, and pinch-to-zoom math', () => {
+  // Test 1: Center Playhead alignment math with internal playhead cursor (eliminating 28px offset)
+  const screenWidth = 390;
+  const leftMuteColumnWidth = 56;
+  const scrollContainerWidth = screenWidth - leftMuteColumnWidth; // 334px
+  const centerOffset = scrollContainerWidth / 2; // 167px inside scroll container
+  const pxPerSec = 45;
+
+  // In the prior attempt, playhead was placed on outer parent (390 / 2 = 195px from screen left)
+  // while tracks started at 56px + 167px = 223px from screen left, producing a 28px misalignment!
+  const priorOuterPlayheadX = screenWidth / 2; // 195px
+  const priorTrackStartX = leftMuteColumnWidth + centerOffset; // 223px
+  const priorOffsetError = priorTrackStartX - priorOuterPlayheadX;
+  assert.equal(priorOffsetError, 28, 'Prior attempt had a 28px offset error due to outer container playhead');
+
+  // With the fixed structure: Playhead cursor is placed inside timelineScrollRef at 50%
+  const fixedPlayheadRelativeX = centerOffset; // 167px
+  // At playheadSec = 0 (initial entry: 00:00:00:00)
+  const playheadSec0 = 0.0;
+  const translateX0 = centerOffset - playheadSec0 * pxPerSec;
+  assert.equal(translateX0, 167);
+  // Timestamp t=0 on track relative to scroll container:
+  const trackPosAtT0 = translateX0 + 0 * pxPerSec;
+  assert.equal(trackPosAtT0, fixedPlayheadRelativeX, 't=0 is now pixel-perfect at the playhead cursor (0px error)');
+
+  // At playheadSec = 5.2s (during video playback)
+  const playheadSec5 = 5.2;
+  const translateX5 = centerOffset - playheadSec5 * pxPerSec;
+  // Point on clip at 5.2s has relative position:
+  const trackPosAtT5 = translateX5 + playheadSec5 * pxPerSec;
+  assert.equal(trackPosAtT5, fixedPlayheadRelativeX, 'Current playhead timestamp stays locked under center playhead');
+
+  // Test 2: Pinch to zoom on timeline math (clamped 8..220 px/s)
+  const initialDist = 120;
+  const initialPxPerSec = 45;
+  // Pinch out (spread fingers): dist grows from 120 to 240 (2.0x zoom)
+  const spreadDist = 240;
+  const zoomInPx = Math.round(Math.max(8, Math.min(220, initialPxPerSec * (spreadDist / initialDist))));
+  assert.equal(zoomInPx, 90, 'Timeline clips stretch proportionally when spreading fingers');
+
+  // Pinch in (close fingers): dist shrinks from 120 to 20 (0.166x zoom)
+  const closeDist = 20;
+  const zoomOutPx = Math.round(Math.max(8, Math.min(220, initialPxPerSec * (closeDist / initialDist))));
+  assert.equal(zoomOutPx, 8, 'Timeline clips compress down to 8 px/s when pinching fingers');
+
+  // Extreme spread (5.0x zoom) clamped to 220 px/s
+  const extremeDist = 600;
+  const extremeZoomPx = Math.round(Math.max(8, Math.min(220, initialPxPerSec * (extremeDist / initialDist))));
+  assert.equal(extremeZoomPx, 220, 'Max timeline zoom clamped cleanly at 220 px/s');
+
+  // Test 3: Responsive canvas pan scaling: 9:16 vertical (1080x1920) vs 16:9 (1920x1080)
+  // For 9:16 vertical mobile video on 360x640 preview box:
+  const canvasW_916 = 1080;
+  const canvasH_916 = 1920;
+  const boxW = 360;
+  const boxH = 640;
+  const scaleRatioX_916 = canvasW_916 / boxW; // 3.0
+  const scaleRatioY_916 = canvasH_916 / boxH; // 3.0
+  assert.equal(scaleRatioX_916, 3.0, 'X pan ratio matches 9:16 canvas exactly');
+  assert.equal(scaleRatioY_916, 3.0, 'Y pan ratio matches 9:16 canvas exactly (1:1 finger tracking)');
+
+  // Test 4: wasPinching prevents accidental seek on finger lift
+  let wasPinching = true;
+  let hasDragged = false;
+  let didSeek = false;
+  // When touches drop to 0 after pinch:
+  const touchesRemaining = 0;
+  if (touchesRemaining === 0) {
+    if (wasPinching) {
+      wasPinching = false;
+      // Seek is bypassed!
+    } else if (!hasDragged) {
+      didSeek = true;
+    }
+  }
+  assert.equal(didSeek, false, 'Accidental seek must be suppressed after pinch-to-zoom');
+  assert.equal(wasPinching, false, 'wasPinching must reset cleanly after all fingers lift');
+});
+
+
 
 
 

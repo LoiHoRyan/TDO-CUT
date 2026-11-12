@@ -844,6 +844,8 @@ function CapCutCropModal({ clip, onClose, onConfirm }: CapCutCropModalProps) {
 export default function App() {
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const mediaInputRef = useRef<HTMLInputElement | null>(null);
+  const videoInputRef = useRef<HTMLInputElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
   const srtInputRef = useRef<HTMLInputElement | null>(null);
   const overlayInputRef = useRef<HTMLInputElement | null>(null);
@@ -2610,10 +2612,30 @@ export default function App() {
         width?: number;
         height?: number;
       }>((resolve) => {
+        let settled = false;
+        let detectedDuration = 5.0;
+        let detectedW = 1920;
+        let detectedH = 1080;
+
+        const safeResolve = (val: {
+          duration: number;
+          thumb?: string;
+          width?: number;
+          height?: number;
+        }) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutId);
+          resolve(val);
+        };
+        const timeoutId = setTimeout(() => {
+          safeResolve({ duration: detectedDuration, width: detectedW, height: detectedH });
+        }, 3200);
+
         if (isImage) {
           const img = new Image();
           img.onload = () => {
-            resolve({
+            safeResolve({
               duration: defaultImageDuration || 5.0,
               thumb: objectUrl,
               width: img.naturalWidth || 1920,
@@ -2621,7 +2643,7 @@ export default function App() {
             });
           };
           img.onerror = () =>
-            resolve({
+            safeResolve({
               duration: defaultImageDuration || 5.0,
               thumb: objectUrl,
               width: 1920,
@@ -2633,12 +2655,12 @@ export default function App() {
           aud.preload = 'metadata';
           aud.src = objectUrl;
           aud.onloadedmetadata = () => {
-            resolve({
+            safeResolve({
               duration:
                 Number.isFinite(aud.duration) && aud.duration > 0 ? aud.duration : 12.0,
             });
           };
-          aud.onerror = () => resolve({ duration: 12.0 });
+          aud.onerror = () => safeResolve({ duration: 12.0 });
         } else {
           const vid = document.createElement('video');
           vid.preload = 'auto';
@@ -2646,20 +2668,42 @@ export default function App() {
           vid.playsInline = true;
           vid.src = objectUrl;
           let retriedBrightFrame = false;
-          vid.onloadeddata = () => {
+
+          vid.onloadedmetadata = () => {
             if (Number.isFinite(vid.duration) && vid.duration > 0) {
-              const dur = vid.duration;
-              const safeMax = Math.max(0.05, dur - 0.1);
-              vid.currentTime = Math.min(Math.max(0.1, dur * 0.18), safeMax);
-            } else {
-              vid.currentTime = 0.08;
+              detectedDuration = vid.duration;
+            }
+            if (vid.videoWidth > 0 && vid.videoHeight > 0) {
+              detectedW = vid.videoWidth;
+              detectedH = vid.videoHeight;
+            }
+            const safeSeek = Math.min(
+              Math.max(0.1, detectedDuration * 0.18),
+              Math.max(0.05, detectedDuration - 0.1)
+            );
+            try {
+              vid.currentTime = safeSeek;
+            } catch {
+              // Ignore initial seek
             }
           };
+
+          vid.onloadeddata = () => {
+            if (Number.isFinite(vid.duration) && vid.duration > 0) {
+              detectedDuration = vid.duration;
+              const safeMax = Math.max(0.05, detectedDuration - 0.1);
+              vid.currentTime = Math.min(Math.max(0.1, detectedDuration * 0.18), safeMax);
+            }
+          };
+
           vid.onseeked = () => {
             try {
-              const dur = Number.isFinite(vid.duration) && vid.duration > 0 ? vid.duration : 5.0;
-              const vw = vid.videoWidth || 1920;
-              const vh = vid.videoHeight || 1080;
+              const dur =
+                Number.isFinite(vid.duration) && vid.duration > 0
+                  ? vid.duration
+                  : detectedDuration;
+              const vw = vid.videoWidth || detectedW;
+              const vh = vid.videoHeight || detectedH;
               const c = document.createElement('canvas');
               c.width = vw >= vh ? 320 : 180;
               c.height = vw >= vh ? 180 : 320;
@@ -2683,22 +2727,26 @@ export default function App() {
                   }
                 }
               }
-              resolve({
+              safeResolve({
                 duration: dur,
                 thumb: c.toDataURL('image/jpeg', 0.85),
                 width: vw,
                 height: vh,
               });
             } catch {
-              resolve({
-                duration:
-                  Number.isFinite(vid.duration) && vid.duration > 0 ? vid.duration : 5.0,
-                width: vid.videoWidth || 1920,
-                height: vid.videoHeight || 1080,
+              safeResolve({
+                duration: detectedDuration,
+                width: detectedW,
+                height: detectedH,
               });
             }
           };
-          vid.onerror = () => resolve({ duration: 5.0, width: 1920, height: 1080 });
+          vid.onerror = () => safeResolve({ duration: detectedDuration, width: detectedW, height: detectedH });
+          try {
+            vid.load();
+          } catch {
+            // Ignore load error
+          }
         }
       });
 
@@ -4606,10 +4654,26 @@ export default function App() {
         className="hidden"
       />
       <input
+        ref={videoInputRef}
+        type="file"
+        multiple
+        accept="video/*,video/mp4,video/quicktime,video/webm,video/3gpp,video/x-matroska,.mp4,.mov,.webm,.m4v,.3gp,.mkv"
+        onChange={handleImportRealFiles}
+        className="hidden"
+      />
+      <input
+        ref={imageInputRef}
+        type="file"
+        multiple
+        accept="image/*,image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp"
+        onChange={handleImportRealFiles}
+        className="hidden"
+      />
+      <input
         ref={audioInputRef}
         type="file"
         multiple
-        accept="audio/*"
+        accept="audio/*,audio/mpeg,audio/wav,audio/aac,audio/mp4,audio/ogg,.mp3,.wav,.m4a,.aac,.ogg"
         onChange={handleImportRealFiles}
         className="hidden"
       />
@@ -5390,7 +5454,12 @@ export default function App() {
           }}
           onExitToHome={() => setActiveView('home')}
           onOpenExport={() => setIsExportModalOpen(true)}
-          onAddMedia={() => mediaInputRef.current?.click()}
+          onAddMedia={(targetType) => {
+            if (targetType === 'video') videoInputRef.current?.click();
+            else if (targetType === 'image') imageInputRef.current?.click();
+            else if (targetType === 'audio') audioInputRef.current?.click();
+            else mediaInputRef.current?.click();
+          }}
           onTrimStartToPlayhead={() =>
             commitClips((prev) =>
               trimClipStartToPlayhead(prev, playheadSec, selectedClipId, snapEnabled)
@@ -5431,6 +5500,8 @@ export default function App() {
           }}
           renderPlayer={() => (
             <VideoPreviewCanvas
+              isMobile={true}
+              hideTopBar={true}
               hideBottomControls={true}
               playheadSec={playheadSec}
               totalDurationSec={totalTimelineDuration}
@@ -5463,6 +5534,40 @@ export default function App() {
                 setSelectedClipId(clipId);
                 setSelectedClipIds([clipId]);
                 setInspectorMode('clip');
+              }}
+              onDirectTransformChange={(posX, posY, scale, rotation, flipH, flipV) => {
+                const targetId = selectedClipId || activeVideoClip?.id;
+                if (!targetId) return;
+                commitClips((prev) =>
+                  prev.map((c) =>
+                    c.id === targetId
+                      ? {
+                          ...c,
+                          posX,
+                          posY,
+                          ...(scale !== undefined ? { scale } : {}),
+                          ...(rotation !== undefined ? { rotation } : {}),
+                          ...(flipH !== undefined ? { flipH } : {}),
+                          ...(flipV !== undefined ? { flipV } : {}),
+                        }
+                      : c
+                  )
+                );
+              }}
+              onUpdateSpecificClipTransform={(clipId, posX, posY, scale, rotation) => {
+                commitClips((prev) =>
+                  prev.map((c) =>
+                    c.id === clipId
+                      ? {
+                          ...c,
+                          posX,
+                          posY,
+                          ...(scale !== undefined ? { scale } : {}),
+                          ...(rotation !== undefined ? { rotation } : {}),
+                        }
+                      : c
+                  )
+                );
               }}
             />
           )}

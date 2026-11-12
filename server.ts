@@ -5,8 +5,18 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-
 import { createReadStream } from 'node:fs';
+
+import {
+  initPostgresDatabase,
+  getPostgresStatus,
+  getAllProjectsFromDb,
+  getProjectByIdFromDb,
+  upsertProjectToDb,
+  deleteProjectFromDb,
+  setProjectTrashStatusInDb,
+  duplicateProjectInDb,
+} from './src/server/db';
 
 interface MediaFileMeta {
   index: number;
@@ -256,6 +266,15 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // JSON Body Parser for PostgreSQL Project payloads & metadata
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+  // Initialize PostgreSQL connection and schema on startup
+  initPostgresDatabase().catch((err) => {
+    console.warn('[PostgreSQL Startup Init]:', err.message);
+  });
+
   // Periodic cleanup for stale export jobs older than 30 minutes
   setInterval(() => {
     const now = Date.now();
@@ -273,6 +292,93 @@ async function startServer() {
       }
     }
   }, 5 * 60 * 1000);
+
+  // ========================================================================
+  // POSTGRESQL DATABASE API ENDPOINTS
+  // ========================================================================
+
+  // Database Connection Health & Info
+  app.get('/api/db/status', async (_req: express.Request, res: express.Response) => {
+    try {
+      const status = await getPostgresStatus();
+      res.json(status);
+    } catch (err: any) {
+      res.status(500).json({ connected: false, error: err.message, engine: 'postgresql' });
+    }
+  });
+
+  // GET All Projects from PostgreSQL
+  app.get('/api/projects', async (_req: express.Request, res: express.Response) => {
+    try {
+      const projects = await getAllProjectsFromDb();
+      res.json({ ok: true, data: projects, engine: 'postgresql' });
+    } catch (err: any) {
+      res.status(503).json({ ok: false, error: err.message, engine: 'fallback' });
+    }
+  });
+
+  // GET Single Project by ID
+  app.get('/api/projects/:id', async (req: express.Request, res: express.Response) => {
+    try {
+      const project = await getProjectByIdFromDb(req.params.id);
+      if (!project) {
+        return res.status(404).json({ ok: false, error: 'Project not found' });
+      }
+      res.json({ ok: true, data: project, engine: 'postgresql' });
+    } catch (err: any) {
+      res.status(503).json({ ok: false, error: err.message });
+    }
+  });
+
+  // POST Save / Upsert Project in PostgreSQL
+  app.post('/api/projects', async (req: express.Request, res: express.Response) => {
+    try {
+      const project = req.body;
+      if (!project || !project.id || !project.name) {
+        return res.status(400).json({ ok: false, error: 'Invalid project payload' });
+      }
+      await upsertProjectToDb(project);
+      res.json({ ok: true, message: 'Project saved to PostgreSQL successfully', engine: 'postgresql' });
+    } catch (err: any) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // DELETE Project permanently from PostgreSQL
+  app.delete('/api/projects/:id', async (req: express.Request, res: express.Response) => {
+    try {
+      await deleteProjectFromDb(req.params.id);
+      res.json({ ok: true, message: 'Project deleted permanently from PostgreSQL' });
+    } catch (err: any) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // PUT Move Project to / from Trash in PostgreSQL
+  app.put('/api/projects/:id/trash', async (req: express.Request, res: express.Response) => {
+    try {
+      const { isDeletedInTrash } = req.body;
+      await setProjectTrashStatusInDb(req.params.id, Boolean(isDeletedInTrash));
+      res.json({ ok: true, message: 'Project trash status updated in PostgreSQL' });
+    } catch (err: any) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // POST Duplicate Project in PostgreSQL
+  app.post('/api/projects/:id/duplicate', async (req: express.Request, res: express.Response) => {
+    try {
+      const newId = req.body?.newId || `project_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      const copyLabel = req.body?.copyLabel || 'Bản sao';
+      const duplicated = await duplicateProjectInDb(req.params.id, newId, copyLabel);
+      if (!duplicated) {
+        return res.status(404).json({ ok: false, error: 'Source project not found' });
+      }
+      res.json({ ok: true, data: duplicated, engine: 'postgresql' });
+    } catch (err: any) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
 
   let ffmpegAvailableCache: boolean | null = null;
   app.get('/api/app-info', (_req: express.Request, res: express.Response) => {

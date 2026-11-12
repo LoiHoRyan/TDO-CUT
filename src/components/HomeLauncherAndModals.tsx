@@ -31,6 +31,7 @@ import {
   Moon,
   UploadCloud,
   Image as ImageIcon,
+  Database,
 } from 'lucide-react';
 import {
   SubProjectItem,
@@ -1749,6 +1750,28 @@ export const SystemSettingsModal: React.FC<SystemSettingsModalProps> = ({
                   onChange={(e) => onChangeDefaultImageDuration(Number(e.target.value))}
                   className="w-20 px-2 py-1 bg-[#141418] border border-[#2B2B34] rounded font-mono text-white text-right"
                 />
+              </div>
+
+              {/* PostgreSQL Database Storage Engine Card */}
+              <div className="p-3 bg-[#141418] border border-[#2B2B34] rounded-md space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-semibold text-white">
+                    <Database className="w-3.5 h-3.5 text-[#00E5CC]" />
+                    <span>
+                      {language === 'en'
+                        ? 'Database Engine:'
+                        : 'Hệ thống Lưu trữ Cơ sở Dữ liệu:'}
+                    </span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#00E5CC]/15 text-[#00E5CC] border border-[#00E5CC]/40 font-mono">
+                    PostgreSQL (ACID + JSONB)
+                  </span>
+                </div>
+                <div className="text-[10.5px] text-[#9CA3AF] leading-relaxed">
+                  {language === 'en'
+                    ? 'Projects, clips, and timeline states are securely persisted to PostgreSQL. Unlimited storage quota, multi-device synchronization, and zero data loss on browser cache cleanup.'
+                    : 'Dự án, dòng thời gian và các clip được lưu kiên cố vào PostgreSQL. Không bị giới hạn 5MB như local storage, không lo mất khi dọn dẹp trình duyệt và hỗ trợ đồng bộ đa thiết bị an toàn 100%.'}
+                </div>
               </div>
             </div>
           )}

@@ -1,4 +1,4 @@
-# TDO CUT — Multimedia Video Editing Software & PyQt6 Engine
+# TDO CUT — Multimedia Video Editing Software
 
 A multi-layered video editing application featuring a 4-zone layout (Home Launcher, 9 Resource Tabs, Keyframes, Speed ​​Curves, HSL, and a Multi-Track Timeline), built on a hybrid architecture combining C++, PyQt6, and FFmpeg CLI.
 
@@ -27,3 +27,4 @@ A multi-layered video editing application featuring a 4-zone layout (Home Launch
    ```bash
    npm run build
    ```
+   <img width="1254" height="1254" alt="logo" src="https://github.com/user-attachments/assets/5aed6702-6218-402e-8bd9-b22f4cc6c730" />

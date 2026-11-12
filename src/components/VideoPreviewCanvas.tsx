@@ -1940,11 +1940,11 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
         ctx.restore();
       }
 
-      // Vignette overlay
+      // Vignette overlay (supports dark vignette > 0 and white halo vignette < 0)
       const totalVignette =
         (activeVideoClip.vignette || 0) +
         (globalAdjustments?.enabled ? globalAdjustments.vignette : 0);
-      if (totalVignette > 0) {
+      if (Math.abs(totalVignette) > 0.001) {
         const rad = ctx.createRadialGradient(
           w / 2,
           h / 2,
@@ -1953,8 +1953,10 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
           h / 2,
           w * 0.65
         );
-        rad.addColorStop(0, 'rgba(0,0,0,0)');
-        rad.addColorStop(1, `rgba(0,0,0,${Math.min(0.92, totalVignette / 100)})`);
+        const color = totalVignette > 0 ? '0,0,0' : '255,255,255';
+        const alpha = Math.min(0.92, Math.abs(totalVignette) / 100);
+        rad.addColorStop(0, `rgba(${color},0)`);
+        rad.addColorStop(1, `rgba(${color},${alpha})`);
         ctx.fillStyle = rad;
         ctx.fillRect(0, 0, w, h);
       }

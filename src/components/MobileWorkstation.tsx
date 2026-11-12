@@ -105,7 +105,7 @@ export interface MobileWorkstationProps {
   onTrimEndToPlayhead?: () => void;
   onDeleteSelected: () => void;
   onSelectClip: (id: string | null) => void;
-  onUpdateClipProp: (key: string, value: any) => void;
+  onUpdateClipProp: (key: string, value: any, targetClipId?: string) => void;
   onFlipHorizontal: () => void;
   onSetAspectRatio: (ratio: AspectRatioOption) => void;
   onSetPreviewQuality: (q: PreviewQualityOption) => void;
@@ -246,7 +246,9 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
   // Touch Timeline Drag Ref
   const timelineScrollRef = useRef<HTMLDivElement>(null);
   const isDraggingTimeline = useRef(false);
+  const isProgrammaticScrollRef = useRef(false);
   const dragStartX = useRef(0);
+  const dragStartScrollLeft = useRef(0);
   const dragStartPlayhead = useRef(0);
   const hasDragged = useRef(false);
 
@@ -288,7 +290,26 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
   const timelinePinchStartPx = useRef(45);
 
   // Measure timeline tracks container width to center 00:00:00:00 under the stationary playhead
-  const [containerWidth, setContainerWidth] = useState<number>(0);
+  const [containerWidth, setContainerWidth] = useState<number>(() =>
+    typeof window !== 'undefined' ? window.innerWidth : 390
+  );
+  const halfWidth = Math.max(120, Math.round(containerWidth / 2));
+
+  // Target clip for adjustments (selected clip or clip under playhead or first video clip)
+  const activeAdjustmentClip = useMemo(() => {
+    if (selectedClipId) {
+      const found = clips.find((c) => c.id === selectedClipId);
+      if (found) return found;
+    }
+    return (
+      videoClips.find(
+        (c) => playheadSec >= c.startTime && playheadSec <= c.startTime + c.duration
+      ) ||
+      videoClips[0] ||
+      currentClip
+    );
+  }, [clips, selectedClipId, videoClips, playheadSec, currentClip]);
+
   useEffect(() => {
     const el = timelineScrollRef.current;
     if (!el) return;
@@ -308,6 +329,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       initialPlayheadResetRef.current = true;
       if (playheadSec < 0 || playheadSec > 0.05) {
         onPlayheadChange(0);
+        if (timelineScrollRef.current) timelineScrollRef.current.scrollLeft = 0;
       }
     }
   }, []);
@@ -344,19 +366,28 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     onTogglePlay();
   };
 
-  // Compute exact timestamp from clientX on timeline
-  const getTimeFromClientX = (clientX: number): number => {
+  // Synchronize playhead when timeline is scrolled (swiped, dragged, momentum flicked, or wheeled)
+  const handleScroll = () => {
+    if (isProgrammaticScrollRef.current) {
+      isProgrammaticScrollRef.current = false;
+      return;
+    }
     const el = timelineScrollRef.current;
-    if (!el) return 0;
-    const rect = el.getBoundingClientRect();
-    const xInContent = clientX - rect.left + el.scrollLeft;
-    const targetSec = Math.max(0, Math.min(totalTimelineDuration, xInContent / pxPerSec));
-    return Number(targetSec.toFixed(2));
+    if (!el) return;
+    if (isPlaying) {
+      onTogglePlay();
+    }
+    const currentScroll = el.scrollLeft;
+    const targetSec = Math.max(0, Math.min(totalTimelineDuration, currentScroll / pxPerSec));
+    const roundedSec = Number(targetSec.toFixed(2));
+    if (Math.abs(roundedSec - playheadSec) >= 0.02) {
+      onPlayheadChange(roundedSec);
+    }
   };
 
-  // Handle Touch Scrubbing & Tap to Seek & 2-finger Pinch-to-zoom on Timeline
-  const handleTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
-    if ('touches' in e && e.touches.length === 2) {
+  // Handle Touch Scrubbing & 2-finger Pinch-to-zoom on Timeline
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
       isDraggingTimeline.current = false;
       isPinchingTimeline.current = true;
       wasPinchingTimeline.current = true;
@@ -364,9 +395,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       const t1 = e.touches[1];
       timelinePinchStartDist.current = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
       timelinePinchStartPx.current = pxPerSec;
-      return;
-    }
-    if ('touches' in e && e.touches.length === 1 && wasPinchingTimeline.current) {
+      dragStartPlayhead.current = playheadSec;
       return;
     }
     if (isPlaying) {
@@ -374,88 +403,88 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     }
     isDraggingTimeline.current = true;
     hasDragged.current = false;
-    const clientX = 'touches' in e && e.touches[0] ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
-    dragStartX.current = clientX;
-    dragStartPlayhead.current = playheadSec;
+    dragStartX.current = e.touches[0].clientX;
+    dragStartScrollLeft.current = timelineScrollRef.current?.scrollLeft || 0;
   };
 
-  const handleTouchMove = (e: React.TouchEvent | React.MouseEvent) => {
-    if (isPinchingTimeline.current && 'touches' in e && e.touches.length === 2) {
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (isPinchingTimeline.current && e.touches.length === 2) {
       const t0 = e.touches[0];
       const t1 = e.touches[1];
       const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
       const ratio = dist / Math.max(10, timelinePinchStartDist.current);
       const nextPx = Math.round(Math.max(12, Math.min(220, timelinePinchStartPx.current * ratio)));
       setPxPerSec(nextPx);
+      if (timelineScrollRef.current) {
+        isProgrammaticScrollRef.current = true;
+        timelineScrollRef.current.scrollLeft = Math.round(dragStartPlayhead.current * nextPx);
+      }
       return;
     }
-    if (!isDraggingTimeline.current || wasPinchingTimeline.current) return;
-    const clientX = 'touches' in e && e.touches[0] ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
-    const deltaX = clientX - dragStartX.current;
-    if (Math.abs(deltaX) > 3) {
-      hasDragged.current = true;
-    }
-    if (hasDragged.current) {
-      // Horizontal scrubbing: moving left pulls later footage forward, moving right pulls earlier footage
-      const deltaSec = deltaX / pxPerSec;
-      const newSec = Math.max(0, Math.min(totalTimelineDuration, dragStartPlayhead.current - deltaSec));
-      onPlayheadChange(Number(newSec.toFixed(2)));
+    if (e.touches.length === 1) {
+      const dx = e.touches[0].clientX - dragStartX.current;
+      if (Math.abs(dx) > 3) {
+        hasDragged.current = true;
+      }
     }
   };
 
-  const handleTouchEnd = (e: React.TouchEvent | React.MouseEvent) => {
-    const touchesCount = 'touches' in e ? e.touches.length : 0;
-    if (isPinchingTimeline.current) {
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (e.touches.length < 2) {
       isPinchingTimeline.current = false;
     }
-    if (touchesCount === 0) {
+    if (e.touches.length === 0) {
+      isDraggingTimeline.current = false;
       if (wasPinchingTimeline.current) {
         wasPinchingTimeline.current = false;
-        isDraggingTimeline.current = false;
-        hasDragged.current = false;
-        return;
       }
-      if (!hasDragged.current) {
-        const clientX =
-          'changedTouches' in e && e.changedTouches && e.changedTouches[0]
-            ? e.changedTouches[0].clientX
-            : 'touches' in e && e.touches && e.touches[0]
-            ? e.touches[0].clientX
-            : (e as React.MouseEvent).clientX;
-
-        if (typeof clientX === 'number' && !Number.isNaN(clientX)) {
-          const targetSec = getTimeFromClientX(clientX);
-          onPlayheadChange(targetSec);
-        }
-      }
-      isDraggingTimeline.current = false;
       hasDragged.current = false;
     }
   };
 
-  // Auto-scroll timeline smoothly to track playhead during playback without discrete jumps or touch fighting
-  useEffect(() => {
-    if (!timelineScrollRef.current) return;
-    if (isDraggingTimeline.current || isPinchingTimeline.current) return;
-    const el = timelineScrollRef.current;
-    const playheadPx = playheadSec * pxPerSec;
-
+  // Mouse dragging on desktop with window listeners so mouse release is never lost
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
     if (isPlaying) {
-      // Fluid, continuous forward gliding: track playhead at ~40% viewport without notchy steps
-      const targetScroll = playheadPx - el.clientWidth * 0.4;
-      el.scrollLeft = Math.max(0, targetScroll);
-      return;
+      onTogglePlay();
     }
+    isDraggingTimeline.current = true;
+    hasDragged.current = false;
+    dragStartX.current = e.clientX;
+    dragStartScrollLeft.current = timelineScrollRef.current?.scrollLeft || 0;
 
-    // When paused / tapped: keep playhead visible comfortably
-    const viewLeft = el.scrollLeft;
-    const viewRight = el.scrollLeft + el.clientWidth;
-    if (playheadPx > viewRight - 30) {
-      el.scrollLeft = Math.max(0, playheadPx - el.clientWidth * 0.5);
-    } else if (playheadPx < viewLeft + 30) {
-      el.scrollLeft = Math.max(0, playheadPx - el.clientWidth * 0.2);
+    const handleWindowMouseMove = (moveEv: MouseEvent) => {
+      if (!isDraggingTimeline.current) return;
+      const dx = moveEv.clientX - dragStartX.current;
+      if (Math.abs(dx) > 3) {
+        hasDragged.current = true;
+      }
+      if (hasDragged.current && timelineScrollRef.current) {
+        timelineScrollRef.current.scrollLeft = dragStartScrollLeft.current - dx;
+      }
+    };
+
+    const handleWindowMouseUp = () => {
+      isDraggingTimeline.current = false;
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+  };
+
+  // Keep timeline scroll position strictly aligned with fixed center playhead
+  useEffect(() => {
+    const el = timelineScrollRef.current;
+    if (!el) return;
+    if (isDraggingTimeline.current || isPinchingTimeline.current) return;
+    const targetScroll = Math.round(playheadSec * pxPerSec);
+    if (Math.abs(el.scrollLeft - targetScroll) >= 1) {
+      isProgrammaticScrollRef.current = true;
+      el.scrollLeft = targetScroll;
     }
-  }, [playheadSec, pxPerSec, isPlaying]);
+  }, [playheadSec, pxPerSec]);
 
   // Click on a Transition Seam button '|' between clip i and clip i+1
   const handleOpenTransitionSeam = (clipId: string, seamTime: number) => {
@@ -581,7 +610,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
         </div>
       )}
 
-      {/* 1. TOP MOBILE HEADER BAR (CapCut Mobile style - Image 3) */}
+      {/* 1. TOP MOBILE HEADER BAR (CapCut Mobile style) */}
       <header
         className={`flex items-center justify-between px-3 h-11 shrink-0 border-b z-30 ${
           isLight ? 'bg-white border-[#E2E8F0]' : 'bg-[#14151B] border-[#22242D]'
@@ -599,74 +628,9 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
           <X className="w-5 h-5 stroke-[2.2]" />
         </button>
 
-        {/* Center: Resolution Pill dropdown (1080P ▾) */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setIsResolutionMenuOpen((p) => !p)}
-            className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold cursor-pointer border active:scale-95 transition-all ${
-              isLight
-                ? 'bg-[#F1F5F9] border-[#CBD5E1] text-[#0F172A]'
-                : 'bg-[#22242F] border-[#313543] text-white'
-            }`}
-          >
-            <span className="font-mono">
-              {exportRes.toUpperCase()}
-            </span>
-            <ChevronDown className="w-3 h-3 text-[#00E5CC]" />
-          </button>
-
-          {/* Resolution Dropdown Popover */}
-          {isResolutionMenuOpen && (
-            <>
-              <div
-                className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs"
-                onClick={() => setIsResolutionMenuOpen(false)}
-              />
-              <div
-                className={`absolute left-1/2 -translate-x-1/2 top-10 w-48 p-2 rounded-xl shadow-2xl z-50 text-xs border ${
-                  isLight
-                    ? 'bg-white border-[#CBD5E1] text-[#0F172A]'
-                    : 'bg-[#1B1D26] border-[#313543] text-white'
-                }`}
-              >
-                <div className="px-2 py-1 text-[10px] font-bold text-[#A1A1AA] uppercase">
-                  {isEn ? 'Export Quality' : 'Độ phân giải xuất'}
-                </div>
-                {(
-                  [
-                    { id: '720p', label: '720P (HD 720)' },
-                    { id: '1080p', label: '1080P (Full HD Khuyên dùng)' },
-                    { id: '2k', label: '2K (QHD 1440)' },
-                    { id: '4k', label: '4K (Ultra HD 2160)' },
-                  ] as const
-                ).map((q) => (
-                  <button
-                    key={q.id}
-                    type="button"
-                    onClick={() => {
-                      setExportRes(q.id);
-                      setIsResolutionMenuOpen(false);
-                    }}
-                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left cursor-pointer transition-colors ${
-                      exportRes === q.id
-                        ? 'bg-[#00E5CC]/20 text-[#00E5CC] font-bold'
-                        : isLight
-                        ? 'hover:bg-gray-100 text-[#0F172A]'
-                        : 'hover:bg-white/5 text-white'
-                    }`}
-                  >
-                    <span>{q.label}</span>
-                    {exportRes === q.id && <Check className="w-3.5 h-3.5 text-[#00E5CC]" />}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Right: Theme Toggle & Cyan Export Button */}
+        {/* Right side group: [Theme Sun/Moon] [1080P ▾] [Xuất / Export] */}
         <div className="flex items-center gap-2">
+          {/* Theme Toggle Sun / Moon */}
           <button
             type="button"
             onClick={onToggleTheme}
@@ -678,6 +642,73 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
             {isLight ? <Moon className="w-4 h-4 text-sky-600" /> : <Sun className="w-4 h-4 text-amber-400" />}
           </button>
 
+          {/* Resolution Dropdown (1080P ▾) */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsResolutionMenuOpen((p) => !p)}
+              className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold cursor-pointer border active:scale-95 transition-all ${
+                isLight
+                  ? 'bg-[#F1F5F9] border-[#CBD5E1] text-[#0F172A]'
+                  : 'bg-[#22242F] border-[#313543] text-white'
+              }`}
+            >
+              <span className="font-mono">
+                {exportRes.toUpperCase()}
+              </span>
+              <ChevronDown className="w-3 h-3 text-[#00E5CC]" />
+            </button>
+
+            {/* Resolution Dropdown Popover */}
+            {isResolutionMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs"
+                  onClick={() => setIsResolutionMenuOpen(false)}
+                />
+                <div
+                  className={`absolute right-0 top-10 w-48 p-2 rounded-xl shadow-2xl z-50 text-xs border ${
+                    isLight
+                      ? 'bg-white border-[#CBD5E1] text-[#0F172A]'
+                      : 'bg-[#1B1D26] border-[#313543] text-white'
+                  }`}
+                >
+                  <div className="px-2 py-1 text-[10px] font-bold text-[#A1A1AA] uppercase">
+                    {isEn ? 'Export Quality' : 'Độ phân giải xuất'}
+                  </div>
+                  {(
+                    [
+                      { id: '720p', label: '720P (HD 720)' },
+                      { id: '1080p', label: '1080P (Full HD Khuyên dùng)' },
+                      { id: '2k', label: '2K (QHD 1440)' },
+                      { id: '4k', label: '4K (Ultra HD 2160)' },
+                    ] as const
+                  ).map((q) => (
+                    <button
+                      key={q.id}
+                      type="button"
+                      onClick={() => {
+                        setExportRes(q.id);
+                        setIsResolutionMenuOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left cursor-pointer transition-colors ${
+                        exportRes === q.id
+                          ? 'bg-[#00E5CC]/20 text-[#00E5CC] font-bold'
+                          : isLight
+                          ? 'hover:bg-gray-100 text-[#0F172A]'
+                          : 'hover:bg-white/5 text-white'
+                      }`}
+                    >
+                      <span>{q.label}</span>
+                      {exportRes === q.id && <Check className="w-3.5 h-3.5 text-[#00E5CC]" />}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Export Button */}
           <button
             type="button"
             onClick={onOpenExport}
@@ -729,34 +760,58 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
 
       {/* 3. MOBILE TRANSPORT CONTROL ROW (CapCut Mobile style) */}
       <div
-        className={`flex items-center justify-between px-3 py-1.5 shrink-0 border-t border-b select-none ${
+        className={`relative flex items-center justify-between px-3 py-1.5 shrink-0 border-t border-b select-none ${
           isLight ? 'bg-white border-[#E2E8F0]' : 'bg-[#14151B] border-[#22242D]'
         }`}
       >
-        {/* Left: Fullscreen preview button (icon-only, toggles full canvas view without timeline) */}
-        <button
-          type="button"
-          onClick={() => setIsFullCanvasMode(true)}
-          aria-label="Toàn màn hình canvas"
-          title="Toàn màn hình canvas"
-          className="w-8 h-8 rounded-full flex items-center justify-center bg-white/5 hover:bg-white/10 active:scale-90 border border-white/10 text-white cursor-pointer transition-all"
-        >
-          <Maximize2 className="w-4 h-4 text-[#00E5CC]" />
-        </button>
+        {/* Left: Fullscreen preview button & Current Timecode */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsFullCanvasMode(true)}
+            aria-label="Toàn màn hình canvas"
+            title="Toàn màn hình canvas"
+            className={`w-8 h-8 rounded-full flex items-center justify-center active:scale-90 border cursor-pointer transition-all ${
+              isLight
+                ? 'bg-gray-100 hover:bg-gray-200 border-gray-200 text-[#0F172A]'
+                : 'bg-white/5 hover:bg-white/10 border-white/10 text-white'
+            }`}
+          >
+            <Maximize2 className="w-4 h-4 text-[#00E5CC]" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onPlayheadChange(0);
+              if (timelineScrollRef.current) timelineScrollRef.current.scrollLeft = 0;
+            }}
+            title="Bấm để về 00:00"
+            className="font-mono text-xs font-semibold cursor-pointer active:scale-95 transition-colors"
+          >
+            <span className={isLight ? 'text-[#0F172A]' : 'text-white/90'}>
+              {formatTimecode(playheadSec).slice(3, 8)}
+            </span>
+            <span className="text-[#64748B] text-[10px] ml-1">
+              / {formatTimecode(totalTimelineDuration).slice(3, 8)}
+            </span>
+          </button>
+        </div>
 
-        {/* Center: Large Electric Cyan Play / Pause Circle Button */}
-        <button
-          type="button"
-          onClick={handlePlayToggle}
-          aria-label={isPlaying ? 'Tạm dừng video' : 'Phát video'}
-          className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer shadow-md active:scale-90 transition-transform bg-[#00E5CC] text-[#071013] hover:bg-[#00F5DC]"
-        >
-          {isPlaying ? (
-            <Pause className="w-4 h-4 fill-current" />
-          ) : (
-            <Play className="w-4 h-4 fill-current ml-0.5" />
-          )}
-        </button>
+        {/* Center: Play / Pause Button - locked directly above stationary center playhead */}
+        <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2">
+          <button
+            type="button"
+            onClick={handlePlayToggle}
+            aria-label={isPlaying ? 'Tạm dừng video' : 'Phát video'}
+            className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer shadow-md active:scale-90 transition-transform bg-[#00E5CC] text-[#071013] hover:bg-[#00F5DC]"
+          >
+            {isPlaying ? (
+              <Pause className="w-4 h-4 fill-current" />
+            ) : (
+              <Play className="w-4 h-4 fill-current ml-0.5" />
+            )}
+          </button>
+        </div>
 
         {/* Right: Undo, Redo Controls */}
         <div className="flex items-center gap-1.5">
@@ -785,406 +840,437 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
         </div>
       </div>
 
-      {/* 4. TOUCH-OPTIMIZED MOBILE TIMELINE (CapCut Mobile style with Center Playhead & Ruler) */}
+      {/* 4. TOUCH-OPTIMIZED MOBILE TIMELINE (CapCut Mobile style with Stationary Center Playhead) */}
       <div
-        className={`relative h-[156px] shrink-0 border-b flex flex-col overflow-hidden select-none ${
-          isLight ? 'bg-[#F1F5F9] border-[#E2E8F0]' : 'bg-[#101116] border-[#22242D]'
+        className={`relative h-[172px] shrink-0 border-b flex flex-col overflow-hidden select-none ${
+          isLight ? 'bg-[#F8FAFC] border-[#E2E8F0]' : 'bg-[#101116] border-[#22242D]'
         }`}
       >
-        {/* Horizontal Timeline Container */}
-        <div className="flex-1 flex min-h-0 relative">
-          {/* Left Column: Timecode header & Ảnh bìa & Âm thanh Buttons (Vertically aligned with tracks) */}
+        {/* Stationary White Center Playhead Indicator (Vertically aligned directly below Play button) */}
+        <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex flex-col items-center">
+          <div className="w-3 h-3 bg-white rotate-45 -mt-1 shadow-md border border-black/30" />
+          <div className="w-[2px] flex-1 bg-white shadow-[0_0_8px_rgba(255,255,255,0.95)]" />
+        </div>
+
+        {/* Touch-Scrollable Horizontal Timeline Strip */}
+        <div
+          ref={timelineScrollRef}
+          onScroll={handleScroll}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchEnd}
+          onMouseDown={handleMouseDown}
+          onWheel={(e) => {
+            if (e.ctrlKey || e.metaKey) {
+              e.preventDefault();
+              const factor = e.deltaY < 0 ? 1.15 : 0.87;
+              const nextPx = Math.round(Math.max(12, Math.min(220, pxPerSec * factor)));
+              setPxPerSec(nextPx);
+              if (timelineScrollRef.current) {
+                isProgrammaticScrollRef.current = true;
+                timelineScrollRef.current.scrollLeft = Math.round(playheadSec * nextPx);
+              }
+            }
+          }}
+          className="w-full h-full overflow-x-auto scrollbar-none relative py-1 flex flex-col justify-start touch-pan-x"
+          style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorX: 'contain' }}
+        >
+          {/* Scrollable Tracks Content Strip */}
           <div
-            className={`w-14 shrink-0 flex flex-col py-1 border-r z-20 space-y-1.5 ${
-              isLight ? 'bg-white border-[#E2E8F0]' : 'bg-[#14151C] border-[#22242E]'
-            }`}
+            style={{
+              width: `${Math.max(
+                halfWidth + (totalTimelineDuration + 2) * pxPerSec + halfWidth,
+                containerWidth + 100
+              )}px`,
+              minWidth: '100%',
+            }}
+            className="relative space-y-1.5 select-none flex flex-col"
           >
-            {/* Quick-jump to 00:00:00:00 timecode (Ruler height h-4) */}
-            <div className="h-4 flex items-center justify-center shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  onPlayheadChange(0);
-                  if (timelineScrollRef.current) timelineScrollRef.current.scrollLeft = 0;
-                }}
-                title="Nhấn để về đầu 00:00"
-                className="font-mono text-[7px] leading-tight text-center text-[#00E5CC] font-bold px-0.5 py-0.5 rounded active:scale-95 cursor-pointer"
-              >
-                <div>{formatTimecode(playheadSec).slice(3, 8)}</div>
-                <div className="text-[6.5px] text-[#64748B] font-normal">{formatTimecode(totalTimelineDuration).slice(3, 8)}</div>
-              </button>
+            {/* ROW 0: TIMELINE RULER STRIP (00:00 starts at halfWidth) */}
+            <div className="h-4 relative border-b border-white/10 select-none">
+              {(() => {
+                const maxSec = Math.ceil(totalTimelineDuration) + 12;
+                return Array.from({ length: maxSec + 1 }).map((_, sec) => {
+                  const leftPos = halfWidth + sec * pxPerSec;
+                  const isMajor = pxPerSec >= 50 ? true : pxPerSec >= 24 ? sec % 2 === 0 : sec % 5 === 0;
+                  return (
+                    <div
+                      key={sec}
+                      style={{ left: `${leftPos}px` }}
+                      className="absolute top-0 bottom-0 flex flex-col items-center pointer-events-none"
+                    >
+                      <div className={`w-[1px] ${isMajor ? 'h-2 bg-white/40' : 'h-1 bg-white/20'}`} />
+                      {isMajor && (
+                        <span className="text-[7.5px] font-mono text-[#94A3B8] -ml-3 mt-0.5 leading-none">
+                          {formatTimecode(sec).slice(3, 8)}
+                        </span>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
             </div>
 
-            {/* Đặt ảnh bìa clip (Track 0 height h-12, aligned with video track) */}
-            <div className="h-12 flex items-center justify-center shrink-0">
-              <button
-                type="button"
-                onClick={() => onCaptureCover?.()}
-                title="Chụp khung hình hiện tại làm Ảnh bìa dự án"
-                className="flex flex-col items-center justify-center p-0.5 cursor-pointer active:scale-95 transition-transform"
+            {/* ROW 1: TRACK 0 (VIDEO TRACK) & LEFT RUNWAY (MUTE CLIP + COVER ON 1 ROW) */}
+            <div className="h-12 relative flex items-center">
+              {/* Left runway before 00:00: Mute Clip and Cover arranged on 1 row! */}
+              <div
+                style={{ width: `${halfWidth}px` }}
+                className="absolute left-0 top-0 bottom-0 flex items-center justify-end pr-2 gap-2 z-20 pointer-events-auto"
               >
-                <div className="w-7 h-7 rounded-lg border border-[#00E5CC]/70 overflow-hidden flex items-center justify-center bg-black/40 shadow-xs">
-                  {coverDataUrl ? (
-                    <img src={coverDataUrl} alt="Cover" className="w-full h-full object-cover" />
-                  ) : (
-                    <ImageIcon className="w-3.5 h-3.5 text-[#00E5CC]" />
-                  )}
-                </div>
-                <span className="text-[7.5px] leading-tight text-center text-[#94A3B8] mt-0.5 font-medium">
-                  Ảnh bìa
-                </span>
-              </button>
-            </div>
-
-            {/* Tắt / Bật tiếng video chính & Âm thanh (Track 1 height h-10, aligned with audio track) */}
-            <div className="h-10 flex items-center justify-center shrink-0">
-              <button
-                type="button"
-                onClick={() => onToggleTrackMute(0)}
-                title={trackMuted[0] ? 'Bật tiếng video' : 'Tắt tiếng video'}
-                className="flex flex-col items-center justify-center p-0.5 cursor-pointer active:scale-95 transition-transform"
-              >
-                <div
-                  className={`w-7 h-7 rounded-lg border flex items-center justify-center shadow-xs transition-colors ${
+                {/* 1. Mute Clip Button (Vertical tile matching CapCut Mobile) */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleTrackMute(0);
+                  }}
+                  title={trackMuted[0] ? 'Bật tiếng video' : 'Tắt tiếng clip'}
+                  className={`flex flex-col items-center justify-center w-11 h-11 rounded-xl border text-center cursor-pointer active:scale-95 transition-all shadow-xs ${
                     trackMuted[0]
-                      ? 'border-rose-500/50 bg-rose-500/15 text-rose-400'
-                      : 'border-white/10 bg-black/40 text-[#94A3B8] hover:text-[#00E5CC]'
+                      ? 'border-rose-500/60 bg-rose-500/20 text-rose-400'
+                      : isLight
+                      ? 'border-gray-200 bg-white/90 hover:bg-white text-gray-700'
+                      : 'border-white/10 bg-[#191A23] hover:bg-[#222430] text-[#94A3B8] hover:text-[#00E5CC]'
                   }`}
                 >
-                  {trackMuted[0] ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5 text-[#00E5CC]" />}
+                  {trackMuted[0] ? (
+                    <VolumeX className="w-4 h-4 text-rose-400 shrink-0" />
+                  ) : (
+                    <Volume2 className="w-4 h-4 text-[#00E5CC] shrink-0" />
+                  )}
+                  <span className="text-[7.5px] font-semibold mt-0.5 leading-none whitespace-nowrap">
+                    {trackMuted[0] ? (isEn ? 'Muted' : 'Đã tắt') : (isEn ? 'Mute' : 'Tắt tiếng')}
+                  </span>
+                </button>
+
+                {/* 2. Cover (Ảnh bìa) Button (Vertical tile matching CapCut Mobile) */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCaptureCover?.();
+                  }}
+                  title="Chụp khung hình hiện tại làm Ảnh bìa dự án"
+                  className={`flex flex-col items-center justify-center w-11 h-11 rounded-xl border text-center cursor-pointer active:scale-95 transition-all shadow-xs ${
+                    isLight
+                      ? 'border-gray-200 bg-white/90 hover:bg-white text-gray-700'
+                      : 'border-white/10 bg-[#191A23] hover:bg-[#222430] text-[#94A3B8] hover:text-[#00E5CC]'
+                  }`}
+                >
+                  <div className="w-5 h-5 rounded-md overflow-hidden flex items-center justify-center bg-black/50 shrink-0 border border-white/15 relative">
+                    {coverDataUrl ? (
+                      <img src={coverDataUrl} alt="Cover" className="w-full h-full object-cover" />
+                    ) : (
+                      <ImageIcon className="w-3 h-3 text-[#00E5CC]" />
+                    )}
+                    <div className="absolute inset-0 bg-black/25 flex items-center justify-center opacity-70 hover:opacity-100">
+                      <Wand2 className="w-2 h-2 text-white" />
+                    </div>
+                  </div>
+                  <span className="text-[7.5px] font-semibold mt-0.5 leading-none whitespace-nowrap">
+                    {isEn ? 'Cover' : 'Ảnh bìa'}
+                  </span>
+                </button>
+              </div>
+
+              {/* Video Clips starting at halfWidth (00:00) */}
+              {videoClips.length === 0 ? (
+                <div
+                  style={{ left: `${halfWidth}px` }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowAddMediaModal(true);
+                  }}
+                  className="absolute h-11 rounded-xl border-2 border-dashed border-[#00E5CC]/60 bg-[#00E5CC]/10 flex items-center justify-center gap-2 text-xs font-bold text-[#00E5CC] cursor-pointer hover:bg-[#00E5CC]/20 active:scale-98 transition-all px-4"
+                >
+                  <Plus className="w-4 h-4 stroke-[2.5]" />
+                  <span>+ Thêm video / tệp đầu tiên</span>
                 </div>
-                <span className="text-[7.5px] leading-tight text-center text-[#94A3B8] mt-0.5 font-medium">
-                  {trackMuted[0] ? 'Tắt tiếng' : 'Âm thanh'}
-                </span>
-              </button>
-            </div>
-          </div>
+              ) : (
+                <>
+                  {videoClips.map((clip, idx) => {
+                    const clipLeft = halfWidth + clip.startTime * pxPerSec;
+                    const clipWidth = Math.max(36, clip.duration * pxPerSec);
+                    const isSelected = selectedClipId === clip.id;
+                    const nextClip = videoClips[idx + 1];
 
-          {/* Touch-Scrollable Horizontal Tracks Strip */}
-          <div
-            ref={timelineScrollRef}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-            onMouseDown={handleTouchStart}
-            onMouseMove={handleTouchMove}
-            onMouseUp={handleTouchEnd}
-            className="flex-1 overflow-x-auto scrollbar-none relative py-1 flex flex-col justify-start"
-            style={{ WebkitOverflowScrolling: 'touch' }}
-          >
-            {/* Inner Timeline Tracks Content starting right next to the left header buttons */}
-            <div
-              style={{
-                width: `${Math.max((totalTimelineDuration + 8) * pxPerSec + 120, 600)}px`,
-                minWidth: '100%',
-              }}
-              className="relative space-y-1.5 select-none pl-0.5 pr-16"
-            >
-              {/* White Playhead Vertical Line Indicator */}
-              <div
-                style={{
-                  left: `${playheadSec * pxPerSec}px`,
-                }}
-                className="absolute inset-y-0 -translate-x-1/2 z-30 pointer-events-none flex flex-col items-center"
-              >
-                <div className="w-2.5 h-2.5 bg-white rotate-45 -mt-0.5 shadow-md border border-black/20" />
-                <div className="w-[2px] flex-1 bg-white shadow-[0_0_8px_rgba(255,255,255,0.85)]" />
-              </div>
-
-              {/* TIMELINE RULER STRIP */}
-              <div
-                onClick={(e) => {
-                  const targetSec = getTimeFromClientX(e.clientX);
-                  onPlayheadChange(targetSec);
-                }}
-                className="h-4 relative border-b border-white/10 select-none cursor-pointer"
-              >
-                {(() => {
-                  const maxSec = Math.ceil(totalTimelineDuration) + 12;
-                  return Array.from({ length: maxSec + 1 }).map((_, sec) => {
-                    const leftPos = sec * pxPerSec;
-                    const isMajor = pxPerSec >= 50 ? true : pxPerSec >= 24 ? sec % 2 === 0 : sec % 5 === 0;
                     return (
-                      <div
-                        key={sec}
-                        style={{ left: `${leftPos}px` }}
-                        className="absolute top-0 bottom-0 flex flex-col items-center pointer-events-none"
-                      >
-                        <div className={`w-[1px] ${isMajor ? 'h-2 bg-white/40' : 'h-1 bg-white/20'}`} />
-                        {isMajor && (
-                          <span className="text-[7.5px] font-mono text-[#94A3B8] -ml-3 mt-0.5 leading-none">
-                            {formatTimecode(sec).slice(3, 8)}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
+                      <React.Fragment key={clip.id}>
+                        {/* Video Clip Card */}
+                        <div
+                          style={{
+                            left: `${clipLeft}px`,
+                            width: `${clipWidth}px`,
+                            ...(clip.thumbnailUrl
+                              ? {
+                                  backgroundImage: `url(${clip.thumbnailUrl})`,
+                                  backgroundRepeat: 'repeat-x',
+                                  backgroundSize: 'auto 100%',
+                                }
+                              : {}),
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectClip(clip.id);
+                          }}
+                          className={`absolute h-11 rounded-lg overflow-hidden border flex items-center px-1.5 transition-all cursor-pointer shadow-xs ${
+                            isSelected
+                              ? 'border-2 border-white ring-2 ring-white/60 bg-[#00E5CC]/25 z-10'
+                              : isLight
+                              ? 'bg-[#E2E8F0] border-[#CBD5E1] text-[#0F172A]'
+                              : 'bg-[#1A1C24] border-[#2E313D] text-white'
+                          }`}
+                        >
+                          {/* Left Trim Handle when selected */}
+                          {isSelected && (
+                            <div
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onTrimStartToPlayhead?.();
+                              }}
+                              title="Kéo đầu clip tới điểm phát"
+                              className="absolute left-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-l-md"
+                            >
+                              <div className="flex gap-0.5">
+                                <div className="w-[1px] h-3 bg-black/80" />
+                                <div className="w-[1px] h-3 bg-black/80" />
+                              </div>
+                            </div>
+                          )}
 
-              {/* TRACK 0: MAIN VIDEO CLIP STRIP */}
-              <div
-                onClick={(e) => {
-                  const targetSec = getTimeFromClientX(e.clientX);
-                  onPlayheadChange(targetSec);
-                }}
-                className="h-12 relative flex items-center"
-              >
-                {videoClips.length === 0 ? (
-                  <div
+                          {/* Duration Badge & Title */}
+                          <div className="min-w-0 flex-1 z-10 pointer-events-none flex items-center justify-between pl-2 pr-2">
+                            <span className="text-[8px] font-mono font-bold bg-black/70 backdrop-blur-xs text-[#00E5CC] px-1 py-0.5 rounded shadow-xs">
+                              {clip.duration.toFixed(1)}s
+                            </span>
+                            <span className="text-[9.5px] font-bold truncate text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] max-w-[65%]">
+                              {clip.name}
+                            </span>
+                          </div>
+
+                          {/* Right Trim Handle when selected */}
+                          {isSelected && (
+                            <div
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onTrimEndToPlayhead?.();
+                              }}
+                              title="Kéo đuôi clip tới điểm phát"
+                              className="absolute right-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-r-md"
+                            >
+                              <div className="flex gap-0.5">
+                                <div className="w-[1px] h-3 bg-black/80" />
+                                <div className="w-[1px] h-3 bg-black/80" />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Transition Seam Button '|' */}
+                        {nextClip && (
+                          <div
+                            style={{
+                              left: `${halfWidth + (clip.startTime + clip.duration) * pxPerSec - 11}px`,
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenTransitionSeam(nextClip.id, clip.startTime + clip.duration);
+                            }}
+                            title="Thêm hiệu ứng chuyển tiếp tại điểm cắt này"
+                            className="absolute z-20 top-1/2 -translate-y-1/2 w-5 h-5 rounded bg-white text-black shadow-md border border-gray-300 flex items-center justify-center cursor-pointer active:scale-90 hover:bg-[#00E5CC] hover:text-black transition-all"
+                          >
+                            {nextClip.transitionType && nextClip.transitionType !== 'none' ? (
+                              <ArrowRightLeft className="w-3 h-3 text-[#00D2C4]" />
+                            ) : (
+                              <span className="font-bold text-xs leading-none">|</span>
+                            )}
+                          </div>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+
+                  {/* '+' Add Media Button at end of Track 0 */}
+                  <button
+                    type="button"
+                    style={{
+                      left: `${halfWidth + totalTimelineDuration * pxPerSec + 12}px`,
+                    }}
                     onClick={(e) => {
                       e.stopPropagation();
                       setShowAddMediaModal(true);
                     }}
-                    className="w-full h-11 rounded-xl border-2 border-dashed border-[#00E5CC]/60 bg-[#00E5CC]/10 flex items-center justify-center gap-2 text-xs font-bold text-[#00E5CC] cursor-pointer hover:bg-[#00E5CC]/20 active:scale-98 transition-all px-4 mx-2"
+                    title="Thêm video / ảnh vào dòng thời gian"
+                    className="absolute z-10 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg bg-white text-black flex items-center justify-center font-bold shadow-md active:scale-95 hover:bg-[#00E5CC] transition-all cursor-pointer"
                   >
-                    <Plus className="w-4 h-4 stroke-[2.5]" />
-                    <span>+ Thêm video / tệp đầu tiên</span>
-                  </div>
-                ) : (
-                  <>
-                    {videoClips.map((clip, idx) => {
-                      const clipLeft = clip.startTime * pxPerSec;
-                      const clipWidth = Math.max(36, clip.duration * pxPerSec);
-                      const isSelected = selectedClipId === clip.id;
-                      const nextClip = videoClips[idx + 1];
+                    <Plus className="w-5 h-5 stroke-[2.8]" />
+                  </button>
+                </>
+              )}
+            </div>
 
-                      return (
-                        <React.Fragment key={clip.id}>
-                          {/* Video Clip Card (CapCut mobile white highlight + filmstrip + drag handles) */}
-                          <div
-                            style={{
-                              left: `${clipLeft}px`,
-                              width: `${clipWidth}px`,
-                              ...(clip.thumbnailUrl
-                                ? {
-                                    backgroundImage: `url(${clip.thumbnailUrl})`,
-                                    backgroundRepeat: 'repeat-x',
-                                    backgroundSize: 'auto 100%',
-                                  }
-                                : {}),
-                            }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onSelectClip(clip.id);
-                              const targetSec = getTimeFromClientX(e.clientX);
-                              onPlayheadChange(targetSec);
-                            }}
-                            className={`absolute h-11 rounded-lg overflow-hidden border flex items-center px-1.5 transition-all cursor-pointer shadow-xs ${
-                              isSelected
-                                ? 'border-2 border-white ring-2 ring-white/60 bg-[#00E5CC]/25 z-10'
-                                : isLight
-                                ? 'bg-[#E2E8F0] border-[#CBD5E1] text-[#0F172A]'
-                                : 'bg-[#1A1C24] border-[#2E313D] text-white'
-                            }`}
-                          >
-                            {/* Left Trim Handle when selected (CapCut style) */}
-                            {isSelected && (
-                              <div
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onTrimStartToPlayhead?.();
-                                }}
-                                title="Kéo đầu clip tới điểm phát"
-                                className="absolute left-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-l-md"
-                              >
-                                <div className="flex gap-0.5">
-                                  <div className="w-[1px] h-3 bg-black/80" />
-                                  <div className="w-[1px] h-3 bg-black/80" />
-                                </div>
-                              </div>
-                            )}
+            {/* ROW 2: TRACK 1 (AUDIO TRACK) */}
+            <div className="h-9 relative flex items-center">
+              {/* Left runway before 00:00: Audio Icon button */}
+              <div
+                style={{ width: `${halfWidth}px` }}
+                className="absolute left-0 top-0 bottom-0 flex items-center justify-end pr-2 z-20 pointer-events-auto"
+              >
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveDrawer('audio');
+                  }}
+                  title="Mở thư viện âm thanh"
+                  className="w-7 h-7 rounded-lg border border-[#0284C7]/40 bg-[#0284C7]/15 flex items-center justify-center text-[#38BDF8] hover:bg-[#0284C7]/30 cursor-pointer active:scale-95 transition-all shadow-xs"
+                >
+                  <Music className="w-3.5 h-3.5" />
+                </button>
+              </div>
 
-                            {/* Duration Badge & Title with contrast pill */}
-                            <div className="min-w-0 flex-1 z-10 pointer-events-none flex items-center justify-between pl-2 pr-2">
-                              <span className="text-[8px] font-mono font-bold bg-black/70 backdrop-blur-xs text-[#00E5CC] px-1 py-0.5 rounded shadow-xs">
-                                {clip.duration.toFixed(1)}s
-                              </span>
-                              <span className="text-[9.5px] font-bold truncate text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] max-w-[65%]">
-                                {clip.name}
-                              </span>
-                            </div>
-
-                            {/* Right Trim Handle when selected (CapCut style) */}
-                            {isSelected && (
-                              <div
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onTrimEndToPlayhead?.();
-                                }}
-                                title="Kéo đuôi clip tới điểm phát"
-                                className="absolute right-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-r-md"
-                              >
-                                <div className="flex gap-0.5">
-                                  <div className="w-[1px] h-3 bg-black/80" />
-                                  <div className="w-[1px] h-3 bg-black/80" />
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* TRANSITION SEAM BUTTON '|' BETWEEN CONSECUTIVE CLIPS */}
-                          {nextClip && (
-                            <div
-                              style={{
-                                left: `${(clip.startTime + clip.duration) * pxPerSec - 11}px`,
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenTransitionSeam(nextClip.id, clip.startTime + clip.duration);
-                              }}
-                              title="Thêm hiệu ứng chuyển tiếp tại điểm cắt này"
-                              className="absolute z-20 top-1/2 -translate-y-1/2 w-5 h-5 rounded bg-white text-black shadow-md border border-gray-300 flex items-center justify-center cursor-pointer active:scale-90 hover:bg-[#00E5CC] hover:text-black transition-all"
-                            >
-                              {nextClip.transitionType && nextClip.transitionType !== 'none' ? (
-                                <ArrowRightLeft className="w-3 h-3 text-[#00D2C4]" />
-                              ) : (
-                                <span className="font-bold text-xs leading-none">|</span>
-                              )}
-                            </div>
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
-
-                    {/* '+' Add Media Button at end of Track 0 (CapCut mobile white button) */}
-                    <button
-                      type="button"
+              {/* Audio Track Content starting at halfWidth (00:00) */}
+              {audioClips.length > 0 ? (
+                audioClips.map((clip) => {
+                  const clipLeft = halfWidth + clip.startTime * pxPerSec;
+                  const clipWidth = Math.max(30, clip.duration * pxPerSec);
+                  return (
+                    <div
+                      key={clip.id}
                       style={{
-                        left: `${totalTimelineDuration * pxPerSec + 12}px`,
+                        left: `${clipLeft}px`,
+                        width: `${clipWidth}px`,
                       }}
                       onClick={(e) => {
                         e.stopPropagation();
-                        setShowAddMediaModal(true);
+                        onSelectClip(clip.id);
                       }}
-                      title="Thêm video / ảnh vào dòng thời gian"
-                      className="absolute z-10 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg bg-white text-black flex items-center justify-center font-bold shadow-md active:scale-95 hover:bg-[#00E5CC] transition-all cursor-pointer"
+                      className="absolute h-7 rounded-md bg-[#0284C7]/30 border border-[#0284C7] px-2 flex items-center gap-1.5 text-[9px] font-semibold text-[#38BDF8] truncate cursor-pointer shadow-xs"
                     >
-                      <Plus className="w-5 h-5 stroke-[2.8]" />
-                    </button>
-                  </>
-                )}
-              </div>
-
-              {/* TRACK 1: AUDIO WAVEFORM STRIP */}
-              <div
-                onClick={(e) => {
-                  const targetSec = getTimeFromClientX(e.clientX);
-                  onPlayheadChange(targetSec);
-                }}
-                className="h-10 relative flex items-center"
-              >
-                {audioClips.length > 0 ? (
-                  audioClips.map((clip) => {
-                    const clipLeft = clip.startTime * pxPerSec;
-                    const clipWidth = Math.max(30, clip.duration * pxPerSec);
-                    return (
-                      <div
-                        key={clip.id}
-                        style={{
-                          left: `${clipLeft}px`,
-                          width: `${clipWidth}px`,
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSelectClip(clip.id);
-                          const targetSec = getTimeFromClientX(e.clientX);
-                          onPlayheadChange(targetSec);
-                        }}
-                        className="absolute h-7 rounded-md bg-[#0284C7]/30 border border-[#0284C7] px-2 flex items-center gap-1.5 text-[9px] font-semibold text-[#38BDF8] truncate cursor-pointer shadow-xs"
-                      >
-                        <Music className="w-3 h-3 shrink-0" />
-                        <span className="truncate">{clip.name}</span>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveDrawer('audio');
-                    }}
-                    style={{
-                      left: '0px',
-                      width: `${Math.max(160, totalTimelineDuration * pxPerSec)}px`,
-                    }}
-                    className="absolute h-7 px-3 rounded-md border border-dashed border-[#38BDF8]/60 text-[#38BDF8] bg-[#0284C7]/10 hover:bg-[#0284C7]/20 flex items-center gap-1.5 text-[9.5px] font-bold cursor-pointer transition-colors shadow-xs"
-                  >
-                    <Plus className="w-3.5 h-3.5 text-[#38BDF8] shrink-0" />
-                    <span>Thêm âm thanh</span>
-                  </button>
-                )}
-              </div>
-
-              {/* TRACK 2: TEXT / SUBTITLES STRIP */}
-              {textClips.length > 0 && (
-                <div className="h-6 relative flex items-center">
-                  {textClips.map((clip) => {
-                    const clipLeft = clip.startTime * pxPerSec;
-                    const clipWidth = Math.max(28, clip.duration * pxPerSec);
-                    const isSelected = selectedClipId === clip.id;
-                    return (
-                      <div
-                        key={clip.id}
-                        style={{
-                          left: `${clipLeft}px`,
-                          width: `${clipWidth}px`,
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSelectClip(clip.id);
-                          const targetSec = getTimeFromClientX(e.clientX);
-                          onPlayheadChange(targetSec);
-                        }}
-                        className={`absolute h-5 rounded-full border px-2 flex items-center gap-1 text-[8.5px] font-bold truncate cursor-pointer transition-all ${
-                          isSelected
-                            ? 'bg-[#F97316] text-white border-white ring-2 ring-[#F97316]/50'
-                            : 'bg-[#C2410C]/25 text-[#FB923C] border-[#F97316]'
-                        }`}
-                      >
-                        <Type className="w-2.5 h-2.5 shrink-0" />
-                        <span className="truncate">{clip.subtitleText || clip.name}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* TRACK 3: STICKERS STRIP */}
-              {stickerClips.length > 0 && (
-                <div className="h-6 relative flex items-center">
-                  {stickerClips.map((clip) => {
-                    const clipLeft = clip.startTime * pxPerSec;
-                    const clipWidth = Math.max(28, clip.duration * pxPerSec);
-                    const isSelected = selectedClipId === clip.id;
-                    return (
-                      <div
-                        key={clip.id}
-                        style={{
-                          left: `${clipLeft}px`,
-                          width: `${clipWidth}px`,
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSelectClip(clip.id);
-                          const targetSec = getTimeFromClientX(e.clientX);
-                          onPlayheadChange(targetSec);
-                        }}
-                        className={`absolute h-5 rounded-full border px-2 flex items-center gap-1 text-[8.5px] font-bold truncate cursor-pointer transition-all ${
-                          isSelected
-                            ? 'bg-[#A855F7] text-white border-white ring-2 ring-[#A855F7]/50'
-                            : 'bg-[#7E22CE]/25 text-[#C084FC] border-[#A855F7]'
-                        }`}
-                      >
-                        <Smile className="w-2.5 h-2.5 shrink-0" />
-                        <span className="truncate">{clip.stickerEmoji || clip.name}</span>
-                      </div>
-                    );
-                  })}
-                </div>
+                      <Music className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{clip.name}</span>
+                    </div>
+                  );
+                })
+              ) : (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveDrawer('audio');
+                  }}
+                  style={{
+                    left: `${halfWidth}px`,
+                    width: `${Math.max(160, totalTimelineDuration * pxPerSec)}px`,
+                  }}
+                  className="absolute h-7 px-3 rounded-md border border-dashed border-[#38BDF8]/60 text-[#38BDF8] bg-[#0284C7]/10 hover:bg-[#0284C7]/20 flex items-center gap-1.5 text-[9.5px] font-bold cursor-pointer transition-colors shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5 text-[#38BDF8] shrink-0" />
+                  <span>{isEn ? '+ Add audio' : '+ Thêm âm thanh'}</span>
+                </button>
               )}
             </div>
+
+            {/* ROW 3: TRACK 2 (TEXT TRACK) */}
+            <div className="h-7 relative flex items-center">
+              {/* Left runway before 00:00: Text Icon button */}
+              <div
+                style={{ width: `${halfWidth}px` }}
+                className="absolute left-0 top-0 bottom-0 flex items-center justify-end pr-2 z-20 pointer-events-auto"
+              >
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveDrawer('text');
+                  }}
+                  title="Mở thư viện văn bản"
+                  className="w-8 h-8 rounded-xl border border-[#F97316]/40 bg-[#F97316]/15 flex items-center justify-center text-[#FB923C] hover:bg-[#F97316]/30 cursor-pointer active:scale-95 transition-all shadow-xs"
+                >
+                  <Type className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Text Track Content starting at halfWidth (00:00) */}
+              {textClips.length > 0 ? (
+                textClips.map((clip) => {
+                  const clipLeft = halfWidth + clip.startTime * pxPerSec;
+                  const clipWidth = Math.max(28, clip.duration * pxPerSec);
+                  const isSelected = selectedClipId === clip.id;
+                  return (
+                    <div
+                      key={clip.id}
+                      style={{
+                        left: `${clipLeft}px`,
+                        width: `${clipWidth}px`,
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectClip(clip.id);
+                      }}
+                      className={`absolute h-5 rounded-full border px-2 flex items-center gap-1 text-[8.5px] font-bold truncate cursor-pointer transition-all ${
+                        isSelected
+                          ? 'bg-[#F97316] text-white border-white ring-2 ring-[#F97316]/50'
+                          : 'bg-[#C2410C]/25 text-[#FB923C] border-[#F97316]'
+                      }`}
+                    >
+                      <Type className="w-2.5 h-2.5 shrink-0" />
+                      <span className="truncate">{clip.subtitleText || clip.name}</span>
+                    </div>
+                  );
+                })
+              ) : (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveDrawer('text');
+                  }}
+                  style={{
+                    left: `${halfWidth}px`,
+                    width: `${Math.max(160, totalTimelineDuration * pxPerSec)}px`,
+                  }}
+                  className="absolute h-5 px-3 rounded-full border border-dashed border-[#F97316]/60 text-[#FB923C] bg-[#EA580C]/10 hover:bg-[#EA580C]/20 flex items-center gap-1.5 text-[8.5px] font-bold cursor-pointer transition-colors shadow-xs"
+                >
+                  <Plus className="w-3 text-[#FB923C] shrink-0" />
+                  <span>{isEn ? '+ Add text' : '+ Thêm văn bản'}</span>
+                </button>
+              )}
+            </div>
+
+            {/* ROW 4: TRACK 3 (STICKER TRACK - if any exist) */}
+            {stickerClips.length > 0 && (
+              <div className="h-6 relative flex items-center">
+                {stickerClips.map((clip) => {
+                  const clipLeft = halfWidth + clip.startTime * pxPerSec;
+                  const clipWidth = Math.max(28, clip.duration * pxPerSec);
+                  const isSelected = selectedClipId === clip.id;
+                  return (
+                    <div
+                      key={clip.id}
+                      style={{
+                        left: `${clipLeft}px`,
+                        width: `${clipWidth}px`,
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectClip(clip.id);
+                      }}
+                      className={`absolute h-5 rounded-full border px-2 flex items-center gap-1 text-[8.5px] font-bold truncate cursor-pointer transition-all ${
+                        isSelected
+                          ? 'bg-[#A855F7] text-white border-white ring-2 ring-[#A855F7]/50'
+                          : 'bg-[#7E22CE]/25 text-[#C084FC] border-[#A855F7]'
+                      }`}
+                    >
+                      <Smile className="w-2.5 h-2.5 shrink-0" />
+                      <span className="truncate">{clip.stickerEmoji || clip.name}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -2239,7 +2325,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       )}
 
       {/* DRAWER 9: ADJUSTMENTS DRAWER */}
-      {activeDrawer === 'adjust' && currentClip && (
+      {activeDrawer === 'adjust' && (activeAdjustmentClip || videoClips.length > 0) && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end">
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-xs animate-in fade-in"
@@ -2252,27 +2338,58 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
           >
             <div className="flex items-center justify-between pb-3 border-b border-inherit">
               <span className="font-bold text-sm">Điều chỉnh ánh sáng & Màu sắc</span>
-              <button type="button" onClick={() => setActiveDrawer(null)}>
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = activeAdjustmentClip;
+                    if (target) {
+                      if (!selectedClipId) onSelectClip(target.id);
+                      [
+                        'brightness',
+                        'contrast',
+                        'saturation',
+                        'warmth',
+                        'tint',
+                        'highlight',
+                        'shadow',
+                        'sharpen',
+                        'vignette',
+                        'hslHue',
+                        'hslSat',
+                        'hslBri',
+                      ].forEach((k) => onUpdateClipProp(k, 0, target.id));
+                    }
+                  }}
+                  className="text-xs text-[#00E5CC] hover:underline font-medium cursor-pointer"
+                >
+                  Đặt lại về 0
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveDrawer(null)}
+                  className="p-1 rounded-full hover:bg-white/10 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
             <div className="py-3 space-y-3.5 max-h-[60vh] overflow-y-auto pr-1">
               {[
-                { key: 'brightness', label: 'Độ sáng (Brightness)', min: -50, max: 50 },
-                { key: 'contrast', label: 'Độ tương phản (Contrast)', min: -50, max: 50 },
-                { key: 'saturation', label: 'Độ bão hòa màu (Saturation)', min: -50, max: 50 },
-                { key: 'warmth', label: 'Nhiệt độ màu (Warmth / Temp)', min: -50, max: 50 },
-                { key: 'tint', label: 'Sắc thái màu (Tint)', min: -50, max: 50 },
-                { key: 'highlight', label: 'Vùng sáng (Highlights)', min: -50, max: 50 },
-                { key: 'shadow', label: 'Vùng tối (Shadows)', min: -50, max: 50 },
-                { key: 'sharpen', label: 'Độ sắc nét (Sharpen)', min: 0, max: 100 },
-                { key: 'vignette', label: 'Viền tối góc (Vignette)', min: 0, max: 100 },
-                { key: 'opacity', label: 'Độ mờ đục (Opacity)', min: 0, max: 100, defaultVal: 100 },
-                { key: 'hslHue', label: 'Tông màu HSL (Hue)', min: -50, max: 50 },
-                { key: 'hslSat', label: 'Độ bão hòa HSL (Sat)', min: -50, max: 50 },
-                { key: 'hslBri', label: 'Độ sáng HSL (Lightness)', min: -50, max: 50 },
+                { key: 'brightness', label: 'Độ sáng (Brightness)', min: -100, max: 100 },
+                { key: 'contrast', label: 'Độ tương phản (Contrast)', min: -100, max: 100 },
+                { key: 'saturation', label: 'Độ bão hòa màu (Saturation)', min: -100, max: 100 },
+                { key: 'warmth', label: 'Nhiệt độ màu (Warmth / Temp)', min: -100, max: 100 },
+                { key: 'tint', label: 'Sắc thái màu (Tint)', min: -100, max: 100 },
+                { key: 'highlight', label: 'Vùng sáng (Highlights)', min: -100, max: 100 },
+                { key: 'shadow', label: 'Vùng tối (Shadows)', min: -100, max: 100 },
+                { key: 'sharpen', label: 'Độ sắc nét (Sharpen)', min: -100, max: 100 },
+                { key: 'vignette', label: 'Viền tối góc (Vignette)', min: -100, max: 100 },
+                { key: 'hslHue', label: 'Tông màu HSL (Hue)', min: -100, max: 100 },
+                { key: 'hslSat', label: 'Độ bão hòa HSL (Sat)', min: -100, max: 100 },
+                { key: 'hslBri', label: 'Độ sáng HSL (Lightness)', min: -100, max: 100 },
               ].map((adj) => {
-                const currentVal = (currentClip[adj.key as keyof TimelineClip] as number) ?? adj.defaultVal ?? 0;
+                const currentVal = (activeAdjustmentClip?.[adj.key as keyof TimelineClip] as number) ?? 0;
                 return (
                   <div key={adj.key} className="space-y-1">
                     <div className="flex items-center justify-between text-xs">
@@ -2286,7 +2403,13 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                       min={adj.min}
                       max={adj.max}
                       value={currentVal}
-                      onChange={(e) => onUpdateClipProp(adj.key, Number(e.target.value))}
+                      onChange={(e) => {
+                        const targetId = activeAdjustmentClip?.id;
+                        if (targetId && !selectedClipId) {
+                          onSelectClip(targetId);
+                        }
+                        onUpdateClipProp(adj.key, Number(e.target.value), targetId);
+                      }}
                       className="w-full accent-[#00E5CC] h-1.5 cursor-pointer"
                     />
                   </div>

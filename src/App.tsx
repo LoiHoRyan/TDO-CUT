@@ -5440,8 +5440,17 @@ export default function App() {
             setSelectedClipIds(id ? [id] : []);
             if (id) setInspectorMode('clip');
           }}
-          onUpdateClipProp={(key, value) => {
-            updateSelectedClipProp(key as keyof TimelineClip, value);
+          onUpdateClipProp={(key, value, targetClipId) => {
+            const targetId = targetClipId || selectedClipId || (currentClip && currentClip.id) || (clips[0] && clips[0].id);
+            if (!targetId) return;
+            const commitKey = `clip:${targetId}:${String(key)}`;
+            commitClips((prev) =>
+              prev.map((c) => {
+                if (c.id !== targetId) return c;
+                return { ...c, [key]: value };
+              }),
+              commitKey
+            );
           }}
           onFlipHorizontal={() => {
             if (currentClip) {
@@ -8094,7 +8103,7 @@ export default function App() {
                           { key: 'contrast', label: 'Tương phản', min: -100, max: 100 },
                           { key: 'saturation', label: 'Độ bão hòa', min: -100, max: 100 },
                           { key: 'warmth', label: 'Nhiệt độ màu', min: -100, max: 100 },
-                          { key: 'vignette', label: 'Viền tối', min: 0, max: 100 },
+                          { key: 'vignette', label: 'Viền tối', min: -100, max: 100 },
                         ] as const
                       ).map((slider) => (
                         <div
@@ -10203,7 +10212,11 @@ export default function App() {
                               { key: 'contrast', label: 'Tương phản', min: -100, max: 100 },
                               { key: 'saturation', label: 'Bão hòa', min: -100, max: 100 },
                               { key: 'warmth', label: 'Nhiệt độ màu', min: -100, max: 100 },
-                              { key: 'vignette', label: 'Viền tối', min: 0, max: 100 },
+                              { key: 'tint', label: 'Sắc thái', min: -100, max: 100 },
+                              { key: 'highlight', label: 'Vùng sáng', min: -100, max: 100 },
+                              { key: 'shadow', label: 'Vùng tối', min: -100, max: 100 },
+                              { key: 'sharpen', label: 'Độ sắc nét', min: -100, max: 100 },
+                              { key: 'vignette', label: 'Viền tối', min: -100, max: 100 },
                             ] as const
                           ).map((adj) => (
                             <div

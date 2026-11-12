@@ -295,16 +295,16 @@ export interface TimelineClip {
   voiceEffect?: 'none' | 'chipmunk' | 'robot' | 'deep' | 'echo' | 'megaphone';
   beatMarkers?: number[]; // relative seconds of detected beats
   sfxType?: 'whoosh' | 'beep' | 'bassdrop' | 'ding';
-  // CapCut Color Adjustments (Điều chỉnh Basic + HSL)
-  brightness?: number;    // -50 to 50
-  contrast?: number;      // -50 to 50
-  saturation?: number;    // -50 to 50
-  warmth?: number;        // -50 to 50 (Temp)
-  tint?: number;          // -50 to 50
-  highlight?: number;     // -50 to 50
-  shadow?: number;        // -50 to 50
-  sharpen?: number;       // 0 to 100
-  vignette?: number;      // 0 to 100
+  // CapCut Color Adjustments (Điều chỉnh Basic + HSL: default 0, min -100, max 100)
+  brightness?: number;    // -100 to 100
+  contrast?: number;      // -100 to 100
+  saturation?: number;    // -100 to 100
+  warmth?: number;        // -100 to 100 (Temp)
+  tint?: number;          // -100 to 100
+  highlight?: number;     // -100 to 100
+  shadow?: number;        // -100 to 100
+  sharpen?: number;       // -100 to 100
+  vignette?: number;      // -100 to 100
   protectSkinTone?: boolean;
   hslColor?: 'red' | 'orange' | 'yellow' | 'green' | 'cyan' | 'blue' | 'purple' | 'magenta';
   hslHue?: number;

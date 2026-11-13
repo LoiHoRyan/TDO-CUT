@@ -363,6 +363,7 @@ interface ExportVideoModalProps {
   onDownloadCapCutDraft: () => void;
   onShuffleBeforeVariantExport?: () => void;
   language?: AppLanguage;
+  isMobile?: boolean;
 }
 
 export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
@@ -381,8 +382,45 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
   onDownloadCapCutDraft,
   onShuffleBeforeVariantExport,
   language = 'vi',
+  isMobile: propIsMobile,
 }) => {
   const isEn = language === 'en';
+  const [isWindowMobile, setIsWindowMobile] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 768;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsWindowMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const isMobile = propIsMobile !== undefined ? propIsMobile : isWindowMobile;
+
+  // Track active object URLs to prevent OOM memory leak in mobile browsers
+  const activeObjectUrlsRef = useRef<Set<string>>(new Set());
+  const revokeAllObjectUrls = () => {
+    activeObjectUrlsRef.current.forEach((u) => {
+      try {
+        URL.revokeObjectURL(u);
+      } catch {
+        // Ignore
+      }
+    });
+    activeObjectUrlsRef.current.clear();
+  };
+
+  useEffect(() => {
+    return () => {
+      revokeAllObjectUrls();
+    };
+  }, []);
+
   const [title, setTitle] = useState(() => resolveDefaultProjectTitle(projectName, language));
   const [exportPath, setExportPath] = useState(() => getDefaultExportDirPath());
 
@@ -582,6 +620,14 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
     );
   };
 
+  const handleModalClose = () => {
+    if (isRendering) {
+      handleCancelExport();
+    }
+    revokeAllObjectUrls();
+    onClose();
+  };
+
   if (!isOpen) return null;
 
   const effectiveCoverUrl = coverDataUrl || localCapturedCoverUrl;
@@ -643,8 +689,66 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
     totalDuration
   );
 
-  // Honor exact CapCut Studio resolution (480p, 720p, 1080p, 2K, 4K) while preserving exact native video aspect ratio in 'original' mode
+  // Honor exact CapCut Studio resolution (480p, 720p, 1080p, 2K, 4K) while preserving exact aspect ratios (1080x1920 for 9:16, 1920x1080 for 16:9)
   const computeExactTargetDimensions = (): { width: number; height: number } => {
+    const currentRatio = effectiveAspectRatio;
+    const toEven = (n: number) => Math.max(2, Math.round(n / 2) * 2);
+
+    if (currentRatio === '9:16') {
+      if (resolution === '720p') return { width: 720, height: 1280 };
+      if (resolution === '1080p') return { width: 1080, height: 1920 };
+      if (resolution === '2K') return { width: 1440, height: 2560 };
+      if (resolution === '4K') return { width: 2160, height: 3840 };
+      if (resolution === '480p') return { width: 480, height: 854 };
+      return { width: 1080, height: 1920 };
+    }
+    if (currentRatio === '16:9') {
+      if (resolution === '720p') return { width: 1280, height: 720 };
+      if (resolution === '1080p') return { width: 1920, height: 1080 };
+      if (resolution === '2K') return { width: 2560, height: 1440 };
+      if (resolution === '4K') return { width: 3840, height: 2160 };
+      if (resolution === '480p') return { width: 854, height: 480 };
+      return { width: 1920, height: 1080 };
+    }
+    if (currentRatio === '1:1') {
+      const dim =
+        resolution === '4K'
+          ? 2160
+          : resolution === '2K'
+          ? 1440
+          : resolution === '720p'
+          ? 720
+          : resolution === '480p'
+          ? 480
+          : 1080;
+      return { width: dim, height: dim };
+    }
+    if (currentRatio === '3:4') {
+      const h =
+        resolution === '4K'
+          ? 2880
+          : resolution === '2K'
+          ? 1920
+          : resolution === '720p'
+          ? 960
+          : resolution === '480p'
+          ? 640
+          : 1440;
+      return { width: toEven((h * 3) / 4), height: h };
+    }
+    if (currentRatio === '4:3') {
+      const w =
+        resolution === '4K'
+          ? 2880
+          : resolution === '2K'
+          ? 1920
+          : resolution === '720p'
+          ? 960
+          : resolution === '480p'
+          ? 640
+          : 1440;
+      return { width: w, height: toEven((w * 3) / 4) };
+    }
     if (aspectRatio === 'original' && detectedNativeW > 0 && detectedNativeH > 0) {
       const shortSideMap: Record<typeof resolution, number> = {
         '480p': 480,
@@ -655,7 +759,6 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
       };
       const shortSide = shortSideMap[resolution] || 1080;
       const natRatio = detectedNativeW / detectedNativeH;
-      const toEven = (n: number) => Math.max(2, Math.round(n / 2) * 2);
       if (natRatio >= 1) {
         return { width: toEven(shortSide * natRatio), height: toEven(shortSide) };
       }
@@ -1659,25 +1762,49 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             (m) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)
           ) || '';
 
-        // True CapCut Studio target bitrate (24 Mbps for 1080p Recommended, 34.8 Mbps Higher, 38 Mbps 2K, 65 Mbps 4K)
-        const targetBitrateBps = Math.max(
-          8_000_000,
-          Math.min(85_000_000, exportSpec.videoBitsPerSecond || 24_000_000)
-        );
+        // True CapCut target bitrate (12-16 Mbps for 1080p, 8-10 Mbps for 720p, 20-30 Mbps for 2K/4K)
+        const mobileTargetBps =
+          resolution === '4K' || resolution === '2K'
+            ? 18_000_000
+            : resolution === '720p'
+            ? bitrateMode === 'higher'
+              ? 10_000_000
+              : 8_000_000
+            : bitrateMode === 'higher'
+            ? 16_000_000
+            : 12_000_000;
+
+        const effectiveTargetBps = isMobile
+          ? mobileTargetBps
+          : Math.max(8_000_000, Math.min(85_000_000, exportSpec.videoBitsPerSecond || 24_000_000));
+
         let recorder: MediaRecorder;
+        const buildRecorder = (bps: number): MediaRecorder => {
+          if (mimeType) {
+            return new MediaRecorder(videoStream, {
+              mimeType,
+              videoBitsPerSecond: bps,
+              audioBitsPerSecond: 192_000,
+            });
+          }
+          return new MediaRecorder(videoStream, {
+            videoBitsPerSecond: bps,
+            audioBitsPerSecond: 192_000,
+          });
+        };
+
         try {
-          recorder = mimeType
-            ? new MediaRecorder(videoStream, {
-                mimeType,
-                videoBitsPerSecond: targetBitrateBps,
-                audioBitsPerSecond: 320_000,
-              })
-            : new MediaRecorder(videoStream, {
-                videoBitsPerSecond: targetBitrateBps,
-                audioBitsPerSecond: 320_000,
-              });
+          recorder = buildRecorder(effectiveTargetBps);
         } catch {
-          recorder = new MediaRecorder(videoStream);
+          try {
+            recorder = buildRecorder(8_000_000);
+          } catch {
+            try {
+              recorder = buildRecorder(5_000_000);
+            } catch {
+              recorder = new MediaRecorder(videoStream);
+            }
+          }
         }
         activeRecorderRef.current = recorder;
 
@@ -1945,6 +2072,271 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
     URL.revokeObjectURL(url);
   };
 
+  // Dedicated Mobile Export Bottom Sheet (Matching CapCut Mobile aesthetics)
+  if (isMobile) {
+    return (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={isEn ? 'Mobile Export Window' : 'Xuất video'}
+        className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center items-center bg-black/85 backdrop-blur-sm p-0 sm:p-4 text-xs text-[#E4E4E7]"
+      >
+        <div className="w-full max-w-[480px] bg-[#18181E] border-t sm:border border-[#2C2C36] rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[85vh]">
+          {/* Mobile Header */}
+          <div className="flex items-center justify-between px-4 py-3.5 bg-[#202028] border-b border-[#2C2C36] shrink-0">
+            <div className="flex items-center gap-2 font-bold text-sm text-white">
+              <Film className="w-4 h-4 text-[#00E5CC]" />
+              <span>{isEn ? 'Export Video' : 'Xuất video'}</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleModalClose}
+              aria-label={isEn ? 'Close export' : 'Đóng'}
+              className="p-1.5 text-[#A1A1AA] hover:text-white rounded-full bg-[#2C2C36]/50 active:bg-[#383846] cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Mobile Body: Vertical Scroll */}
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+            {/* Top Preview & Title Card */}
+            <div className="flex items-center gap-3 p-2.5 bg-[#202028] border border-[#2C2C36] rounded-xl">
+              <div
+                style={
+                  effectiveCoverUrl
+                    ? {
+                        backgroundImage: `url(${effectiveCoverUrl})`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                      }
+                    : {
+                        background: 'linear-gradient(135deg, #0D9488 0%, #1E1B4B 55%, #090D16 100%)',
+                      }
+                }
+                className="w-14 h-18 rounded-lg border border-[#3A3A48] shrink-0 overflow-hidden relative flex items-end justify-center shadow-md"
+              >
+                <span className="absolute top-1 left-1 px-1 py-0.2 text-[8px] font-mono bg-black/70 text-[#00E5CC] rounded">
+                  {aspectRatio === 'original' ? 'Gốc' : aspectRatio}
+                </span>
+                {coverTextOverlay && (
+                  <span
+                    style={{ color: coverTemplateColor }}
+                    className="text-[9px] font-black truncate max-w-[90%] mb-1 px-1 bg-black/75 rounded"
+                  >
+                    {coverTextOverlay}
+                  </span>
+                )}
+              </div>
+              <div className="flex-1 min-w-0 space-y-1">
+                <input
+                  type="text"
+                  value={title}
+                  placeholder={isEn ? 'Enter project name' : 'Nhập tên dự án'}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full px-2 py-1 bg-[#141418] border border-[#32323C] rounded text-white text-xs font-semibold focus:border-[#00E5CC] outline-none"
+                />
+                <div className="text-[11px] text-[#A1A1AA] flex items-center gap-1.5">
+                  <span data-testid="export-quality-spec" className="text-[#00E5CC] font-mono font-bold">
+                    {targetExportW}×{targetExportH}
+                  </span>
+                  <span>•</span>
+                  <span>{exportSpec.fps} FPS</span>
+                  <span>•</span>
+                  <span>{totalDuration.toFixed(1)}s</span>
+                </div>
+                <div className="text-[10px] text-[#9CA3AF]">
+                  {isEn ? 'Est. size:' : 'Dung lượng ước tính:'}{' '}
+                  <span data-testid="export-estimated-size" className="text-[#00E5CC] font-mono font-bold">
+                    ~{estimatedSizeMb} MB
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Resolution Segmented Control */}
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-semibold text-[#D4D4D8]">
+                {isEn ? 'Resolution' : 'Độ phân giải'}
+              </span>
+              <div className="grid grid-cols-4 gap-1.5">
+                {(['720p', '1080p', '2K', '4K'] as const).map((r) => {
+                  const active = resolution === r;
+                  return (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setResolution(r)}
+                      className={`py-2 text-xs font-bold rounded-lg transition-all border ${
+                        active
+                          ? 'bg-[#00E5CC] text-black border-[#00E5CC] shadow-md shadow-[#00E5CC]/20'
+                          : 'bg-[#202028] text-[#D4D4D8] border-[#2C2C36] hover:bg-[#282834]'
+                      }`}
+                    >
+                      {r.toUpperCase()}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Frame Rate Segmented Control */}
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-semibold text-[#D4D4D8]">
+                {isEn ? 'Frame Rate' : 'Tỷ lệ khung hình'}
+              </span>
+              <div className="grid grid-cols-3 gap-1.5">
+                {(['24fps', '30fps', '60fps'] as const).map((f) => {
+                  const active = fps === f;
+                  return (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setFps(f)}
+                      className={`py-2 text-xs font-bold rounded-lg transition-all border ${
+                        active
+                          ? 'bg-[#00E5CC] text-black border-[#00E5CC] shadow-md shadow-[#00E5CC]/20'
+                          : 'bg-[#202028] text-[#D4D4D8] border-[#2C2C36] hover:bg-[#282834]'
+                      }`}
+                    >
+                      {f.replace('fps', ' FPS')}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Quality / Bitrate Segmented Control */}
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-semibold text-[#D4D4D8]">
+                {isEn ? 'Bitrate / Quality' : 'Chất lượng / Tốc độ mã'}
+              </span>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[
+                  { id: 'recommended', label: isEn ? 'Standard' : 'Tiêu chuẩn (Chuẩn)' },
+                  { id: 'higher', label: isEn ? 'High Quality' : 'Chất lượng cao' },
+                ].map((b) => {
+                  const active = bitrateMode === b.id;
+                  return (
+                    <button
+                      key={b.id}
+                      type="button"
+                      onClick={() => setBitrateMode(b.id as 'recommended' | 'higher')}
+                      className={`py-2 text-xs font-bold rounded-lg transition-all border ${
+                        active
+                          ? 'bg-[#00E5CC] text-black border-[#00E5CC] shadow-md shadow-[#00E5CC]/20'
+                          : 'bg-[#202028] text-[#D4D4D8] border-[#2C2C36] hover:bg-[#282834]'
+                      }`}
+                    >
+                      {b.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Format Selection (MP4 / MOV) */}
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-semibold text-[#D4D4D8]">
+                {isEn ? 'Format' : 'Định dạng tệp'}
+              </span>
+              <div className="grid grid-cols-2 gap-1.5">
+                {(['mp4', 'mov'] as const).map((fmt) => {
+                  const active = format === fmt;
+                  return (
+                    <button
+                      key={fmt}
+                      type="button"
+                      onClick={() => setFormat(fmt)}
+                      className={`py-2 text-xs font-bold rounded-lg transition-all border ${
+                        active
+                          ? 'bg-[#00E5CC] text-black border-[#00E5CC] shadow-md shadow-[#00E5CC]/20'
+                          : 'bg-[#202028] text-[#D4D4D8] border-[#2C2C36] hover:bg-[#282834]'
+                      }`}
+                    >
+                      {fmt.toUpperCase()}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Live Progress Bar when Rendering */}
+            {isRendering && (
+              <div className="p-3 bg-[#202028] border border-[#00E5CC]/50 rounded-xl space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 font-bold text-[#00E5CC]">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>{isEn ? 'Exporting video...' : 'Đang xuất video...'}</span>
+                  </div>
+                  <span className="font-mono font-bold text-white text-sm">{progress}%</span>
+                </div>
+                <div className="w-full h-2.5 bg-[#141418] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-[#00E5CC] to-[#38BDF8] transition-all duration-150"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-[#A1A1AA] text-center">
+                  {isEn
+                    ? 'Please keep this screen open and do not close browser'
+                    : 'Vui lòng giữ nguyên màn hình và không đóng trình duyệt'}
+                </p>
+              </div>
+            )}
+
+            {/* Exported Video Done Box */}
+            {exportedFiles.length > 0 && !isRendering && (
+              <div className="p-3 bg-[#1A2624] border border-[#00E5CC] rounded-xl space-y-2.5">
+                <div className="flex items-center gap-2 text-xs font-bold text-[#00E5CC]">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>{isEn ? 'Video exported successfully!' : 'Đã xuất video thành công!'}</span>
+                </div>
+                <video
+                  src={exportedFiles[0].url}
+                  controls
+                  playsInline
+                  className="w-full max-h-48 rounded-lg bg-black object-contain"
+                />
+                <a
+                  href={exportedFiles[0].url}
+                  download={exportedFiles[0].name}
+                  className="w-full py-2.5 bg-[#00E5CC] hover:bg-[#00c4ae] active:scale-[0.98] text-black font-extrabold text-xs rounded-lg flex items-center justify-center gap-1.5 transition"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>{isEn ? 'Download Video to Phone' : 'Lưu video vào điện thoại'}</span>
+                </a>
+              </div>
+            )}
+          </div>
+
+          {/* Mobile Footer Action Button */}
+          <div className="p-3.5 bg-[#202028] border-t border-[#2C2C36] shrink-0">
+            {isRendering ? (
+              <button
+                type="button"
+                onClick={handleCancelExport}
+                className="w-full py-3 bg-[#EF4444] hover:bg-[#DC2626] active:scale-[0.98] text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2 transition cursor-pointer"
+              >
+                <Ban className="w-4 h-4" />
+                <span>{isEn ? 'Cancel Export' : 'Hủy xuất video'}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleStartRealVideoExport}
+                className="w-full py-3 bg-[#00E5CC] hover:bg-[#00c4ae] active:scale-[0.98] text-black font-extrabold text-sm rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-[#00E5CC]/25 transition cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>{isEn ? 'Export Video Now' : 'Xuất video ngay'}</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       role="dialog"
@@ -1959,18 +2351,13 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             <Film className="w-4 h-4 text-[#00E5CC]" />
             <span>
               {isEn
-                ? 'Export — TDO CUT Studio Desktop'
-                : 'Xuất (Export — TDO CUT Studio Desktop)'}
+                ? 'Export Video'
+                : 'Xuất Video (Export)'}
             </span>
           </div>
           <button
             type="button"
-            onClick={() => {
-              if (isRendering) {
-                handleCancelExport();
-              }
-              onClose();
-            }}
+            onClick={handleModalClose}
             aria-label={isEn ? 'Close export modal' : 'Đóng hộp thoại xuất'}
             className="p-1 text-[#A1A1AA] hover:text-white rounded cursor-pointer"
           >

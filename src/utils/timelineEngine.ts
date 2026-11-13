@@ -2073,10 +2073,13 @@ export function buildFfmpegMatrixCommand(
 
   if (fastCopyMode) {
     const segCommands = v1
-      .map(
-        (c, i) =>
-          `ffmpeg -y -ss ${c.sourceIn.toFixed(2)} -t ${c.duration.toFixed(2)} -i "${c.filePath}" -map 0:v:0 -map 0:a:0? -c copy -avoid_negative_ts make_zero "seg_${i}.mp4"`
-      )
+      .map((c, i) => {
+        if ((c.sourceIn || 0) > 0.05) {
+          // Re-encode trimmed clip with IDR keyframe at frame 0 to prevent 0.8s freeze at playback start
+          return `ffmpeg -y -ss ${c.sourceIn.toFixed(2)} -t ${c.duration.toFixed(2)} -i "${c.filePath}" -map 0:v:0 -map 0:a:0? -c:v libx264 -crf ${crfVal} -preset fast -g 30 -keyint_min 30 -avoid_negative_ts make_zero -c:a aac -b:a 192k "seg_${i}.mp4"`;
+        }
+        return `ffmpeg -y -ss ${c.sourceIn.toFixed(2)} -t ${c.duration.toFixed(2)} -i "${c.filePath}" -map 0:v:0 -map 0:a:0? -c copy -avoid_negative_ts make_zero "seg_${i}.mp4"`;
+      })
       .join('\n');
     const concatList = v1.map((_, i) => `file 'seg_${i}.mp4'`).join('\n');
     return `# TDO-CUT — CHẾ ĐỘ SIÊU TỐC (-c copy · Giữ nguyên độ phân giải gốc ${nativeDims.width}x${nativeDims.height} & Âm thanh · Thời lượng chuẩn ${totalRealTimeDuration.toFixed(2)}s)\n${segCommands}\n# Danh sách nối (concat_list.txt):\n# ${concatList.replace(/\n/g, ' | ')}\nffmpeg -y -f concat -safe 0 -i concat_list.txt -map 0:v:0 -map 0:a:0? -c copy -movflags +faststart "./Output/TDO_Cut_FastCopy_${count}Vars.mp4"`;
@@ -2108,14 +2111,16 @@ export function buildFfmpegMatrixCommand(
   const afChain = `-af "aresample=async=1:first_pts=0,asetpts=PTS-STARTPTS"`;
   const durFlag = totalRealTimeDuration > 0 ? `-t ${totalRealTimeDuration.toFixed(2)}` : '';
 
+  const gopFlags = '-g 30 -keyint_min 30';
+  const faststartFlags = '-movflags +faststart -avoid_negative_ts make_zero';
   const encoder = config.gpuEncoder || 'hevc_nvenc';
   if (encoder === 'prores') {
     return `ffmpeg -y ${inputs} -map 0:v:0 -map 0:a:0? ${vfChain} ${afChain} -vsync cfr -c:v prores -profile:v 3 -pix_fmt yuv422p10le -crf ${crfVal} -preset ${presetVal} -b:v 45M -c:a pcm_s16le -ar 48000 -ac 2 ${durFlag} ${metaFlags} "./Output/TDO_Cut_Variant_${String(variantOrRatio)}.mov"`;
   }
   if (encoder === 'hevc_nvenc') {
-    return `ffmpeg -y ${inputs} -map 0:v:0 -map 0:a:0? ${vfChain} ${afChain} -vsync cfr -c:v hevc_nvenc -tag:v hvc1 -crf ${crfVal} -cq ${crfVal} -preset ${presetVal} -b:v 28M -pix_fmt yuv420p -c:a aac -b:a 192k -ar 48000 -ac 2 -movflags +faststart ${durFlag} ${metaFlags} "./Output/TDO_Cut_Variant_${String(variantOrRatio)}.mp4"`;
+    return `ffmpeg -y ${inputs} -map 0:v:0 -map 0:a:0? ${vfChain} ${afChain} -vsync cfr -c:v hevc_nvenc -tag:v hvc1 -crf ${crfVal} -cq ${crfVal} -preset ${presetVal} ${gopFlags} -b:v 28M -pix_fmt yuv420p -c:a aac -b:a 192k -ar 48000 -ac 2 ${faststartFlags} ${durFlag} ${metaFlags} "./Output/TDO_Cut_Variant_${String(variantOrRatio)}.mp4"`;
   }
-  return `ffmpeg -y ${inputs} -map 0:v:0 -map 0:a:0? ${vfChain} ${afChain} -vsync cfr -c:v ${encoder} -crf ${crfVal} -preset ${presetVal} -b:v 20M -pix_fmt yuv420p -c:a aac -b:a 192k -ar 48000 -ac 2 -movflags +faststart ${durFlag} ${metaFlags} "./Output/TDO_Cut_Variant_${String(variantOrRatio)}.mp4"`;
+  return `ffmpeg -y ${inputs} -map 0:v:0 -map 0:a:0? ${vfChain} ${afChain} -vsync cfr -c:v ${encoder} -crf ${crfVal} -preset ${presetVal} ${gopFlags} -b:v 20M -pix_fmt yuv420p -c:a aac -b:a 192k -ar 48000 -ac 2 ${faststartFlags} ${durFlag} ${metaFlags} "./Output/TDO_Cut_Variant_${String(variantOrRatio)}.mp4"`;
 }
 
 export interface ContainedRect {
@@ -3462,9 +3467,23 @@ export async function patchMediaRecorderBlobDuration(
   durationSec: number
 ): Promise<Blob> {
   try {
-    const ab = await blob.arrayBuffer();
-    const patched = patchMediaRecorderBufferDuration(new Uint8Array(ab), durationSec);
-    return new Blob([new Uint8Array(patched).buffer as ArrayBuffer], { type: blob.type || 'video/webm' });
+    if (!blob || blob.size <= 0 || !durationSec || durationSec <= 0) return blob;
+    // For small buffers up to 128KB, patch directly
+    if (blob.size <= 131072) {
+      const ab = await blob.arrayBuffer();
+      const patched = patchMediaRecorderBufferDuration(new Uint8Array(ab), durationSec);
+      return new Blob([new Uint8Array(patched).buffer as ArrayBuffer], { type: blob.type || 'video/webm' });
+    }
+    // For large video recordings (e.g. 20MB - 150MB on mobile):
+    // EBML header or MP4 mvhd box is always located in the first 64KB!
+    // Slicing only the header prevents allocating multiple full-sized video arrays in JS heap,
+    // which eliminates mobile browser OOM tab crashes completely.
+    const headerChunkSize = Math.min(blob.size, 65536);
+    const headerSlice = blob.slice(0, headerChunkSize);
+    const headerAb = await headerSlice.arrayBuffer();
+    const patchedHeader = patchMediaRecorderBufferDuration(new Uint8Array(headerAb), durationSec);
+    const restSlice = blob.slice(headerChunkSize);
+    return new Blob([new Uint8Array(patchedHeader).buffer as ArrayBuffer, restSlice], { type: blob.type || 'video/webm' });
   } catch {
     return blob;
   }

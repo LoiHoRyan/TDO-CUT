@@ -11562,10 +11562,11 @@ export default function App() {
         </main>
       )}
 
-      {/* 2-COLUMN TDO CUT EXPORT VIDEO MODAL */}
+      {/* TDO CUT EXPORT VIDEO MODAL */}
       <ExportVideoModal
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
+        isMobile={isMobile}
         projectName={projectName}
         aspectRatio={aspectRatio}
         clips={clips}

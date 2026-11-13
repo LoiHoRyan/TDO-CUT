@@ -853,6 +853,7 @@ async function startServer() {
 
           // Add each video segment as an input with safe clamped seek
           const vSegInputIndices: number[] = [];
+          const vSegTrimOffsets: number[] = [];
           vSegs.forEach((seg) => {
             const mIdx = seg.mediaIndex;
             const probed = mediaInfoList[mIdx];
@@ -862,15 +863,19 @@ async function startServer() {
               srcIn = Math.max(0, Number((probed.duration - 0.2).toFixed(3)));
             }
             const outDur = Math.max(0.1, Number((seg.duration || 1.0).toFixed(3)));
-            const srcDur = Number((outDur * spd + 0.25).toFixed(3));
-            ffArgs.push(
-              '-ss',
-              String(srcIn),
-              '-t',
-              String(srcDur),
-              '-i',
-              mediaPaths[mIdx]
-            );
+            const srcDur = Number((outDur * spd).toFixed(3));
+
+            // To completely prevent 0.8s initial freeze and audio/video desync:
+            // If srcIn <= 1.0s, demux without input -ss so FFmpeg decodes cleanly from frame 0 with exact PTS 0.
+            // If srcIn > 1.0s, seek to (srcIn - 0.5s) on input and trim from 0.5s via filter!
+            if (srcIn <= 1.0) {
+              ffArgs.push('-t', String(Number((srcIn + srcDur + 0.6).toFixed(3))), '-i', mediaPaths[mIdx]);
+              vSegTrimOffsets.push(srcIn);
+            } else {
+              const seekPre = Number((srcIn - 0.5).toFixed(3));
+              ffArgs.push('-ss', String(seekPre), '-t', String(Number((srcDur + 1.0).toFixed(3))), '-i', mediaPaths[mIdx]);
+              vSegTrimOffsets.push(0.5);
+            }
             vSegInputIndices.push(nextInputIdx++);
           });
 
@@ -904,12 +909,14 @@ async function startServer() {
 
           vSegs.forEach((seg, idx) => {
             const inIdx = vSegInputIndices[idx];
+            const trimOffset = vSegTrimOffsets[idx] || 0;
             const mIdx = seg.mediaIndex;
             const probed = mediaInfoList[mIdx];
             const spd = Math.max(0.25, Math.min(4.0, seg.speed || 1.0));
             const outDur = Math.max(0.1, Number((seg.duration || 1.0).toFixed(3)));
 
             const vChain: string[] = [
+              `trim=start=${trimOffset.toFixed(3)}:duration=${(outDur * spd).toFixed(3)}`,
               `setpts=(PTS-STARTPTS)/${spd.toFixed(4)}`,
               `fps=${safeFps}`,
             ];
@@ -948,27 +955,20 @@ async function startServer() {
               const rin = probed.colorRange === 'pc' ? 'pc' : 'tv';
               vChain.push(
                 `zscale=tin=${tin}:pin=bt2020:min=${min}:rin=${rin}:t=bt709:p=bt709:m=bt709:r=tv`,
-                `scale='trunc(min(${safeW},iw*${userScale.toFixed(3)})/2)*2':'trunc(min(${safeH},ih*${userScale.toFixed(3)})/2)*2':force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos+accurate_rnd+full_chroma_int`,
-                `pad=${safeW}:${safeH}:'(ow-iw)/2+${userPosX}':'(oh-ih)/2+${userPosY}':black`,
+                `scale=${safeW}:${safeH}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos+accurate_rnd+full_chroma_int`,
+                `scale='trunc(iw*${userScale.toFixed(3)}/2)*2':'trunc(ih*${userScale.toFixed(3)}/2)*2':flags=lanczos+accurate_rnd`,
+                `pad='max(iw,${safeW})':'max(ih,${safeH})':'(ow-iw)/2+${userPosX}':'(oh-ih)/2+${userPosY}':black`,
+                `crop=${safeW}:${safeH}:'(iw-${safeW})/2':'(ih-${safeH})/2'`,
                 `unsharp=5:5:0.6:5:5:0.0`,
                 `setsar=1`,
                 `format=yuv420p`
               );
             } else {
-              // High-clarity Lanczos scaling with user scale + offset + studio unsharp mask
-              if (Math.abs(userScale - 1.0) > 0.01) {
-                vChain.push(
-                  `scale=${safeW}:${safeH}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos+accurate_rnd+full_chroma_int`,
-                  `scale='trunc(iw*${userScale.toFixed(3)}/2)*2':'trunc(ih*${userScale.toFixed(3)}/2)*2':flags=lanczos+accurate_rnd`,
-                  `pad=${safeW}:${safeH}:'(ow-iw)/2+${userPosX}':'(oh-ih)/2+${userPosY}':black`
-                );
-              } else {
-                vChain.push(
-                  `scale=${safeW}:${safeH}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos+accurate_rnd+full_chroma_int`,
-                  `pad=${safeW}:${safeH}:'(ow-iw)/2+${userPosX}':'(oh-ih)/2+${userPosY}':black`
-                );
-              }
               vChain.push(
+                `scale=${safeW}:${safeH}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos+accurate_rnd+full_chroma_int`,
+                `scale='trunc(iw*${userScale.toFixed(3)}/2)*2':'trunc(ih*${userScale.toFixed(3)}/2)*2':flags=lanczos+accurate_rnd`,
+                `pad='max(iw,${safeW})':'max(ih,${safeH})':'(ow-iw)/2+${userPosX}':'(oh-ih)/2+${userPosY}':black`,
+                `crop=${safeW}:${safeH}:'(iw-${safeW})/2':'(ih-${safeH})/2'`,
                 `unsharp=5:5:0.6:5:5:0.0`,
                 `setsar=1`,
                 `format=yuv420p`
@@ -992,7 +992,6 @@ async function startServer() {
               vChain.push(`fade=t=in:st=0:d=${tDur.toFixed(2)}`);
             }
             vChain.push(
-              `tpad=stop_mode=clone:stop_duration=0.5`,
               `trim=0:${outDur.toFixed(3)}`,
               `setpts=PTS-STARTPTS`
             );
@@ -1010,8 +1009,9 @@ async function startServer() {
                 )},asetpts=PTS-STARTPTS,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[asil${idx}]`
               );
               const aChain: string[] = [
-                `aresample=48000:async=1:first_pts=0`,
+                `atrim=start=${trimOffset.toFixed(3)}:duration=${(outDur * spd).toFixed(3)}`,
                 `asetpts=PTS-STARTPTS`,
+                `aresample=48000:async=1:first_pts=0`,
               ];
               const atempo = buildAtempoChain(spd);
               if (atempo) aChain.push(atempo);
@@ -1136,6 +1136,12 @@ async function startServer() {
               `${targetKbps}k`,
               '-bufsize',
               `${bufSizeKbps}k`,
+              '-g',
+              String(safeFps),
+              '-keyint_min',
+              String(safeFps),
+              '-avoid_negative_ts',
+              'make_zero',
               '-c:a',
               'libopus',
               '-b:a',
@@ -1156,18 +1162,22 @@ async function startServer() {
               'high',
               '-level:v',
               maxDim > 1920 ? '5.2' : '4.2',
-              '-crf',
-              String(effectiveCrf),
+              '-b:v',
+              `${targetKbps}k`,
               '-maxrate',
               `${Math.round(targetKbps * 1.35)}k`,
               '-bufsize',
               `${bufSizeKbps}k`,
+              '-crf',
+              String(effectiveCrf),
               '-x264-params',
               'cabac=1:deblock=1,0,0:8x8dct=1:aq-mode=2:aq-strength=1.0',
               '-g',
-              String(safeFps * 2),
+              String(safeFps),
               '-keyint_min',
               String(safeFps),
+              '-avoid_negative_ts',
+              'make_zero',
               '-pix_fmt',
               'yuv420p',
               '-color_primaries',

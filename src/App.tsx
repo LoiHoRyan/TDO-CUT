@@ -211,9 +211,29 @@ function NumericBoxWithSteppers({
   ariaLabel,
   onChange,
 }: NumericBoxWithSteppersProps) {
+  const [isFocused, setIsFocused] = useState(false);
+  const [textBuffer, setTextBuffer] = useState<string>(() =>
+    step < 1 ? String(Number(value.toFixed(2))) : String(Math.round(value))
+  );
+
+  useEffect(() => {
+    if (!isFocused) {
+      setTextBuffer(step < 1 ? String(Number(value.toFixed(2))) : String(Math.round(value)));
+    }
+  }, [value, step, isFocused]);
+
   const clampVal = (v: number) => {
     const clamped = Math.max(min, Math.min(max, v));
     return step < 1 ? Number(clamped.toFixed(2)) : Math.round(clamped);
+  };
+
+  const commitBuffer = () => {
+    const trimmed = textBuffer.trim().replace(/%/g, '');
+    const parsed = parseFloat(trimmed);
+    const safeVal = Number.isNaN(parsed) ? value : parsed;
+    const clamped = clampVal(safeVal);
+    setTextBuffer(step < 1 ? String(Number(clamped.toFixed(2))) : String(Math.round(clamped)));
+    onChange(clamped);
   };
 
   return (
@@ -222,19 +242,43 @@ function NumericBoxWithSteppers({
     >
       {prefix && <span className="text-[10px] text-[#71717A] mr-0.5 select-none">{prefix}</span>}
       <input
-        type="number"
+        type="text"
+        inputMode="decimal"
         aria-label={ariaLabel}
-        min={min}
-        max={max}
-        step={step}
-        value={step < 1 ? Number(value.toFixed(2)) : Math.round(value)}
+        value={textBuffer}
+        onFocus={(e) => {
+          setIsFocused(true);
+          e.currentTarget.select();
+        }}
         onChange={(e) => {
-          const parsed = parseFloat(e.target.value);
-          if (!Number.isNaN(parsed)) {
-            onChange(clampVal(parsed));
+          // Allow free text editing without premature clamping while typing
+          setTextBuffer(e.target.value);
+        }}
+        onBlur={() => {
+          setIsFocused(false);
+          commitBuffer();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            commitBuffer();
+            e.currentTarget.blur();
+          } else if (e.key === 'Escape') {
+            setTextBuffer(step < 1 ? String(Number(value.toFixed(2))) : String(Math.round(value)));
+            setIsFocused(false);
+            e.currentTarget.blur();
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            const next = clampVal(value + step);
+            setTextBuffer(step < 1 ? String(Number(next.toFixed(2))) : String(Math.round(next)));
+            onChange(next);
+          } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            const next = clampVal(value - step);
+            setTextBuffer(step < 1 ? String(Number(next.toFixed(2))) : String(Math.round(next)));
+            onChange(next);
           }
         }}
-        className="w-full min-w-0 bg-transparent text-right font-mono text-[11px] text-white focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        className="w-full min-w-0 bg-transparent text-right font-mono text-[11px] text-white focus:outline-none"
       />
       {unit && (
         <span className="text-[9.5px] font-mono text-[#9CA3AF] ml-0.5 select-none">{unit}</span>
@@ -243,7 +287,12 @@ function NumericBoxWithSteppers({
         <button
           type="button"
           title="Tăng thông số"
-          onClick={() => onChange(clampVal(value + step))}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            const next = clampVal(value + step);
+            setTextBuffer(step < 1 ? String(Number(next.toFixed(2))) : String(Math.round(next)));
+            onChange(next);
+          }}
           className="text-[8px] text-[#9CA3AF] hover:text-[#00E5CC] leading-[8px] cursor-pointer select-none"
         >
           ▴
@@ -251,7 +300,12 @@ function NumericBoxWithSteppers({
         <button
           type="button"
           title="Giảm thông số"
-          onClick={() => onChange(clampVal(value - step))}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            const next = clampVal(value - step);
+            setTextBuffer(step < 1 ? String(Number(next.toFixed(2))) : String(Math.round(next)));
+            onChange(next);
+          }}
           className="text-[8px] text-[#9CA3AF] hover:text-[#00E5CC] leading-[8px] cursor-pointer select-none"
         >
           ▾
@@ -5590,7 +5644,14 @@ export default function App() {
                           ...c,
                           posX,
                           posY,
-                          ...(scale !== undefined ? { scale } : {}),
+                          ...(scale !== undefined
+                            ? {
+                                scale,
+                                scaleX: scale,
+                                scaleY: scale,
+                                cropRatio: Number((scale / 100).toFixed(2)),
+                              }
+                            : {}),
                           ...(rotation !== undefined ? { rotation } : {}),
                         }
                       : c

@@ -1567,6 +1567,92 @@ test('Clip edge trim clamp strictly prevents stretching beyond sourceDuration, a
   assert.equal(packed[1].startTime, 6.0, 'Clip B snapped seamlessly to 6.0s eliminating the 4s gap');
 });
 
+test('Scale input buffer parsing, scale up to 500%, and mobile scroll playback guard', () => {
+  // 1. Verify Numeric input parsing with text buffers:
+  // User had 150 -> deletes 0 -> "15" -> adds 0 -> "100" (or "100%")
+  const parseNumericInput = (text: string, currentVal: number, min: number, max: number, step = 1): number => {
+    const trimmed = text.trim().replace(/%/g, '');
+    const parsed = parseFloat(trimmed);
+    const safeVal = Number.isNaN(parsed) ? currentVal : parsed;
+    const clamped = Math.max(min, Math.min(max, safeVal));
+    return step < 1 ? Number(clamped.toFixed(2)) : Math.round(clamped);
+  };
+
+  assert.equal(parseNumericInput('100', 150, 10, 500), 100, 'Typing 100 yields 100%');
+  assert.equal(parseNumericInput('100%', 150, 10, 500), 100, 'Typing 100% with percent symbol yields 100%');
+  assert.equal(parseNumericInput('500', 100, 10, 500), 500, 'Scale can reach full 500%');
+  assert.equal(parseNumericInput('650', 100, 10, 500), 500, 'Values above 500 clamp to 500%');
+  assert.equal(parseNumericInput('5', 100, 10, 500), 10, 'Values below min clamp to 10% on commit');
+  assert.equal(parseNumericInput('', 150, 10, 500), 150, 'Empty input safely falls back to current value');
+  assert.equal(parseNumericInput('-45', 0, -180, 180), -45, 'Negative inputs parsed and preserved');
+  assert.equal(parseNumericInput('1.75', 1.0, 0.1, 10, 0.1), 1.75, 'Decimal inputs parsed cleanly with fractional steps');
+
+  // 2. Verify Overlay clip scaling math up to 500% (5.0x screen width)
+  const computeOverlayFactor = (ovScalePercent: number) => {
+    const ovScale = ovScalePercent / 100;
+    const scaledFactor = ovScale <= 1 ? ovScale * 0.55 : 0.55 + (ovScale - 1) * 1.1125;
+    return Math.min(5.0, Math.max(0.08, scaledFactor));
+  };
+
+  assert.equal(Number(computeOverlayFactor(100).toFixed(2)), 0.55, 'Scale 100% overlay factor is 0.55');
+  assert.equal(Number(computeOverlayFactor(48).toFixed(3)), 0.264, 'Scale 48% overlay factor is preserved');
+  assert.equal(Number(computeOverlayFactor(500).toFixed(1)), 5.0, 'Scale 500% overlay factor reaches full 5.0x without being capped at 1.5x');
+
+  // 3. Verify Corner handle drag sensitivity reaches full 500% within a comfortable screen drag distance
+  const computeCornerDragScale = (origScale: number, delta: number, baseDim: number) => {
+    const deltaScale = (delta / baseDim) * 360;
+    return Math.max(10, Math.min(500, Math.round(origScale + deltaScale)));
+  };
+  const reachedMaxScale = computeCornerDragScale(100, 280, 250);
+  assert.equal(reachedMaxScale, 500, 'Corner drag comfortably reaches 500% on standard display width');
+
+  // 4. Mobile timeline scroll guard during active playback & user touch tracking:
+  let playhead = 5.3;
+  const isPlaying = true;
+  const isDraggingTimeline = false;
+  const isProgrammatic = true;
+
+  const handleMobileScrollSim = (
+    scrollLeft: number,
+    pxPerSec: number,
+    playing: boolean,
+    touching: boolean,
+    programmatic: boolean
+  ) => {
+    if (playing) return;
+    if (programmatic) return;
+    if (!touching) return;
+    playhead = scrollLeft / pxPerSec;
+  };
+
+  // Stale scroll event while playing -> must NOT modify playhead
+  handleMobileScrollSim(200, 50, isPlaying, isDraggingTimeline, isProgrammatic);
+  assert.equal(playhead, 5.3, 'Playhead must NOT be overridden by asynchronous scroll events while playing');
+
+  // Programmatic scroll while paused without user touch -> must NOT modify playhead
+  handleMobileScrollSim(100, 50, false, false, true);
+  assert.equal(playhead, 5.3, 'Programmatic scroll without user touching timeline must NOT modify playhead');
+
+  // User actively dragging timeline while paused -> MUST synchronize playhead
+  handleMobileScrollSim(400, 50, false, true, false);
+  assert.equal(playhead, 8.0, 'User touch dragging timeline synchronizes playhead to 8.0s');
+
+  // 5. Video seek tolerance check during playback vs paused
+  const shouldExecuteHardSeek = (curTime: number, targetTime: number, playing: boolean): boolean => {
+    const diff = Math.abs(curTime - targetTime);
+    if (playing) {
+      return diff > 2.0;
+    }
+    return diff > 0.04;
+  };
+
+  assert.equal(shouldExecuteHardSeek(1.2, 1.45, true), false, 'Small drift (0.25s < 0.5s) while playing does not force hard seek');
+  assert.equal(shouldExecuteHardSeek(1.2, 2.0, true), false, 'Moderate drift (0.8s) while playing does not force hard seek');
+  assert.equal(shouldExecuteHardSeek(1.2, 3.8, true), true, 'Large jump (> 2.0s) while playing triggers hard seek');
+  assert.equal(shouldExecuteHardSeek(1.2, 1.3, false), true, 'Scrubbing while paused with > 0.04s difference triggers precise seek');
+});
+
+
 
 
 

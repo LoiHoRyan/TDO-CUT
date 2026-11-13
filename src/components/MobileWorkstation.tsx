@@ -247,6 +247,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
   const timelineScrollRef = useRef<HTMLDivElement>(null);
   const isDraggingTimeline = useRef(false);
   const isProgrammaticScrollRef = useRef(false);
+  const lastProgrammaticScrollTimeRef = useRef(0);
   const dragStartX = useRef(0);
   const dragStartScrollLeft = useRef(0);
   const dragStartPlayhead = useRef(0);
@@ -295,6 +296,29 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
   );
   const halfWidth = Math.max(120, Math.round(containerWidth / 2));
 
+  // Memoize Timeline Ruler Marks to prevent expensive JSX recreation on every playhead tick
+  const rulerMarks = useMemo(() => {
+    const maxSec = Math.ceil(totalTimelineDuration) + 12;
+    return Array.from({ length: maxSec + 1 }).map((_, sec) => {
+      const leftPos = halfWidth + sec * pxPerSec;
+      const isMajor = pxPerSec >= 50 ? true : pxPerSec >= 24 ? sec % 2 === 0 : sec % 5 === 0;
+      return (
+        <div
+          key={sec}
+          style={{ left: `${leftPos}px` }}
+          className="absolute top-0 bottom-0 flex flex-col items-center pointer-events-none"
+        >
+          <div className={`w-[1px] ${isMajor ? 'h-2 bg-white/40' : 'h-1 bg-white/20'}`} />
+          {isMajor && (
+            <span className="text-[7.5px] font-mono text-[#94A3B8] -ml-3 mt-0.5 leading-none">
+              {formatTimecode(sec).slice(3, 8)}
+            </span>
+          )}
+        </div>
+      );
+    });
+  }, [totalTimelineDuration, halfWidth, pxPerSec]);
+
   // Target clip for adjustments (selected clip or clip under playhead or first video clip)
   const activeAdjustmentClip = useMemo(() => {
     if (selectedClipId) {
@@ -329,7 +353,11 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       initialPlayheadResetRef.current = true;
       if (playheadSec < 0 || playheadSec > 0.05) {
         onPlayheadChange(0);
-        if (timelineScrollRef.current) timelineScrollRef.current.scrollLeft = 0;
+        if (timelineScrollRef.current) {
+          isProgrammaticScrollRef.current = true;
+          lastProgrammaticScrollTimeRef.current = Date.now();
+          timelineScrollRef.current.scrollLeft = 0;
+        }
       }
     }
   }, []);
@@ -368,15 +396,22 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
 
   // Synchronize playhead when timeline is scrolled (swiped, dragged, momentum flicked, or wheeled)
   const handleScroll = () => {
-    if (isProgrammaticScrollRef.current) {
+    // 1. During active playback, timeline scroll is driven strictly by playheadSec.
+    // NEVER allow programmatic scroll events to overwrite playheadSec or stop playback!
+    if (isPlaying) {
+      return;
+    }
+    // 2. Programmatic scrolls (playhead updates, zoom changes, reset to 0) must NEVER overwrite playheadSec!
+    if (isProgrammaticScrollRef.current || Date.now() - lastProgrammaticScrollTimeRef.current < 200) {
       isProgrammaticScrollRef.current = false;
+      return;
+    }
+    // 3. Only sync from scroll to playhead when user is actively touching or dragging the timeline
+    if (!isDraggingTimeline.current && !hasDragged.current) {
       return;
     }
     const el = timelineScrollRef.current;
     if (!el) return;
-    if (isPlaying) {
-      onTogglePlay();
-    }
     const currentScroll = el.scrollLeft;
     const targetSec = Math.max(0, Math.min(totalTimelineDuration, currentScroll / pxPerSec));
     const roundedSec = Number(targetSec.toFixed(2));
@@ -434,11 +469,14 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       isPinchingTimeline.current = false;
     }
     if (e.touches.length === 0) {
-      isDraggingTimeline.current = false;
       if (wasPinchingTimeline.current) {
         wasPinchingTimeline.current = false;
       }
-      hasDragged.current = false;
+      // Allow brief trailing momentum scroll to settle before disarming drag flag
+      window.setTimeout(() => {
+        isDraggingTimeline.current = false;
+        hasDragged.current = false;
+      }, 150);
     }
   };
 
@@ -618,6 +656,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     const targetScroll = Math.round(playheadSec * pxPerSec);
     if (Math.abs(el.scrollLeft - targetScroll) >= 1) {
       isProgrammaticScrollRef.current = true;
+      lastProgrammaticScrollTimeRef.current = Date.now();
       el.scrollLeft = targetScroll;
     }
   }, [playheadSec, pxPerSec]);
@@ -919,7 +958,11 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
             type="button"
             onClick={() => {
               onPlayheadChange(0);
-              if (timelineScrollRef.current) timelineScrollRef.current.scrollLeft = 0;
+              if (timelineScrollRef.current) {
+                isProgrammaticScrollRef.current = true;
+                lastProgrammaticScrollTimeRef.current = Date.now();
+                timelineScrollRef.current.scrollLeft = 0;
+              }
             }}
             title="Bấm để về 00:00"
             className="font-mono text-xs font-semibold cursor-pointer active:scale-95 transition-colors"
@@ -1025,27 +1068,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
           >
             {/* ROW 0: TIMELINE RULER STRIP (00:00 starts at halfWidth) */}
             <div className="h-4 relative border-b border-white/10 select-none">
-              {(() => {
-                const maxSec = Math.ceil(totalTimelineDuration) + 12;
-                return Array.from({ length: maxSec + 1 }).map((_, sec) => {
-                  const leftPos = halfWidth + sec * pxPerSec;
-                  const isMajor = pxPerSec >= 50 ? true : pxPerSec >= 24 ? sec % 2 === 0 : sec % 5 === 0;
-                  return (
-                    <div
-                      key={sec}
-                      style={{ left: `${leftPos}px` }}
-                      className="absolute top-0 bottom-0 flex flex-col items-center pointer-events-none"
-                    >
-                      <div className={`w-[1px] ${isMajor ? 'h-2 bg-white/40' : 'h-1 bg-white/20'}`} />
-                      {isMajor && (
-                        <span className="text-[7.5px] font-mono text-[#94A3B8] -ml-3 mt-0.5 leading-none">
-                          {formatTimecode(sec).slice(3, 8)}
-                        </span>
-                      )}
-                    </div>
-                  );
-                });
-              })()}
+              {rulerMarks}
             </div>
 
             {/* ROW 1: TRACK 0 (VIDEO TRACK) & LEFT RUNWAY (MUTE CLIP + COVER ON 1 ROW) */}

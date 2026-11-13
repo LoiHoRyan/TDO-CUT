@@ -283,7 +283,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
   // CapCut PC Player Overlays & Zoom
   const [showSafeArea, setShowSafeArea] = useState(false);
   const [showScopes, setShowScopes] = useState(false);
-  const [playerZoom, setPlayerZoom] = useState<'fit' | '100' | '200'>('fit');
+  const [playerZoom, setPlayerZoom] = useState<'fit' | '50' | '100' | '200' | '300' | '400' | '500'>('fit');
   const [showCanvasBoundingBox, setShowCanvasBoundingBox] = useState(false);
   const [inlineEditingTextClip, setInlineEditingTextClip] = useState<{
     clipId: string;
@@ -360,15 +360,30 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
     }
   };
 
-  // Keep the canvas scale/resize bounding box visible whenever a clip is selected on PC Timeline
+  // Hide the canvas scale/resize bounding box when no clip is selected
   useEffect(() => {
-    if (selectedClipId) {
-      setShowCanvasBoundingBox(true);
-    } else {
+    if (!selectedClipId) {
       setShowCanvasBoundingBox(false);
       setIsSnappedToFrame(false);
     }
   }, [selectedClipId]);
+
+  // Close canvas bounding box & handles when clicking/tapping outside the canvas stage (e.g. timeline, toolbar, inspector)
+  useEffect(() => {
+    if (!showCanvasBoundingBox) return;
+    const handleOutsidePointer = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node | null;
+      if (stageRef.current && target && !stageRef.current.contains(target)) {
+        setShowCanvasBoundingBox(false);
+      }
+    };
+    window.addEventListener('mousedown', handleOutsidePointer, true);
+    window.addEventListener('touchstart', handleOutsidePointer, true);
+    return () => {
+      window.removeEventListener('mousedown', handleOutsidePointer, true);
+      window.removeEventListener('touchstart', handleOutsidePointer, true);
+    };
+  }, [showCanvasBoundingBox]);
 
   // Timecode Inline Input State (Page 44)
   const [isEditingTimecode, setIsEditingTimecode] = useState(false);
@@ -422,7 +437,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
   useEffect(() => {
     const newId = activeVideoClip?.id || '';
     if (newId && currentClipIdRef.current && currentClipIdRef.current !== newId) {
-      const srcCanvas = currentClipCanvasRef.current;
+      const srcCanvas = lastValidVideoFrameCanvasRef.current;
       if (srcCanvas && srcCanvas.width > 0 && srcCanvas.height > 0) {
         if (!outgoingClipCanvasRef.current) {
           outgoingClipCanvasRef.current = document.createElement('canvas');
@@ -627,12 +642,24 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
         : Math.max(0, rawOffset);
 
     const isExportPlaying = vid.dataset.exportPlaying === 'true';
-    const seekTolerance = isPlaying || isExportPlaying ? 1.0 : 0.04;
-    if (Math.abs(vid.currentTime - targetOffset) > seekTolerance) {
-      try {
-        vid.currentTime = Math.max(0.001, targetOffset);
-      } catch {
-        // Ignore seek before metadata ready
+    if (isPlaying || isExportPlaying) {
+      // During active playback, never force seek if deviation is within smooth drift tolerance (< 0.5s).
+      // Hard seeking on mobile hardware video decoders causes keyframe jumps and severe seek loops ("giật sang giây cũ").
+      if (Math.abs(vid.currentTime - targetOffset) > 2.0) {
+        try {
+          vid.currentTime = Math.max(0.001, targetOffset);
+        } catch {
+          // Ignore seek before metadata ready
+        }
+      }
+    } else {
+      // When paused or scrubbing timeline, perform precise seek
+      if (Math.abs(vid.currentTime - targetOffset) > 0.04) {
+        try {
+          vid.currentTime = Math.max(0.001, targetOffset);
+        } catch {
+          // Ignore seek before metadata ready
+        }
       }
     }
 
@@ -851,7 +878,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
 
     ctx.save();
     ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = isDraggingOverlayOrText ? 'low' : 'high';
+    ctx.imageSmoothingQuality = isDraggingOverlayOrText || isMobile ? 'low' : 'high';
 
     if (
       isDraggingOverlayOrText &&
@@ -970,18 +997,6 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
           if (cCtx) {
             cCtx.drawImage(activeVidSource, 0, 0, vw, vh);
             lastValidVideoUrlRef.current = activeVideoClip.mediaUrl;
-          }
-          if (!currentClipCanvasRef.current) {
-            currentClipCanvasRef.current = document.createElement('canvas');
-          }
-          const curC = currentClipCanvasRef.current;
-          if (curC.width !== vw || curC.height !== vh) {
-            curC.width = vw;
-            curC.height = vh;
-          }
-          const curCtx = curC.getContext('2d');
-          if (curCtx) {
-            curCtx.drawImage(activeVidSource, 0, 0, vw, vh);
           }
         } catch {
           // Ignore frame cache errors
@@ -2019,8 +2034,9 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
           ? liveDragTransform
           : null;
       const ovScale = ((ovDrag ? ovDrag.scale : activeOverlayClip.scale) ?? 48) / 100;
-      const ovW = w * Math.min(1.5, Math.max(0.15, ovScale * 0.55));
-      const ovH = h * Math.min(1.5, Math.max(0.15, ovScale * 0.55));
+      const scaledFactor = ovScale <= 1 ? ovScale * 0.55 : 0.55 + (ovScale - 1) * 1.1125;
+      const ovW = w * Math.min(5.0, Math.max(0.08, scaledFactor));
+      const ovH = h * Math.min(5.0, Math.max(0.08, scaledFactor));
       const ovPosX = ovDrag ? ovDrag.posX : activeOverlayClip.posX ?? 380;
       const ovPosY = ovDrag ? ovDrag.posY : activeOverlayClip.posY ?? -220;
       const ovCenterX = w / 2 + (ovPosX / 1920) * w;
@@ -2093,10 +2109,10 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
       }
 
       ctx.strokeStyle =
-        selectedClipId === activeOverlayClip.id && !isHighResExport
+        showCanvasBoundingBox && selectedClipId === activeOverlayClip.id && !isHighResExport
           ? '#00E5CC'
           : 'rgba(255,255,255,0.85)';
-      ctx.lineWidth = (selectedClipId === activeOverlayClip.id && !isHighResExport ? 3 : 1.8) * dpiScale;
+      ctx.lineWidth = (showCanvasBoundingBox && selectedClipId === activeOverlayClip.id && !isHighResExport ? 3 : 1.8) * dpiScale;
       ctx.strokeRect(-ovW / 2, -ovH / 2, ovW, ovH);
       ctx.restore();
     }
@@ -2368,7 +2384,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
             }
           }
 
-          if (selectedClipId === itemClip.id && !isHighResExport) {
+          if (showCanvasBoundingBox && selectedClipId === itemClip.id && !isHighResExport) {
             ctx.shadowBlur = 0;
             ctx.strokeStyle = '#00E5CC';
             ctx.lineWidth = Math.max(2, 2.5 * dpiScale);
@@ -2701,6 +2717,10 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
     } else if (e.touches.length === 1) {
       // 1 finger: Drag video position or Tap to play
       const t0 = e.touches[0];
+      setShowCanvasBoundingBox(true);
+      if (target) {
+        onSelectClipFromCanvas?.(target.id);
+      }
       canvasTouchStateRef.current = {
         isPinch: false,
         initialPinchDist: 0,
@@ -2771,23 +2791,13 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
         );
       }
     } else if (!st.hasMoved && Date.now() - st.startTime < 350) {
-      // Tap without moving -> toggle play (synchronous video hardware unlock on user touch)
+      // Tap without moving -> select/focus clip on canvas and show bounding box
       if (e.cancelable) e.preventDefault();
-      const vid = videoElRef.current;
-      if (vid) {
-        if (!isPlaying) {
-          const p = vid.play();
-          if (p !== undefined) {
-            p.catch(() => {
-              vid.muted = true;
-              vid.play().catch(() => {});
-            });
-          }
-        } else {
-          vid.pause();
-        }
+      setShowCanvasBoundingBox(true);
+      const target = getActiveSelectedCanvasClip();
+      if (target) {
+        onSelectClipFromCanvas?.(target.id);
       }
-      onTogglePlay();
     }
     canvasTouchStateRef.current.isPinch = false;
     canvasTouchStateRef.current.hasMoved = false;
@@ -3019,16 +3029,18 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
 
     if (draggingCanvasObj.mode === 'resize') {
       const h = draggingCanvasObj.handle || 'se';
-      let deltaScale = 0;
+      let delta = 0;
       if (h === 'se' || h === 'e' || h === 's') {
-        deltaScale = (dx + dy) * 0.45;
+        delta = dx + dy;
       } else if (h === 'nw' || h === 'w' || h === 'n') {
-        deltaScale = -(dx + dy) * 0.45;
+        delta = -(dx + dy);
       } else if (h === 'ne') {
-        deltaScale = (dx - dy) * 0.45;
+        delta = dx - dy;
       } else if (h === 'sw') {
-        deltaScale = (-dx + dy) * 0.45;
+        delta = -dx + dy;
       }
+      const baseDim = Math.max(80, Math.min(fittedBoxW, fittedBoxH));
+      const deltaScale = (delta / baseDim) * 360;
       const rawNextScale = Math.max(
         10,
         Math.min(500, Math.round(draggingCanvasObj.origScale + deltaScale))
@@ -3280,7 +3292,6 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
         }}
         onMouseMove={handleStageMouseMove}
         onMouseUp={handleCanvasMouseUp}
-        onMouseLeave={handleCanvasMouseUp}
         data-keep-dark="true"
         className={`relative flex-1 w-full h-full overflow-hidden min-h-0 min-w-0 group ${
           isMobile || hideTopBar ? 'bg-black' : 'bg-[#0D0E12]'
@@ -3441,7 +3452,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setShowCanvasBoundingBox(false);
           }}
-          className={`absolute flex items-center justify-center overflow-hidden ${
+          className={`absolute flex items-center justify-center overflow-visible ${
             isMobile || hideTopBar ? 'inset-0' : 'inset-2'
           }`}
         >
@@ -3452,10 +3463,18 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
               height: `${fittedBoxH}px`,
               aspectRatio: useWideStageFill ? undefined : `${canvasW} / ${canvasH}`,
               transform:
-                playerZoom === '200'
-                  ? 'scale(1.65)'
+                playerZoom === '500'
+                  ? 'scale(5)'
+                  : playerZoom === '400'
+                  ? 'scale(4)'
+                  : playerZoom === '300'
+                  ? 'scale(3)'
+                  : playerZoom === '200'
+                  ? 'scale(2)'
                   : playerZoom === '100'
-                  ? 'scale(1.18)'
+                  ? 'scale(1)'
+                  : playerZoom === '50'
+                  ? 'scale(0.5)'
                   : 'scale(1)',
             }}
             className={`relative flex items-center justify-center transition-transform ${
@@ -3660,7 +3679,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
             )}
 
           {/* Cyan Magnetic Snap Selection Frame & Corner + Edge Resize Handles */}
-          {(showCanvasBoundingBox || Boolean(selectedClipId) || isSnappedToFrame) && activeCanvasTarget && (() => {
+          {showCanvasBoundingBox && activeCanvasTarget && (() => {
             const bBoxScale = (liveDragTransform?.clipId === activeCanvasTarget.id ? liveDragTransform.scale : activeCanvasTarget.scale) ?? 100;
             const bBoxPosX = (liveDragTransform?.clipId === activeCanvasTarget.id ? liveDragTransform.posX : activeCanvasTarget.posX) || 0;
             const bBoxPosY = (liveDragTransform?.clipId === activeCanvasTarget.id ? liveDragTransform.posY : activeCanvasTarget.posY) || 0;
@@ -3685,22 +3704,22 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 {/* 4 Corner Round Handles */}
                 <div
                   onMouseDown={(e) => handleStartResizeHandle(e, 'nw')}
-                  title="Kéo góc để thu phóng video (Tự động hít nam châm khi vừa khít 100%)"
+                  title="Kéo góc để thu phóng video"
                   className="pointer-events-auto absolute -top-2 -left-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nwse-resize hover:scale-125 transition-transform"
                 />
                 <div
                   onMouseDown={(e) => handleStartResizeHandle(e, 'ne')}
-                  title="Kéo góc để thu phóng video (Tự động hít nam châm khi vừa khít 100%)"
+                  title="Kéo góc để thu phóng video"
                   className="pointer-events-auto absolute -top-2 -right-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nesw-resize hover:scale-125 transition-transform"
                 />
                 <div
                   onMouseDown={(e) => handleStartResizeHandle(e, 'sw')}
-                  title="Kéo góc để thu phóng video (Tự động hít nam châm khi vừa khít 100%)"
+                  title="Kéo góc để thu phóng video"
                   className="pointer-events-auto absolute -bottom-2 -left-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nesw-resize hover:scale-125 transition-transform"
                 />
                 <div
                   onMouseDown={(e) => handleStartResizeHandle(e, 'se')}
-                  title="Kéo góc để thu phóng video (Tự động hít nam châm khi vừa khít 100%)"
+                  title="Kéo góc để thu phóng video"
                   className="pointer-events-auto absolute -bottom-2 -right-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nwse-resize hover:scale-125 transition-transform"
                 />
 
@@ -3837,7 +3856,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 setShowQualityMenu(false);
                 setShowRatioMenu(false);
               }}
-              title="Phóng to màn hình xem trước (Fit / 100% / 200%)"
+              title="Phóng to màn hình xem trước (Fit / 50% - 500%)"
               className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-[#D1D5DB] hover:text-white bg-[#1C1D22] border border-[#2A2C34] hover:border-[#383C48] rounded cursor-pointer transition-all"
             >
               <ZoomIn className="w-3 h-3 text-[#00E5CC]" />
@@ -3845,7 +3864,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
             </button>
             {showZoomMenu && (
               <div className="absolute bottom-8 right-0 z-30 bg-[#181920] border border-[#2D303B] rounded-lg shadow-xl py-1 min-w-[100px]">
-                {(['fit', '100', '200'] as const).map((z) => (
+                {(['fit', '50', '100', '200', '300', '400', '500'] as const).map((z) => (
                   <button
                     key={z}
                     type="button"

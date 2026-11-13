@@ -2467,7 +2467,14 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
             ctx.shadowOffsetY = Math.max(1.5, Math.round(2.5 * dpiScale));
           }
 
-          ctx.lineWidth = Math.max(2.5, Math.round(fontSize * 0.16));
+          const strokeW =
+            itemClip.textStrokeWidth !== undefined
+              ? itemClip.textStrokeWidth === 0
+                ? 0
+                : Math.max(0.5, itemClip.textStrokeWidth * dpiScale)
+              : Math.max(2.5, Math.round(fontSize * 0.16));
+          const hasStroke = strokeW > 0 && itemClip.textStrokeColor !== 'transparent';
+          ctx.lineWidth = strokeW;
           ctx.strokeStyle = itemClip.textStrokeColor || 'rgba(0,0,0,0.95)';
           ctx.fillStyle = itemClip.textColor || '#FFFFFF';
 
@@ -2485,13 +2492,13 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
               ctx.save();
               ctx.rotate(angle);
               ctx.translate(0, -dir * radius * 0.35);
-              ctx.strokeText(ch, 0, 0);
+              if (hasStroke) ctx.strokeText(ch, 0, 0);
               ctx.fillText(ch, 0, 0);
               ctx.restore();
             });
             ctx.restore();
           } else {
-            ctx.strokeText(textStr, 0, 0);
+            if (hasStroke) ctx.strokeText(textStr, 0, 0);
             ctx.fillText(textStr, 0, 0);
           }
 
@@ -2715,27 +2722,128 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
         setShowCanvasBoundingBox(true);
       }
     } else if (e.touches.length === 1) {
-      // 1 finger: Drag video position or Tap to play
+      // 1 finger: Check if user touched any Text/Sticker item on canvas first
       const t0 = e.touches[0];
-      setShowCanvasBoundingBox(true);
-      if (target) {
-        onSelectClipFromCanvas?.(target.id);
+      const canvas = canvasRef.current;
+      let matchedItem = false;
+      if (canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const nx = (t0.clientX - rect.left) / Math.max(1, rect.width);
+        const ny = (t0.clientY - rect.top) / Math.max(1, rect.height);
+
+        for (let i = canvasItemsBoundsRef.current.length - 1; i >= 0; i--) {
+          const b = canvasItemsBoundsRef.current[i];
+          const cornerList: Array<{
+            handle: 'nw' | 'ne' | 'sw' | 'se';
+            cx: number;
+            cy: number;
+          }> = [
+            { handle: 'nw', cx: b.x, cy: b.y },
+            { handle: 'ne', cx: b.x + b.w, cy: b.y },
+            { handle: 'sw', cx: b.x, cy: b.y + b.h },
+            { handle: 'se', cx: b.x + b.w, cy: b.y + b.h },
+          ];
+          let hitCorner: 'nw' | 'ne' | 'sw' | 'se' | null = null;
+          for (const corner of cornerList) {
+            if (Math.hypot(nx - corner.cx, ny - corner.cy) <= 0.055) {
+              hitCorner = corner.handle;
+              break;
+            }
+          }
+          const matchedClip = activeClipsAtPlayhead.find((c) => c.id === b.clipId);
+          if (hitCorner) {
+            onCanvasDragStart?.();
+            onSelectClipFromCanvas?.(b.clipId);
+            setShowCanvasBoundingBox(true);
+            setLiveDragTransform({
+              clipId: b.clipId,
+              posX: b.origPosX,
+              posY: b.origPosY,
+              scale: b.origScale,
+              rotation: matchedClip?.rotation,
+            });
+            setDraggingCanvasObj({
+              clipId: b.clipId,
+              mode: 'resize',
+              handle: hitCorner,
+              startX: t0.clientX,
+              startY: t0.clientY,
+              origPosX: b.origPosX,
+              origPosY: b.origPosY,
+              origScale: b.origScale,
+              origRotation: matchedClip?.rotation,
+            });
+            matchedItem = true;
+            break;
+          }
+
+          if (
+            nx >= b.x - 0.04 &&
+            nx <= b.x + b.w + 0.04 &&
+            ny >= b.y - 0.04 &&
+            ny <= b.y + b.h + 0.04
+          ) {
+            onCanvasDragStart?.();
+            onSelectClipFromCanvas?.(b.clipId);
+            setShowCanvasBoundingBox(true);
+            // If already selected, tap opens inline text editing
+            if (selectedClipId === b.clipId && matchedClip && (matchedClip.subtitleText || matchedClip.stickerEmoji || matchedClip.trackIndex === 2)) {
+              const badge = matchedClip.stickerEmoji
+                ? findGraphicBadgeByIconOrText(matchedClip.stickerEmoji) ||
+                  findGraphicBadgeByIconOrText(matchedClip.name)
+                : null;
+              const initialVal = matchedClip.stickerEmoji
+                ? matchedClip.stickerText ?? badge?.badgeText ?? ''
+                : matchedClip.subtitleText || matchedClip.name;
+              setInlineEditingTextClip({
+                clipId: matchedClip.id,
+                value: initialVal,
+              });
+            }
+            setLiveDragTransform({
+              clipId: b.clipId,
+              posX: b.origPosX,
+              posY: b.origPosY,
+              scale: b.origScale,
+              rotation: matchedClip?.rotation,
+            });
+            setDraggingCanvasObj({
+              clipId: b.clipId,
+              mode: 'move',
+              startX: t0.clientX,
+              startY: t0.clientY,
+              origPosX: b.origPosX,
+              origPosY: b.origPosY,
+              origScale: b.origScale,
+              origRotation: matchedClip?.rotation,
+            });
+            matchedItem = true;
+            break;
+          }
+        }
       }
-      canvasTouchStateRef.current = {
-        isPinch: false,
-        initialPinchDist: 0,
-        initialScale: target?.scale ?? 100,
-        initialPosX: target?.posX ?? 0,
-        initialPosY: target?.posY ?? 0,
-        initialCenterX: t0.clientX,
-        initialCenterY: t0.clientY,
-        targetClipId: target?.id,
-        targetClipRotation: target?.rotation ?? 0,
-        startX: t0.clientX,
-        startY: t0.clientY,
-        startTime: Date.now(),
-        hasMoved: false,
-      };
+
+      if (!matchedItem) {
+        if (selectedClipId) {
+          onSelectClipFromCanvas?.('');
+          setShowCanvasBoundingBox(false);
+        }
+        canvasTouchStateRef.current = {
+          isPinch: false,
+          initialPinchDist: 0,
+          initialScale: target?.scale ?? 100,
+          initialPosX: target?.posX ?? 0,
+          initialPosY: target?.posY ?? 0,
+          initialCenterX: t0.clientX,
+          initialCenterY: t0.clientY,
+          targetClipId: target?.id,
+          targetClipRotation: target?.rotation ?? 0,
+          startX: t0.clientX,
+          startY: t0.clientY,
+          startTime: Date.now(),
+          hasMoved: false,
+        };
+      }
     }
   };
 
@@ -2948,6 +3056,12 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
       }
     }
 
+    if (selectedClipId) {
+      onSelectClipFromCanvas?.('');
+      setShowCanvasBoundingBox(false);
+      return;
+    }
+
     setShowCanvasBoundingBox(true);
     const targetClip = getActiveSelectedCanvasClip();
     if (!targetClip) return;
@@ -2976,11 +3090,13 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
   };
 
   const handleStartResizeHandle = (
-    e: React.MouseEvent,
+    e: React.MouseEvent | React.TouchEvent,
     handle: 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'e' | 'w'
   ) => {
     e.stopPropagation();
-    e.preventDefault();
+    if ('cancelable' in e && e.cancelable) e.preventDefault();
+    const clientX = 'touches' in e && e.touches.length > 0 ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+    const clientY = 'touches' in e && e.touches.length > 0 ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
     const targetClip = getActiveSelectedCanvasClip();
     if (!targetClip) return;
     onCanvasDragStart?.();
@@ -2998,8 +3114,8 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
       clipId: targetClip.id,
       mode: 'resize',
       handle,
-      startX: e.clientX,
-      startY: e.clientY,
+      startX: clientX,
+      startY: clientY,
       origPosX,
       origPosY,
       origScale,
@@ -3120,11 +3236,30 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
     const onWindowMouseUp = () => {
       handleCanvasMouseUp();
     };
+    const onWindowTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 0) return;
+      if (e.cancelable) e.preventDefault();
+      const t = e.touches[0];
+      handleStageMouseMove({
+        clientX: t.clientX,
+        clientY: t.clientY,
+      } as unknown as React.MouseEvent<HTMLDivElement>);
+    };
+    const onWindowTouchEnd = () => {
+      handleCanvasMouseUp();
+    };
+
     window.addEventListener('mousemove', onWindowMouseMove);
     window.addEventListener('mouseup', onWindowMouseUp);
+    window.addEventListener('touchmove', onWindowTouchMove, { passive: false });
+    window.addEventListener('touchend', onWindowTouchEnd);
+    window.addEventListener('touchcancel', onWindowTouchEnd);
     return () => {
       window.removeEventListener('mousemove', onWindowMouseMove);
       window.removeEventListener('mouseup', onWindowMouseUp);
+      window.removeEventListener('touchmove', onWindowTouchMove);
+      window.removeEventListener('touchend', onWindowTouchEnd);
+      window.removeEventListener('touchcancel', onWindowTouchEnd);
     };
   }, [draggingCanvasObj]);
 
@@ -3679,11 +3814,73 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
             )}
 
           {/* Cyan Magnetic Snap Selection Frame & Corner + Edge Resize Handles */}
-          {showCanvasBoundingBox && activeCanvasTarget && (() => {
+          {showCanvasBoundingBox && selectedClipId && activeCanvasTarget && (() => {
+            const isTextOrSticker = Boolean(activeCanvasTarget.subtitleText || activeCanvasTarget.trackIndex === 2 || activeCanvasTarget.stickerEmoji);
             const bBoxScale = (liveDragTransform?.clipId === activeCanvasTarget.id ? liveDragTransform.scale : activeCanvasTarget.scale) ?? 100;
             const bBoxPosX = (liveDragTransform?.clipId === activeCanvasTarget.id ? liveDragTransform.posX : activeCanvasTarget.posX) || 0;
             const bBoxPosY = (liveDragTransform?.clipId === activeCanvasTarget.id ? liveDragTransform.posY : activeCanvasTarget.posY) || 0;
             const bBoxRot = (liveDragTransform?.clipId === activeCanvasTarget.id ? liveDragTransform.rotation : activeCanvasTarget.rotation) || 0;
+
+            const bound = isTextOrSticker
+              ? canvasItemsBoundsRef.current.find((b) => b.clipId === activeCanvasTarget.id)
+              : null;
+
+            if (isTextOrSticker && bound) {
+              const bLeft = `${Math.max(0, Math.min(1, bound.x)) * 100}%`;
+              const bTop = `${Math.max(0, Math.min(1, bound.y)) * 100}%`;
+              const bWidth = `${Math.max(0.04, Math.min(1, bound.w)) * 100}%`;
+              const bHeight = `${Math.max(0.03, Math.min(1, bound.h)) * 100}%`;
+
+              return (
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: bLeft,
+                    top: bTop,
+                    width: bWidth,
+                    height: bHeight,
+                    pointerEvents: 'none',
+                    transform: bBoxRot ? `rotate(${bBoxRot}deg)` : undefined,
+                    transformOrigin: 'center center',
+                  }}
+                  className="border-2 border-[#00E5CC] rounded-md shadow-[0_0_12px_rgba(0,229,204,0.4)] z-20"
+                >
+                  {/* 4 Corner Round Handles for Text */}
+                  <div
+                    onMouseDown={(e) => handleStartResizeHandle(e, 'nw')}
+                    onTouchStart={(e) => handleStartResizeHandle(e, 'nw')}
+                    title="Kéo góc để thu phóng văn bản"
+                    className="pointer-events-auto absolute -top-3 -left-3 w-6 h-6 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nwse-resize flex items-center justify-center hover:scale-110 active:scale-125 transition-transform touch-none"
+                  >
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#00E5CC]" />
+                  </div>
+                  <div
+                    onMouseDown={(e) => handleStartResizeHandle(e, 'ne')}
+                    onTouchStart={(e) => handleStartResizeHandle(e, 'ne')}
+                    title="Kéo góc để thu phóng văn bản"
+                    className="pointer-events-auto absolute -top-3 -right-3 w-6 h-6 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nesw-resize flex items-center justify-center hover:scale-110 active:scale-125 transition-transform touch-none"
+                  >
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#00E5CC]" />
+                  </div>
+                  <div
+                    onMouseDown={(e) => handleStartResizeHandle(e, 'sw')}
+                    onTouchStart={(e) => handleStartResizeHandle(e, 'sw')}
+                    title="Kéo góc để thu phóng văn bản"
+                    className="pointer-events-auto absolute -bottom-3 -left-3 w-6 h-6 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nesw-resize flex items-center justify-center hover:scale-110 active:scale-125 transition-transform touch-none"
+                  >
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#00E5CC]" />
+                  </div>
+                  <div
+                    onMouseDown={(e) => handleStartResizeHandle(e, 'se')}
+                    onTouchStart={(e) => handleStartResizeHandle(e, 'se')}
+                    title="Kéo góc để thu phóng văn bản"
+                    className="pointer-events-auto absolute -bottom-3 -right-3 w-6 h-6 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nwse-resize flex items-center justify-center hover:scale-110 active:scale-125 transition-transform touch-none"
+                  >
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#00E5CC]" />
+                  </div>
+                </div>
+              );
+            }
 
             const transX = bBoxPosX * (fittedBoxW / 1920);
             const transY = bBoxPosY * (fittedBoxH / 1080);
@@ -3704,45 +3901,53 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 {/* 4 Corner Round Handles */}
                 <div
                   onMouseDown={(e) => handleStartResizeHandle(e, 'nw')}
+                  onTouchStart={(e) => handleStartResizeHandle(e, 'nw')}
                   title="Kéo góc để thu phóng video"
-                  className="pointer-events-auto absolute -top-2 -left-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nwse-resize hover:scale-125 transition-transform"
+                  className="pointer-events-auto absolute -top-2 -left-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nwse-resize hover:scale-125 transition-transform touch-none"
                 />
                 <div
                   onMouseDown={(e) => handleStartResizeHandle(e, 'ne')}
+                  onTouchStart={(e) => handleStartResizeHandle(e, 'ne')}
                   title="Kéo góc để thu phóng video"
-                  className="pointer-events-auto absolute -top-2 -right-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nesw-resize hover:scale-125 transition-transform"
+                  className="pointer-events-auto absolute -top-2 -right-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nesw-resize hover:scale-125 transition-transform touch-none"
                 />
                 <div
                   onMouseDown={(e) => handleStartResizeHandle(e, 'sw')}
+                  onTouchStart={(e) => handleStartResizeHandle(e, 'sw')}
                   title="Kéo góc để thu phóng video"
-                  className="pointer-events-auto absolute -bottom-2 -left-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nesw-resize hover:scale-125 transition-transform"
+                  className="pointer-events-auto absolute -bottom-2 -left-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nesw-resize hover:scale-125 transition-transform touch-none"
                 />
                 <div
                   onMouseDown={(e) => handleStartResizeHandle(e, 'se')}
+                  onTouchStart={(e) => handleStartResizeHandle(e, 'se')}
                   title="Kéo góc để thu phóng video"
-                  className="pointer-events-auto absolute -bottom-2 -right-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nwse-resize hover:scale-125 transition-transform"
+                  className="pointer-events-auto absolute -bottom-2 -right-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nwse-resize hover:scale-125 transition-transform touch-none"
                 />
 
                 {/* 4 Edge Anchor Handles */}
                 <div
                   onMouseDown={(e) => handleStartResizeHandle(e, 'n')}
+                  onTouchStart={(e) => handleStartResizeHandle(e, 'n')}
                   title="Kéo cạnh trên để thu phóng video"
-                  className="pointer-events-auto absolute -top-1.5 left-1/2 -translate-x-1/2 w-6 h-2 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-ns-resize hover:scale-125 transition-transform"
+                  className="pointer-events-auto absolute -top-1.5 left-1/2 -translate-x-1/2 w-6 h-2 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-ns-resize hover:scale-125 transition-transform touch-none"
                 />
                 <div
                   onMouseDown={(e) => handleStartResizeHandle(e, 's')}
+                  onTouchStart={(e) => handleStartResizeHandle(e, 's')}
                   title="Kéo cạnh dưới để thu phóng video"
-                  className="pointer-events-auto absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-6 h-2 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-ns-resize hover:scale-125 transition-transform"
+                  className="pointer-events-auto absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-6 h-2 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-ns-resize hover:scale-125 transition-transform touch-none"
                 />
                 <div
                   onMouseDown={(e) => handleStartResizeHandle(e, 'w')}
+                  onTouchStart={(e) => handleStartResizeHandle(e, 'w')}
                   title="Kéo cạnh trái để thu phóng video"
-                  className="pointer-events-auto absolute top-1/2 -left-1.5 -translate-y-1/2 w-2 h-6 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-ew-resize hover:scale-125 transition-transform"
+                  className="pointer-events-auto absolute top-1/2 -left-1.5 -translate-y-1/2 w-2 h-6 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-ew-resize hover:scale-125 transition-transform touch-none"
                 />
                 <div
                   onMouseDown={(e) => handleStartResizeHandle(e, 'e')}
+                  onTouchStart={(e) => handleStartResizeHandle(e, 'e')}
                   title="Kéo cạnh phải để thu phóng video"
-                  className="pointer-events-auto absolute top-1/2 -right-1.5 -translate-y-1/2 w-2 h-6 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-ew-resize hover:scale-125 transition-transform"
+                  className="pointer-events-auto absolute top-1/2 -right-1.5 -translate-y-1/2 w-2 h-6 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-ew-resize hover:scale-125 transition-transform touch-none"
                 />
               </div>
             );

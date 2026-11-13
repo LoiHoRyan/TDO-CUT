@@ -1681,9 +1681,12 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           }
         }
 
-        // 1-LSB corner pixel toggle so hardware H.264/VP9 encoders never drop frames or starve VBR bitrate
-        expCtx.fillStyle = frameIdx % 2 === 0 ? '#010101' : '#020202';
-        expCtx.fillRect(w - 1, h - 1, 1, 1);
+        // Active dynamic micro-pattern at bottom edge so hardware encoders maintain studio bitrate and never drop frames
+        for (let px = 0; px < 16; px++) {
+          const v = ((frameIdx + px * 7) % 6) + 1;
+          expCtx.fillStyle = `rgb(${v},${v},${v})`;
+          expCtx.fillRect(w - 16 + px, h - 2, 1, 2);
+        }
       };
 
       for (let vIdx = 1; vIdx <= totalVariants; vIdx++) {
@@ -1694,23 +1697,27 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           await new Promise((r) => setTimeout(r, 60));
         }
 
-        // Prime first video clip at start offset and wait for seek so frame 0 is rendered immediately (zero startup freeze)
+        // Prime first video clip and verify active playback so frame 0 renders immediately with ZERO 0.8s freeze
         const firstClip = activeV1Clips[0];
         if (firstClip) {
           const firstEntry = preloadedVideos.get(firstClip.id);
           if (firstEntry) {
-            firstEntry.el.currentTime = firstClip.sourceIn || 0;
-            firstEntry.el.playbackRate = Math.max(0.25, Math.min(4.0, firstClip.speed || 1.0));
+            const startSec = Math.max(0, firstClip.sourceIn || 0);
+            const spd = Math.max(0.25, Math.min(4.0, firstClip.speed || 1.0));
+            firstEntry.el.playbackRate = spd;
+            firstEntry.el.currentTime = startSec;
             await new Promise<void>((resolve) => {
-              if (!firstEntry.el.seeking && firstEntry.el.readyState >= 2) return resolve();
+              let done = false;
               const finish = () => {
+                if (done) return;
+                done = true;
                 firstEntry.el.removeEventListener('seeked', finish);
-                firstEntry.el.removeEventListener('canplay', finish);
+                firstEntry.el.removeEventListener('playing', finish);
                 resolve();
               };
               firstEntry.el.addEventListener('seeked', finish, { once: true });
-              firstEntry.el.addEventListener('canplay', finish, { once: true });
-              window.setTimeout(finish, 150);
+              firstEntry.el.addEventListener('playing', finish, { once: true });
+              window.setTimeout(finish, 250);
             });
           }
         }
@@ -1825,13 +1832,17 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
         const fullTimelineSec = Math.max(1.0, totalDuration);
         const frameIntervalMs = Math.max(15, Math.round(1000 / targetFps));
 
-        recorder.start(100);
         if (firstClip) {
           const firstEntry = preloadedVideos.get(firstClip.id);
           if (firstEntry && firstEntry.el.paused) {
-            firstEntry.el.play().catch(() => {});
+            try {
+              await firstEntry.el.play();
+            } catch {
+              // Ignore play error
+            }
           }
         }
+        recorder.start(1000);
         const recordStartMs = performance.now();
         let frameCounter = 0;
         let lastProgressUpdateMs = 0;
@@ -1860,33 +1871,35 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               const clipOffset = Math.max(0, elapsedSec - vClip.startTime);
               const spd = Math.max(0.25, Math.min(4.0, vClip.speed || 1.0));
               const targetMediaTime = (vClip.sourceIn || 0) + clipOffset * spd;
-              if (Math.abs(el.playbackRate - spd) > 0.01) {
-                el.playbackRate = spd;
-              }
               if (gainNode && exportAudioCtx) {
                 const targetGain = vClip.muted
                   ? 0
                   : Math.max(0, Math.min(2, (vClip.volume ?? 100) / 100));
                 gainNode.gain.setValueAtTime(targetGain, exportAudioCtx.currentTime);
               }
-              const timeDiff = Math.abs(el.currentTime - targetMediaTime);
-              // Avoid disruptive micro-seeks during initial 0.8s playback startup so video never freezes at start
-              if (timeDiff > 0.5 && (elapsedSec > 0.8 || vClip !== firstClip)) {
+              if (el.paused) {
+                el.play().catch(() => {});
+              }
+              // Dynamic playbackRate micro-sync: smoothly eliminate clock drift without hard seek stalls
+              const timeDiff = el.currentTime - targetMediaTime;
+              if (Math.abs(timeDiff) > 1.2 && !el.seeking) {
                 try {
                   el.currentTime = targetMediaTime;
                 } catch {
                   // Ignore
                 }
-              }
-              if (el.paused) {
-                el.play().catch(() => {});
+              } else if (Math.abs(timeDiff) > 0.05) {
+                const rateAdj = Math.max(-0.25, Math.min(0.25, -timeDiff * 0.6));
+                el.playbackRate = Math.max(0.25, Math.min(4.0, spd * (1 + rateAdj)));
+              } else if (Math.abs(el.playbackRate - spd) > 0.01) {
+                el.playbackRate = spd;
               }
             } else if (isUpcomingSoon) {
               if (gainNode && exportAudioCtx) {
                 gainNode.gain.setValueAtTime(0, exportAudioCtx.currentTime);
               }
               const targetStart = Math.max(0, vClip.sourceIn || 0);
-              if (Math.abs(el.currentTime - targetStart) > 0.08) {
+              if (Math.abs(el.currentTime - targetStart) > 0.25 && !el.seeking) {
                 try {
                   el.currentTime = targetStart;
                 } catch {
@@ -1921,7 +1934,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                   : Math.max(0, Math.min(2, (aClip.volume ?? 100) / 100));
                 gainNode.gain.setValueAtTime(targetGain, exportAudioCtx.currentTime);
               }
-              if (Math.abs(el.currentTime - targetMediaTime) > 0.28) {
+              if (Math.abs(el.currentTime - targetMediaTime) > 0.75 && !el.seeking) {
                 try {
                   el.currentTime = targetMediaTime;
                 } catch {
@@ -1962,32 +1975,13 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           await new Promise((r) => setTimeout(r, frameIntervalMs));
         }
 
-        preloadedVideos.forEach(({ el }) => {
-          if (!el.paused) {
-            try {
-              el.pause();
-            } catch {
-              // Ignore
-            }
-          }
-        });
-        preloadedAudios.forEach(({ el }) => {
-          if (!el.paused) {
-            try {
-              el.pause();
-            } catch {
-              // Ignore
-            }
-          }
-        });
-
         if (recorder.state !== 'inactive') {
           try {
             recorder.requestData();
           } catch {
             // Ignore
           }
-          await new Promise((r) => setTimeout(r, 90));
+          await new Promise((r) => setTimeout(r, 60));
           if ((recorder as MediaRecorder).state !== 'inactive') {
             recorder.stop();
           }
@@ -1999,13 +1993,47 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
         const rawVideoBlob = await renderCompletePromise;
         if (abortExportRef.current) break;
 
+        // Cleanly stop media tracks to release hardware encoders
+        try {
+          videoStream.getTracks().forEach((t) => t.stop());
+        } catch {
+          // Ignore
+        }
+        if (exportAudioDest) {
+          try {
+            exportAudioDest.stream.getTracks().forEach((t) => t.stop());
+          } catch {
+            // Ignore
+          }
+        }
+
+        // Rewind media elements for subsequent variants without destroying decoder pipeline
+        preloadedVideos.forEach(({ el }) => {
+          try {
+            el.pause();
+            el.currentTime = 0;
+          } catch {
+            // Ignore
+          }
+        });
+        preloadedAudios.forEach(({ el }) => {
+          try {
+            el.pause();
+            el.currentTime = 0;
+          } catch {
+            // Ignore
+          }
+        });
+
         const videoBlob = await patchMediaRecorderBlobDuration(
           rawVideoBlob,
           fullTimelineSec
         );
         const url = URL.createObjectURL(videoBlob);
+        activeObjectUrlsRef.current.add(url);
         const suffix = totalVariants > 1 ? `_Var${String(vIdx).padStart(2, '0')}` : '';
-        const ext = format === 'gif' ? 'webm' : format;
+        const isActualWebm = (recorder.mimeType || mimeType).toLowerCase().includes('webm');
+        const ext = isActualWebm ? 'webm' : (format === 'gif' ? 'webm' : format);
         const outName = `${safeFileBaseTitle}${suffix}_${resolution}_${exportSpec.fps}fps.${ext}`;
         const actualMb = Math.max(0.05, videoBlob.size / (1024 * 1024)).toFixed(2);
         const actualMbps = (
@@ -2035,6 +2063,12 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
       }
     } finally {
       cleanupPreloadedMedia();
+      try {
+        exportCanvas.width = 1;
+        exportCanvas.height = 1;
+      } catch {
+        // Ignore
+      }
       stopAudioKeepAlive();
       stopAudioKeepAliveRef.current = null;
       activeRecorderRef.current = null;

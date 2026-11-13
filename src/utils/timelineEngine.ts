@@ -29,6 +29,11 @@ export interface TimelineDragPayload {
   thumbnailUrl?: string;
   colorHex?: string;
   subtitleText?: string;
+  fontSize?: number;
+  textColor?: string;
+  textStrokeColor?: string;
+  textStrokeWidth?: number;
+  fontFamily?: string;
   stickerEmoji?: string;
   stickerType?: StickerOverlayType;
   stickerText?: string;
@@ -359,6 +364,7 @@ export interface TimelineClip {
   textUnderline?: boolean;
   textColor?: string;
   textStrokeColor?: string;
+  textStrokeWidth?: number;
   textBgColor?: string;
   textShadow?: boolean;
   textCurveDeg?: number;  // -360 to 360
@@ -3274,6 +3280,30 @@ export function detectAspectRatioFromDimensions(
     }
   }
   return best;
+}
+
+/**
+ * Computes default text font size dynamically scaled according to project aspect ratio.
+ * In vertical 9:16 or tall 5.8" smartphones, smaller font prevents overflow (26px).
+ * In square 1:1, medium font (30px).
+ * In widescreen 16:9, larger font (38px).
+ */
+export function resolveDefaultTextFontSizeByAspectRatio(aspectRatio?: string): number {
+  if (!aspectRatio) return 32;
+  const normalized = aspectRatio.trim().toLowerCase();
+  if (normalized === '9:16' || normalized === '5.8"') {
+    return 26;
+  }
+  if (normalized === '1:1') {
+    return 30;
+  }
+  if (normalized === '16:9' || normalized === '2.35:1') {
+    return 38;
+  }
+  if (normalized === '4:3' || normalized === '3:4') {
+    return 32;
+  }
+  return 32;
 }
 
 /**

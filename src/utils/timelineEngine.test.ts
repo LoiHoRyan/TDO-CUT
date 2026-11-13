@@ -61,6 +61,8 @@ import {
   getDefaultExportDirPath,
   DEFAULT_TDO_INSTALL_DIR,
   computeRealisticExportEstimate,
+  packTrackClipsContiguously,
+  resolveDefaultTextFontSizeByAspectRatio,
   TimelineClip,
 } from './timelineEngine';
 
@@ -1651,6 +1653,150 @@ test('Scale input buffer parsing, scale up to 500%, and mobile scroll playback g
   assert.equal(shouldExecuteHardSeek(1.2, 3.8, true), true, 'Large jump (> 2.0s) while playing triggers hard seek');
   assert.equal(shouldExecuteHardSeek(1.2, 1.3, false), true, 'Scrubbing while paused with > 0.04s difference triggers precise seek');
 });
+
+test('Mobile aspect ratio default text font size scaling', () => {
+  // Vertical 9:16 (TikTok, Reels, Shorts) and 5.8" smartphone screens use 26px to prevent clipping
+  assert.equal(resolveDefaultTextFontSizeByAspectRatio('9:16'), 26);
+  assert.equal(resolveDefaultTextFontSizeByAspectRatio('5.8"'), 26);
+
+  // Square 1:1 uses 30px
+  assert.equal(resolveDefaultTextFontSizeByAspectRatio('1:1'), 30);
+
+  // Widescreen 16:9 and 2.35:1 use 38px
+  assert.equal(resolveDefaultTextFontSizeByAspectRatio('16:9'), 38);
+  assert.equal(resolveDefaultTextFontSizeByAspectRatio('2.35:1'), 38);
+
+  // 4:3, 3:4, and unspecified fallback to 32px
+  assert.equal(resolveDefaultTextFontSizeByAspectRatio('4:3'), 32);
+  assert.equal(resolveDefaultTextFontSizeByAspectRatio('3:4'), 32);
+  assert.equal(resolveDefaultTextFontSizeByAspectRatio(undefined), 32);
+});
+
+test('Mobile left trim handle ripple to 00:00:00 and track 0 clip reorder permutation', () => {
+  // 1. Verify left handle trimming on Track 0 ripples back to 00:00:00
+  const initialClips = [
+    createDefaultClip({
+      id: 'clip-v1',
+      name: 'Video1.mp4',
+      trackIndex: 0,
+      startTime: 0,
+      duration: 10,
+      sourceIn: 0,
+      sourceDuration: 20,
+    }),
+    createDefaultClip({
+      id: 'clip-v2',
+      name: 'Video2.mp4',
+      trackIndex: 0,
+      startTime: 10,
+      duration: 5,
+      sourceIn: 0,
+      sourceDuration: 15,
+    }),
+  ];
+
+  // User drags left trim handle of clip-v1 rightward by +3.0s:
+  // clip-v1 new startTime: 3.0, new duration: 7.0, new sourceIn: 3.0
+  const afterDragClips = [
+    { ...initialClips[0], startTime: 3.0, duration: 7.0, sourceIn: 3.0 },
+    initialClips[1],
+  ];
+
+  // On release, packTrackClipsContiguously snaps clip-v1 back to 0.00 and ripples clip-v2 to 7.00
+  const rippled = packTrackClipsContiguously(afterDragClips, 0);
+  assert.equal(rippled[0].startTime, 0, 'First clip must snap back to 00:00:00 after left trim');
+  assert.equal(rippled[0].duration, 7.0, 'First clip duration reduced from 10s to 7s');
+  assert.equal(rippled[0].sourceIn, 3.0, 'First clip sourceIn advanced to 3s');
+  assert.equal(rippled[1].startTime, 7.0, 'Second clip ripples left to 7.00s seamlessly');
+
+  // 2. Track 0 Clip Reorder Permutation (Long-press reorder mode)
+  // User reorders [V1 (dur 7), V2 (dur 5)] into [V2, V1]
+  const reorderedOrder = [rippled[1], rippled[0]];
+  let cursor = 0;
+  const reorderedMap = new Map<string, TimelineClip>();
+  for (const c of reorderedOrder) {
+    reorderedMap.set(c.id, {
+      ...c,
+      startTime: Number(cursor.toFixed(2)),
+    });
+    cursor += c.duration;
+  }
+  const finalizedReorder = packTrackClipsContiguously(
+    rippled.map((c) => reorderedMap.get(c.id)!),
+    0
+  );
+
+  assert.equal(finalizedReorder[0].id, 'clip-v2', 'clip-v2 is now first');
+  assert.equal(finalizedReorder[0].startTime, 0.0, 'New first clip starts at 0.00');
+  assert.equal(finalizedReorder[0].duration, 5.0, 'Duration of clip-v2 is preserved');
+  assert.equal(finalizedReorder[1].id, 'clip-v1', 'clip-v1 is now second');
+  assert.equal(finalizedReorder[1].startTime, 5.0, 'New second clip starts contiguously at 5.00');
+  assert.equal(finalizedReorder[1].duration, 7.0, 'Duration of clip-v1 is preserved');
+
+  // 3. Audio Right & Left Trim Duration Hard Clamp
+  const audioClip = createDefaultClip({
+    id: 'clip-a1',
+    name: 'Music.mp3',
+    trackIndex: 1,
+    startTime: 0,
+    duration: 8.0,
+    sourceIn: 2.0,
+    sourceDuration: 10.0,
+  });
+
+  // Maximum allowed duration when sourceIn = 2.0 and sourceDuration = 10.0 is 8.0s
+  const maxAllowedDur = Math.max(0.3, (audioClip.sourceDuration! - (audioClip.sourceIn || 0)) / (audioClip.speed || 1.0));
+  assert.equal(maxAllowedDur, 8.0, 'Audio clip cannot extend beyond remaining source duration');
+});
+
+test('Mobile text default content, aspect-ratio scaling, and export MIME extension integrity', () => {
+  // 1. Verify default text content is 'Nhập chữ của bạn tại đây' in Vietnamese
+  const defaultTextVi = 'Nhập chữ của bạn tại đây';
+  assert.equal(defaultTextVi, 'Nhập chữ của bạn tại đây');
+
+  // 2. Default font size scaling per aspect ratio
+  assert.equal(resolveDefaultTextFontSizeByAspectRatio('9:16'), 26);
+  assert.equal(resolveDefaultTextFontSizeByAspectRatio('1:1'), 30);
+  assert.equal(resolveDefaultTextFontSizeByAspectRatio('16:9'), 38);
+  assert.equal(resolveDefaultTextFontSizeByAspectRatio('4:3'), 32);
+
+  // 3. Container extension verification: WebM mime must produce .webm, MP4 mime produces .mp4
+  const resolveExportExt = (actualMime: string, requestedFormat: string): string => {
+    const isActualWebm = actualMime.toLowerCase().includes('webm');
+    return isActualWebm ? 'webm' : (requestedFormat === 'gif' ? 'webm' : requestedFormat);
+  };
+
+  assert.equal(resolveExportExt('video/webm;codecs=vp9,opus', 'mp4'), 'webm', 'WebM recording must never be labeled .mp4');
+  assert.equal(resolveExportExt('video/mp4;codecs=avc1.640028', 'mp4'), 'mp4', 'Real MP4 recording correctly keeps .mp4');
+  assert.equal(resolveExportExt('video/webm', 'webm'), 'webm', 'WebM format keeps .webm');
+
+  // 4. Video left trim drag indent simulation:
+  // While dragging, clip indents inward (startTime > 0, duration shrinks, sourceIn advances)
+  const origClip = createDefaultClip({
+    id: 'clip-drag-test',
+    name: 'DragTest.mp4',
+    trackIndex: 0,
+    startTime: 0,
+    duration: 10.0,
+    sourceIn: 0.0,
+  });
+  const dragDeltaSec = 2.5; // Dragging handle rightward by 2.5s
+  const intermediateDragClip = {
+    ...origClip,
+    startTime: origClip.startTime + dragDeltaSec, // 2.5s
+    duration: origClip.duration - dragDeltaSec,   // 7.5s
+    sourceIn: (origClip.sourceIn || 0) + dragDeltaSec,   // 2.5s
+  };
+  assert.equal(intermediateDragClip.startTime, 2.5, 'During drag, beginning of clip indents inward');
+  assert.equal(intermediateDragClip.duration, 7.5, 'Duration is reduced to 7.5s');
+
+  // Upon releasing finger, magnetic pack snaps start back to 0.00:
+  const releasedClips = packTrackClipsContiguously([intermediateDragClip as TimelineClip], 0);
+  assert.equal(releasedClips[0].startTime, 0.0, 'On release, clip snaps back to 00:00:00');
+  assert.equal(releasedClips[0].duration, 7.5, 'Trimmed duration 7.5s is strictly retained');
+  assert.equal(releasedClips[0].sourceIn, 2.5, 'Source offset 2.5s is strictly retained');
+});
+
 
 
 

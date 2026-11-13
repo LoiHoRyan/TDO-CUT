@@ -240,7 +240,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
   };
 
   return (
-    <div className={`flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden select-none ${
+    <div className={`flex flex-col md:flex-row flex-1 min-h-0 h-full overflow-hidden select-none relative ${
       themeMode === 'light' ? 'bg-[#F1F5F9] text-[#0F172A]' : 'bg-[#0F1014] text-[#E4E4E7]'
     }`}>
       {/* Left Navigation Sidebar (TDO CUT Studio Hub) - hidden on mobile screens, shown on desktop */}
@@ -347,7 +347,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
       </aside>
 
       {/* Center & Right Launcher Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-4 md:space-y-6">
+      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto p-3 sm:p-4 md:p-6 pb-24 md:pb-6 space-y-4 md:space-y-6">
         {/* Top Launcher Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
@@ -1118,12 +1118,13 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
         </div>
       </div>
 
-      {/* Mobile Fixed Bottom Navigation Bar (CapCut Mobile style - Image 4) */}
-      <div
-        className={`flex md:hidden items-center justify-around px-2 py-2 border-t shrink-0 z-30 select-none ${
+      {/* Mobile Fixed Bottom Navigation Bar (CapCut Mobile style - Permanently fixed at bottom) */}
+      <nav
+        aria-label="Thanh điều hướng trang chủ"
+        className={`fixed md:hidden bottom-0 left-0 right-0 z-50 flex items-center justify-around px-2 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t select-none backdrop-blur-xl ${
           themeMode === 'light'
-            ? 'bg-white border-[#E2E8F0] text-[#0F172A]'
-            : 'bg-[#14151B] border-[#22242D] text-white'
+            ? 'bg-white/95 border-[#E2E8F0] text-[#0F172A] shadow-[0_-4px_16px_rgba(0,0,0,0.06)]'
+            : 'bg-[#14151B]/95 border-[#22242D] text-white shadow-[0_-4px_16px_rgba(0,0,0,0.5)]'
         }`}
       >
         {(
@@ -1153,7 +1154,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
             </button>
           );
         })}
-      </div>
+      </nav>
     </div>
   );
 };

@@ -45,6 +45,10 @@ import {
   Split,
   Eye,
   EyeOff,
+  Copy,
+  Palette,
+  Bold,
+  Italic,
 } from 'lucide-react';
 import {
   TimelineClip,
@@ -57,6 +61,7 @@ import {
   StudioThemeMode,
   AppLanguage,
   formatTimecode,
+  packTrackClipsContiguously,
   WORLD_FLAG_STICKERS,
   FACE_ICON_STICKERS,
   TREND_EMOJI_STICKERS,
@@ -65,6 +70,7 @@ import {
   getFlagGraphicDataUrl,
   extractFlagIsoCode,
   findGraphicBadgeByIconOrText,
+  resolveDefaultTextFontSizeByAspectRatio,
 } from '../utils/timelineEngine';
 import {
   SFX_LIBRARY,
@@ -124,12 +130,15 @@ export interface MobileWorkstationProps {
   onToggleTrackMute: (trackIdx: number) => void;
   onCaptureCover?: () => void;
   renderPlayer: () => React.ReactNode;
+  onReorderClips?: (reorderedTrack0Clips: TimelineClip[]) => void;
+  onDuplicateClip?: (clipId: string) => void;
 }
 
 export type MobileDrawerType =
   | 'edit'
   | 'audio'
   | 'text'
+  | 'text_edit'
   | 'stickers'
   | 'overlay'
   | 'effects'
@@ -218,6 +227,8 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
   onToggleTrackMute,
   onCaptureCover,
   renderPlayer,
+  onReorderClips,
+  onDuplicateClip,
 }) => {
   const isEn = language === 'en';
   const isLight = themeMode === 'light';
@@ -505,43 +516,39 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
   const handleRightHandleTouchStart = (clip: TimelineClip, e: React.TouchEvent) => {
     e.stopPropagation();
     isDraggingTimeline.current = false;
-    touchTrimRef.current = {
-      clipId: clip.id,
-      startX: e.touches[0].clientX,
-      origDuration: clip.duration,
-      sourceDuration: clip.sourceDuration,
-      sourceIn: clip.sourceIn || 0,
-      speed: clip.speed || 1.0,
-      hasMoved: false,
-    };
-  };
-
-  const handleRightHandleTouchMove = (e: React.TouchEvent) => {
-    if (!touchTrimRef.current) return;
-    e.stopPropagation();
-    const touch = e.touches[0];
-    const dx = touch.clientX - touchTrimRef.current.startX;
-    if (Math.abs(dx) > 3) {
-      touchTrimRef.current.hasMoved = true;
-    }
-    const deltaSec = dx / pxPerSec;
-    const speed = touchTrimRef.current.speed && touchTrimRef.current.speed > 0 ? touchTrimRef.current.speed : 1.0;
+    const startX = e.touches[0].clientX;
+    const origDuration = clip.duration;
+    const speed = clip.speed && clip.speed > 0 ? clip.speed : 1.0;
     const effectiveSourceDur =
-      touchTrimRef.current.sourceDuration && touchTrimRef.current.sourceDuration > 0
-        ? touchTrimRef.current.sourceDuration
-        : touchTrimRef.current.origDuration;
-    const maxAllowedDur = Math.max(0.4, (effectiveSourceDur - (touchTrimRef.current.sourceIn || 0)) / speed);
+      clip.sourceDuration && clip.sourceDuration > 0
+        ? clip.sourceDuration
+        : origDuration;
+    const maxAllowedDur = Math.max(0.4, (effectiveSourceDur - (clip.sourceIn || 0)) / speed);
 
-    const desiredDur = touchTrimRef.current.origDuration + deltaSec;
-    const clampedDur = Number(Math.max(0.4, Math.min(maxAllowedDur, desiredDur)).toFixed(2));
-    onUpdateClipProp('duration', clampedDur, touchTrimRef.current.clipId);
+    const onTouchMove = (ev: TouchEvent) => {
+      if (ev.touches.length === 0) return;
+      if (ev.cancelable) ev.preventDefault();
+      const dx = ev.touches[0].clientX - startX;
+      const deltaSec = dx / pxPerSec;
+      const desiredDur = origDuration + deltaSec;
+      const clampedDur = Number(Math.max(0.4, Math.min(maxAllowedDur, desiredDur)).toFixed(2));
+      onUpdateClipProp('duration', clampedDur, clip.id);
+    };
+
+    const onTouchEnd = () => {
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchcancel', onTouchEnd);
+    };
+
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', onTouchEnd);
+    window.addEventListener('touchcancel', onTouchEnd);
   };
 
-  const handleRightHandleTouchEnd = (e: React.TouchEvent) => {
-    if (!touchTrimRef.current) return;
-    e.stopPropagation();
-    touchTrimRef.current = null;
-  };
+  const handleRightHandleTouchMove = () => {};
+
+  const handleRightHandleTouchEnd = () => {};
 
   const handleRightHandleMouseDown = (clip: TimelineClip, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -573,48 +580,500 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     window.addEventListener('mouseup', onMouseUp);
   };
 
+  // State to smoothly visualize Track 0 clip indenting inward during left-handle drag
+  const [activeLeftTrim, setActiveLeftTrim] = useState<{
+    clipId: string;
+    startOffsetSec: number;
+    durationSec: number;
+    sourceIn: number;
+  } | null>(null);
+  const activeLeftTrimRef = useRef<{
+    clipId: string;
+    startOffsetSec: number;
+    durationSec: number;
+    sourceIn: number;
+  } | null>(null);
+
   const handleLeftHandleTouchStart = (clip: TimelineClip, e: React.TouchEvent) => {
     e.stopPropagation();
     isDraggingTimeline.current = false;
-    touchLeftTrimRef.current = {
-      clipId: clip.id,
-      startX: e.touches[0].clientX,
-      origStartTime: clip.startTime,
-      origDuration: clip.duration,
-      sourceIn: clip.sourceIn || 0,
-      sourceDuration: clip.sourceDuration,
-      speed: clip.speed || 1.0,
-      hasMoved: false,
+    const startX = e.touches[0].clientX;
+    const origStartTime = clip.startTime;
+    const origDuration = clip.duration;
+    const sourceIn = clip.sourceIn || 0;
+    const speed = clip.speed || 1.0;
+    let hasMoved = false;
+    let lastNewStart = origStartTime;
+    let lastNewDur = origDuration;
+    let lastNewSourceIn = sourceIn;
+
+    const onTouchMove = (ev: TouchEvent) => {
+      if (ev.touches.length === 0) return;
+      if (ev.cancelable) ev.preventDefault();
+      const dx = ev.touches[0].clientX - startX;
+      if (Math.abs(dx) > 3) hasMoved = true;
+      const deltaSec = dx / pxPerSec;
+      const maxDelta = origDuration - 0.4;
+      const minDelta = clip.sourceDuration ? -sourceIn / speed : -Infinity;
+      const clampedDelta = Math.max(-origStartTime, minDelta, Math.min(maxDelta, deltaSec));
+      lastNewStart = Number((origStartTime + clampedDelta).toFixed(2));
+      lastNewDur = Number((origDuration - clampedDelta).toFixed(2));
+      lastNewSourceIn = Number(Math.max(0, sourceIn + clampedDelta * speed).toFixed(2));
+      const trimState = {
+        clipId: clip.id,
+        startOffsetSec: lastNewStart,
+        durationSec: lastNewDur,
+        sourceIn: lastNewSourceIn,
+      };
+      activeLeftTrimRef.current = trimState;
+      setActiveLeftTrim(trimState);
     };
+
+    const onTouchEnd = () => {
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchcancel', onTouchEnd);
+      activeLeftTrimRef.current = null;
+      setActiveLeftTrim(null);
+      if (hasMoved) {
+        if (clip.trackIndex === 0) {
+          const latestClips = clips.map((c) =>
+            c.id === clip.id
+              ? { ...c, startTime: lastNewStart, duration: lastNewDur, sourceIn: lastNewSourceIn }
+              : c
+          );
+          const updatedClips = packTrackClipsContiguously(latestClips, 0);
+          onReorderClips?.(updatedClips);
+          onPlayheadChange(0);
+          if (timelineScrollRef.current) {
+            timelineScrollRef.current.scrollLeft = 0;
+          }
+        }
+      } else {
+        onTrimStartToPlayhead?.();
+      }
+    };
+
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', onTouchEnd);
+    window.addEventListener('touchcancel', onTouchEnd);
   };
 
-  const handleLeftHandleTouchMove = (e: React.TouchEvent) => {
-    if (!touchLeftTrimRef.current) return;
+  const handleLeftHandleTouchMove = () => {};
+
+  const handleLeftHandleTouchEnd = () => {};
+
+  const handleLeftHandleMouseDown = (clip: TimelineClip, e: React.MouseEvent) => {
     e.stopPropagation();
-    const dx = e.touches[0].clientX - touchLeftTrimRef.current.startX;
-    if (Math.abs(dx) > 3) touchLeftTrimRef.current.hasMoved = true;
-    const deltaSec = dx / pxPerSec;
-    const speed = touchLeftTrimRef.current.speed;
-    const maxDelta = touchLeftTrimRef.current.origDuration - 0.4;
-    const minDelta = touchLeftTrimRef.current.sourceDuration ? -touchLeftTrimRef.current.sourceIn / speed : -Infinity;
-    const clampedDelta = Math.max(-touchLeftTrimRef.current.origStartTime, minDelta, Math.min(maxDelta, deltaSec));
-    const newStart = Number((touchLeftTrimRef.current.origStartTime + clampedDelta).toFixed(2));
-    const newDur = Number((touchLeftTrimRef.current.origDuration - clampedDelta).toFixed(2));
-    const newSourceIn = Number(Math.max(0, touchLeftTrimRef.current.sourceIn + clampedDelta * speed).toFixed(2));
-    onUpdateClipProp('startTime', newStart, touchLeftTrimRef.current.clipId);
-    onUpdateClipProp('duration', newDur, touchLeftTrimRef.current.clipId);
-    onUpdateClipProp('sourceIn', newSourceIn, touchLeftTrimRef.current.clipId);
+    e.preventDefault();
+    isDraggingTimeline.current = false;
+    const startX = e.clientX;
+    const origStartTime = clip.startTime;
+    const origDuration = clip.duration;
+    const sourceIn = clip.sourceIn || 0;
+    const speed = clip.speed || 1.0;
+    let hasMoved = false;
+    let lastNewStart = origStartTime;
+    let lastNewDur = origDuration;
+    let lastNewSourceIn = sourceIn;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - startX;
+      if (Math.abs(dx) > 3) hasMoved = true;
+      const deltaSec = dx / pxPerSec;
+      const maxDelta = origDuration - 0.4;
+      const minDelta = clip.sourceDuration ? -sourceIn / speed : -Infinity;
+      const clampedDelta = Math.max(-origStartTime, minDelta, Math.min(maxDelta, deltaSec));
+      lastNewStart = Number((origStartTime + clampedDelta).toFixed(2));
+      lastNewDur = Number((origDuration - clampedDelta).toFixed(2));
+      lastNewSourceIn = Number(Math.max(0, sourceIn + clampedDelta * speed).toFixed(2));
+      const trimState = {
+        clipId: clip.id,
+        startOffsetSec: lastNewStart,
+        durationSec: lastNewDur,
+        sourceIn: lastNewSourceIn,
+      };
+      activeLeftTrimRef.current = trimState;
+      setActiveLeftTrim(trimState);
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      activeLeftTrimRef.current = null;
+      setActiveLeftTrim(null);
+      if (hasMoved) {
+        if (clip.trackIndex === 0) {
+          const latestClips = clips.map((c) =>
+            c.id === clip.id
+              ? { ...c, startTime: lastNewStart, duration: lastNewDur, sourceIn: lastNewSourceIn }
+              : c
+          );
+          const updatedClips = packTrackClipsContiguously(latestClips, 0);
+          onReorderClips?.(updatedClips);
+          onPlayheadChange(0);
+          if (timelineScrollRef.current) {
+            timelineScrollRef.current.scrollLeft = 0;
+          }
+        }
+      } else {
+        onTrimStartToPlayhead?.();
+      }
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
   };
 
-  const handleLeftHandleTouchEnd = (e: React.TouchEvent) => {
-    if (!touchLeftTrimRef.current) return;
-    e.stopPropagation();
-    const hadMoved = touchLeftTrimRef.current.hasMoved;
-    touchLeftTrimRef.current = null;
-    if (!hadMoved) {
-      onTrimStartToPlayhead?.();
+  // Reorder mode states and handlers (Long-press on Track 0 clip to turn clips into square cards)
+  const [isReordering, setIsReordering] = useState(false);
+  const [reorderDraggingClipId, setReorderDraggingClipId] = useState<string | null>(null);
+  const [reorderClips, setReorderClips] = useState<TimelineClip[]>([]);
+  const isReorderingRef = useRef(false);
+  const reorderDraggingClipIdRef = useRef<string | null>(null);
+  const reorderClipsRef = useRef<TimelineClip[]>([]);
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const longPressStartPos = useRef<{ x: number; y: number } | null>(null);
+
+  const startReorderTimer = (clip: TimelineClip, clientX: number, clientY: number) => {
+    if (isReorderingRef.current) return;
+    longPressStartPos.current = { x: clientX, y: clientY };
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = setTimeout(() => {
+      try {
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate(60);
+        }
+      } catch {
+        // Ignore vibration errors
+      }
+      isReorderingRef.current = true;
+      setIsReordering(true);
+      reorderDraggingClipIdRef.current = clip.id;
+      setReorderDraggingClipId(clip.id);
+      reorderClipsRef.current = [...videoClips];
+      setReorderClips([...videoClips]);
+      longPressTimerRef.current = null;
+
+      const onWindowTouchMove = (ev: TouchEvent) => {
+        if (ev.touches.length > 0) {
+          handleReorderMove(ev.touches[0].clientX);
+        }
+      };
+      const onWindowMouseMove = (ev: MouseEvent) => {
+        if (ev.buttons > 0) {
+          handleReorderMove(ev.clientX);
+        }
+      };
+      const cleanupListeners = () => {
+        window.removeEventListener('touchmove', onWindowTouchMove);
+        window.removeEventListener('touchend', onWindowTouchEnd);
+        window.removeEventListener('touchcancel', onWindowTouchEnd);
+        window.removeEventListener('mousemove', onWindowMouseMove);
+        window.removeEventListener('mouseup', onWindowMouseUp);
+      };
+      const onWindowTouchEnd = () => {
+        handleReorderEnd();
+        cleanupListeners();
+      };
+      const onWindowMouseUp = () => {
+        handleReorderEnd();
+        cleanupListeners();
+      };
+
+      window.addEventListener('touchmove', onWindowTouchMove, { passive: false });
+      window.addEventListener('touchend', onWindowTouchEnd);
+      window.addEventListener('touchcancel', onWindowTouchEnd);
+      window.addEventListener('mousemove', onWindowMouseMove);
+      window.addEventListener('mouseup', onWindowMouseUp);
+    }, 800);
+  };
+
+  const cancelReorderTimer = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    longPressStartPos.current = null;
+  };
+
+  const checkCancelReorder = (clientX: number, clientY: number) => {
+    if (longPressTimerRef.current && longPressStartPos.current) {
+      const dist = Math.hypot(clientX - longPressStartPos.current.x, clientY - longPressStartPos.current.y);
+      if (dist > 8) {
+        cancelReorderTimer();
+      }
     }
   };
+
+  const handleReorderMove = (clientX: number) => {
+    if (!isReorderingRef.current || !reorderDraggingClipIdRef.current) return;
+    const scrollEl = timelineScrollRef.current;
+    if (!scrollEl) return;
+    const rect = scrollEl.getBoundingClientRect();
+    const relX = clientX - rect.left + scrollEl.scrollLeft - halfWidth - 68;
+    const cardStep = 64;
+    const currentClips = reorderClipsRef.current;
+    const targetIdx = Math.max(0, Math.min(currentClips.length - 1, Math.floor(relX / cardStep)));
+    const currentIdx = currentClips.findIndex((c) => c.id === reorderDraggingClipIdRef.current);
+    if (currentIdx !== -1 && currentIdx !== targetIdx) {
+      const next = [...currentClips];
+      const [removed] = next.splice(currentIdx, 1);
+      next.splice(targetIdx, 0, removed);
+      reorderClipsRef.current = next;
+      setReorderClips(next);
+      try {
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate(25);
+        }
+      } catch {
+        // Ignore
+      }
+    }
+  };
+
+  const handleReorderEnd = () => {
+    cancelReorderTimer();
+    if (isReorderingRef.current) {
+      let cursor = 0;
+      const reorderedMap = new Map<string, TimelineClip>();
+      for (const c of reorderClipsRef.current) {
+        reorderedMap.set(c.id, {
+          ...c,
+          startTime: Number(cursor.toFixed(2)),
+        });
+        cursor += c.duration;
+      }
+      const finalClips = clips.map((c) => (reorderedMap.has(c.id) ? reorderedMap.get(c.id)! : c));
+      onReorderClips?.(packTrackClipsContiguously(finalClips, 0));
+      isReorderingRef.current = false;
+      setIsReordering(false);
+      reorderDraggingClipIdRef.current = null;
+      setReorderDraggingClipId(null);
+    }
+  };
+
+  // Audio Left & Right Trim Handlers
+  const handleAudioTrimTouchStart = (clip: TimelineClip, isLeft: boolean, e: React.TouchEvent) => {
+    e.stopPropagation();
+    isDraggingTimeline.current = false;
+    const startX = e.touches[0].clientX;
+    const origStartTime = clip.startTime;
+    const origDuration = clip.duration;
+    const sourceIn = clip.sourceIn || 0;
+    const speed = clip.speed || 1.0;
+    const maxSourceDur = clip.sourceDuration && clip.sourceDuration > 0 ? clip.sourceDuration : 3600;
+
+    const onTouchMove = (ev: TouchEvent) => {
+      if (ev.touches.length === 0) return;
+      if (ev.cancelable) ev.preventDefault();
+      const dx = ev.touches[0].clientX - startX;
+      const deltaSec = dx / pxPerSec;
+      if (isLeft) {
+        const maxDelta = origDuration - 0.3;
+        const minDelta = -sourceIn / speed;
+        const clampedDelta = Math.max(minDelta, Math.min(maxDelta, deltaSec));
+        const newStart = Number(Math.max(0, origStartTime + clampedDelta).toFixed(2));
+        const newDur = Number((origDuration - clampedDelta).toFixed(2));
+        const newSourceIn = Number(Math.max(0, sourceIn + clampedDelta * speed).toFixed(2));
+        onUpdateClipProp('startTime', newStart, clip.id);
+        onUpdateClipProp('duration', newDur, clip.id);
+        onUpdateClipProp('sourceIn', newSourceIn, clip.id);
+      } else {
+        const maxAllowedDur = Math.max(0.3, (maxSourceDur - sourceIn) / speed);
+        const desiredDur = origDuration + deltaSec;
+        const clampedDur = Number(Math.max(0.3, Math.min(maxAllowedDur, desiredDur)).toFixed(2));
+        onUpdateClipProp('duration', clampedDur, clip.id);
+      }
+    };
+
+    const onTouchEnd = () => {
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchcancel', onTouchEnd);
+    };
+
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', onTouchEnd);
+    window.addEventListener('touchcancel', onTouchEnd);
+  };
+
+  const handleAudioTrimTouchMove = () => {};
+
+  const handleAudioTrimTouchEnd = () => {};
+
+  const handleAudioTrimMouseDown = (clip: TimelineClip, isLeft: boolean, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    isDraggingTimeline.current = false;
+    const startX = e.clientX;
+    const origStartTime = clip.startTime;
+    const origDuration = clip.duration;
+    const sourceIn = clip.sourceIn || 0;
+    const speed = clip.speed || 1.0;
+    const maxSourceDur = clip.sourceDuration && clip.sourceDuration > 0 ? clip.sourceDuration : 3600;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - startX;
+      const deltaSec = dx / pxPerSec;
+      if (isLeft) {
+        const maxDelta = origDuration - 0.3;
+        const minDelta = -sourceIn / speed;
+        const clampedDelta = Math.max(minDelta, Math.min(maxDelta, deltaSec));
+        const newStart = Number(Math.max(0, origStartTime + clampedDelta).toFixed(2));
+        const newDur = Number((origDuration - clampedDelta).toFixed(2));
+        const newSourceIn = Number(Math.max(0, sourceIn + clampedDelta * speed).toFixed(2));
+        onUpdateClipProp('startTime', newStart, clip.id);
+        onUpdateClipProp('duration', newDur, clip.id);
+        onUpdateClipProp('sourceIn', newSourceIn, clip.id);
+      } else {
+        const maxAllowedDur = Math.max(0.3, (maxSourceDur - sourceIn) / speed);
+        const desiredDur = origDuration + deltaSec;
+        const clampedDur = Number(Math.max(0.3, Math.min(maxAllowedDur, desiredDur)).toFixed(2));
+        onUpdateClipProp('duration', clampedDur, clip.id);
+      }
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
+  // Text Timeline Drag & Trim Handlers
+  const handleTextDragTouchStart = (clip: TimelineClip, e: React.TouchEvent) => {
+    e.stopPropagation();
+    isDraggingTimeline.current = false;
+    const startX = e.touches[0].clientX;
+    const origStartTime = clip.startTime;
+
+    const onTouchMove = (ev: TouchEvent) => {
+      if (ev.touches.length === 0) return;
+      if (ev.cancelable) ev.preventDefault();
+      const dx = ev.touches[0].clientX - startX;
+      const deltaSec = dx / pxPerSec;
+      const newStart = Number(Math.max(0, origStartTime + deltaSec).toFixed(2));
+      onUpdateClipProp('startTime', newStart, clip.id);
+    };
+
+    const onTouchEnd = () => {
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchcancel', onTouchEnd);
+    };
+
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', onTouchEnd);
+    window.addEventListener('touchcancel', onTouchEnd);
+  };
+
+  const handleTextDragMouseDown = (clip: TimelineClip, e: React.MouseEvent) => {
+    e.stopPropagation();
+    isDraggingTimeline.current = false;
+    const startX = e.clientX;
+    const origStartTime = clip.startTime;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - startX;
+      const deltaSec = dx / pxPerSec;
+      const newStart = Number(Math.max(0, origStartTime + deltaSec).toFixed(2));
+      onUpdateClipProp('startTime', newStart, clip.id);
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
+  const handleTextDragTouchMove = () => {};
+
+  const handleTextDragTouchEnd = () => {};
+
+  const handleTextTrimTouchStart = (clip: TimelineClip, isLeft: boolean, e: React.TouchEvent) => {
+    e.stopPropagation();
+    isDraggingTimeline.current = false;
+    const startX = e.touches[0].clientX;
+    const origStartTime = clip.startTime;
+    const origDuration = clip.duration;
+
+    const onTouchMove = (ev: TouchEvent) => {
+      if (ev.touches.length === 0) return;
+      if (ev.cancelable) ev.preventDefault();
+      const dx = ev.touches[0].clientX - startX;
+      const deltaSec = dx / pxPerSec;
+      if (isLeft) {
+        const maxDelta = origDuration - 0.3;
+        const minDelta = -origStartTime;
+        const clampedDelta = Math.max(minDelta, Math.min(maxDelta, deltaSec));
+        const newStart = Number((origStartTime + clampedDelta).toFixed(2));
+        const newDur = Number((origDuration - clampedDelta).toFixed(2));
+        onUpdateClipProp('startTime', newStart, clip.id);
+        onUpdateClipProp('duration', newDur, clip.id);
+      } else {
+        const desiredDur = origDuration + deltaSec;
+        const clampedDur = Number(Math.max(0.3, desiredDur).toFixed(2));
+        onUpdateClipProp('duration', clampedDur, clip.id);
+      }
+    };
+
+    const onTouchEnd = () => {
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchcancel', onTouchEnd);
+    };
+
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', onTouchEnd);
+    window.addEventListener('touchcancel', onTouchEnd);
+  };
+
+  const handleTextTrimMouseDown = (clip: TimelineClip, isLeft: boolean, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    isDraggingTimeline.current = false;
+    const startX = e.clientX;
+    const origStartTime = clip.startTime;
+    const origDuration = clip.duration;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - startX;
+      const deltaSec = dx / pxPerSec;
+      if (isLeft) {
+        const maxDelta = origDuration - 0.3;
+        const minDelta = -origStartTime;
+        const clampedDelta = Math.max(minDelta, Math.min(maxDelta, deltaSec));
+        const newStart = Number((origStartTime + clampedDelta).toFixed(2));
+        const newDur = Number((origDuration - clampedDelta).toFixed(2));
+        onUpdateClipProp('startTime', newStart, clip.id);
+        onUpdateClipProp('duration', newDur, clip.id);
+      } else {
+        const desiredDur = origDuration + deltaSec;
+        const clampedDur = Number(Math.max(0.3, desiredDur).toFixed(2));
+        onUpdateClipProp('duration', clampedDur, clip.id);
+      }
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
+  const handleTextTrimTouchMove = () => {};
+
+  const handleTextTrimTouchEnd = () => {};
+
+  const [textEditTab, setTextEditTab] = useState<'text' | 'font' | 'color' | 'stroke' | 'style'>('text');
 
   // Mouse dragging on desktop with window listeners so mouse release is never lost
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -1135,7 +1594,60 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
               </div>
 
               {/* Video Clips starting at halfWidth (00:00) */}
-              {videoClips.length === 0 ? (
+              {isReordering ? (
+                /* Reorder Mode: Clips shrink into square blocks that can be dragged left/right across other clips */
+                <div
+                  style={{ left: `${halfWidth}px` }}
+                  className="absolute inset-y-0 flex items-center gap-2 z-30 pointer-events-auto"
+                >
+                  <button
+                    type="button"
+                    onClick={handleReorderEnd}
+                    className="h-14 px-3 rounded-xl bg-[#00E5CC] text-black font-bold text-xs flex items-center gap-1.5 shadow-lg active:scale-95 cursor-pointer shrink-0"
+                  >
+                    <Check className="w-4 h-4 stroke-[3]" />
+                    <span>Xong</span>
+                  </button>
+                  {reorderClips.map((clip, idx) => {
+                    const isDraggingThis = reorderDraggingClipId === clip.id;
+                    return (
+                      <div
+                        key={clip.id}
+                        onTouchStart={() => setReorderDraggingClipId(clip.id)}
+                        onTouchMove={(e) => handleReorderMove(e.touches[0].clientX)}
+                        onTouchEnd={handleReorderEnd}
+                        onTouchCancel={handleReorderEnd}
+                        onMouseDown={() => setReorderDraggingClipId(clip.id)}
+                        onMouseMove={(e) => {
+                          if (e.buttons > 0) handleReorderMove(e.clientX);
+                        }}
+                        onMouseUp={handleReorderEnd}
+                        style={{
+                          backgroundImage: clip.thumbnailUrl ? `url(${clip.thumbnailUrl})` : undefined,
+                          backgroundSize: 'cover',
+                          backgroundPosition: 'center',
+                        }}
+                        className={`w-14 h-14 aspect-square rounded-xl border-2 flex flex-col justify-between p-1 shrink-0 relative transition-all shadow-md cursor-grab active:cursor-grabbing select-none ${
+                          isDraggingThis
+                            ? 'border-[#00E5CC] ring-2 ring-[#00E5CC]/60 scale-105 z-40 bg-[#00E5CC]/30'
+                            : isLight
+                            ? 'border-gray-300 bg-white text-gray-800'
+                            : 'border-white/20 bg-[#1A1C24] text-white'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[7.5px] font-bold px-1 rounded bg-black/75 text-[#00E5CC]">
+                            #{idx + 1}
+                          </span>
+                        </div>
+                        <span className="text-[7.5px] font-mono font-bold self-end px-1 rounded bg-black/75 text-white">
+                          {clip.duration.toFixed(1)}s
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : videoClips.length === 0 ? (
                 <div
                   style={{ left: `${halfWidth}px` }}
                   onClick={(e) => {
@@ -1150,14 +1662,17 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
               ) : (
                 <>
                   {videoClips.map((clip, idx) => {
-                    const clipLeft = halfWidth + clip.startTime * pxPerSec;
-                    const clipWidth = Math.max(36, clip.duration * pxPerSec);
+                    const isTrimmingLeft = activeLeftTrim?.clipId === clip.id;
+                    const displayStartSec = isTrimmingLeft ? activeLeftTrim.startOffsetSec : clip.startTime;
+                    const displayDurSec = isTrimmingLeft ? activeLeftTrim.durationSec : clip.duration;
+                    const clipLeft = halfWidth + displayStartSec * pxPerSec;
+                    const clipWidth = Math.max(36, displayDurSec * pxPerSec);
                     const isSelected = selectedClipId === clip.id;
                     const nextClip = videoClips[idx + 1];
 
                     return (
                       <React.Fragment key={clip.id}>
-                        {/* Video Clip Card */}
+                        {/* Video Clip Card (Long-press ~1s enters square block reorder mode) */}
                         <div
                           style={{
                             left: `${clipLeft}px`,
@@ -1170,6 +1685,13 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                                 }
                               : {}),
                           }}
+                          onTouchStart={(e) => startReorderTimer(clip, e.touches[0].clientX, e.touches[0].clientY)}
+                          onTouchMove={(e) => checkCancelReorder(e.touches[0].clientX, e.touches[0].clientY)}
+                          onTouchEnd={cancelReorderTimer}
+                          onTouchCancel={cancelReorderTimer}
+                          onMouseDown={(e) => startReorderTimer(clip, e.clientX, e.clientY)}
+                          onMouseMove={(e) => checkCancelReorder(e.clientX, e.clientY)}
+                          onMouseUp={cancelReorderTimer}
                           onClick={(e) => {
                             e.stopPropagation();
                             onSelectClip(clip.id);
@@ -1182,18 +1704,19 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                               : 'bg-[#1A1C24] border-[#2E313D] text-white'
                           }`}
                         >
-                          {/* Left Trim Handle when selected */}
+                          {/* Left Trim Handle when selected (Magnetic start ripple to 00:00:00 on release) */}
                           {isSelected && (
                             <div
                               onTouchStart={(e) => handleLeftHandleTouchStart(clip, e)}
                               onTouchMove={handleLeftHandleTouchMove}
                               onTouchEnd={handleLeftHandleTouchEnd}
                               onTouchCancel={handleLeftHandleTouchEnd}
+                              onMouseDown={(e) => handleLeftHandleMouseDown(clip, e)}
                               onClick={(e) => {
                                 e.stopPropagation();
                               }}
-                              title="Kéo đầu clip để cắt ngắn video"
-                              className="absolute left-0 inset-y-0 w-4 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-l-md touch-none select-none"
+                              title="Kéo đầu clip để cắt ngắn video (khi thả tay sẽ nhảy về 00:00:00)"
+                              className="absolute left-0 inset-y-0 w-4 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-l-md touch-none select-none active:bg-[#00E5CC]"
                             >
                               <div className="flex gap-0.5 pointer-events-none">
                                 <div className="w-[1px] h-3 bg-black/80" />
@@ -1302,6 +1825,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                 audioClips.map((clip) => {
                   const clipLeft = halfWidth + clip.startTime * pxPerSec;
                   const clipWidth = Math.max(30, clip.duration * pxPerSec);
+                  const isSelected = selectedClipId === clip.id;
                   return (
                     <div
                       key={clip.id}
@@ -1313,10 +1837,46 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                         e.stopPropagation();
                         onSelectClip(clip.id);
                       }}
-                      className="absolute h-7 rounded-md bg-[#0284C7]/30 border border-[#0284C7] px-2 flex items-center gap-1.5 text-[9px] font-semibold text-[#38BDF8] truncate cursor-pointer shadow-xs"
+                      className={`absolute h-7 rounded-md border flex items-center px-1.5 gap-1.5 text-[9px] font-semibold truncate cursor-pointer shadow-xs ${
+                        isSelected
+                          ? 'bg-[#0284C7]/50 border-2 border-white ring-2 ring-[#0284C7]/60 text-white z-10'
+                          : 'bg-[#0284C7]/30 border-[#0284C7] text-[#38BDF8]'
+                      }`}
                     >
+                      {/* Left Trim Handle for Audio */}
+                      {isSelected && (
+                        <div
+                          onTouchStart={(e) => handleAudioTrimTouchStart(clip, true, e)}
+                          onTouchMove={handleAudioTrimTouchMove}
+                          onTouchEnd={handleAudioTrimTouchEnd}
+                          onTouchCancel={handleAudioTrimTouchEnd}
+                          onMouseDown={(e) => handleAudioTrimMouseDown(clip, true, e)}
+                          onClick={(e) => e.stopPropagation()}
+                          title="Kéo mép trái để cắt đầu âm thanh"
+                          className="absolute left-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-l-md touch-none select-none active:bg-[#38BDF8]"
+                        >
+                          <div className="w-[1px] h-2.5 bg-black/80 pointer-events-none" />
+                        </div>
+                      )}
+
                       <Music className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">{clip.name}</span>
+                      <span className="truncate flex-1">{clip.name}</span>
+
+                      {/* Right Trim Handle for Audio */}
+                      {isSelected && (
+                        <div
+                          onTouchStart={(e) => handleAudioTrimTouchStart(clip, false, e)}
+                          onTouchMove={handleAudioTrimTouchMove}
+                          onTouchEnd={handleAudioTrimTouchEnd}
+                          onTouchCancel={handleAudioTrimTouchEnd}
+                          onMouseDown={(e) => handleAudioTrimMouseDown(clip, false, e)}
+                          onClick={(e) => e.stopPropagation()}
+                          title="Kéo mép phải để thu ngắn / kéo dài âm thanh"
+                          className="absolute right-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-r-md touch-none select-none active:bg-[#38BDF8]"
+                        >
+                          <div className="w-[1px] h-2.5 bg-black/80 pointer-events-none" />
+                        </div>
+                      )}
                     </div>
                   );
                 })
@@ -1339,7 +1899,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
               )}
             </div>
 
-            {/* ROW 3: TRACK 2 (TEXT TRACK) */}
+            {/* ROW 3: TRACK 2 (TEXT TRACK - Drag horizontal reposition & trim handles) */}
             <div className="h-7 relative flex items-center">
               {/* Left runway before 00:00: Text Icon button */}
               <div
@@ -1363,7 +1923,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
               {textClips.length > 0 ? (
                 textClips.map((clip) => {
                   const clipLeft = halfWidth + clip.startTime * pxPerSec;
-                  const clipWidth = Math.max(28, clip.duration * pxPerSec);
+                  const clipWidth = Math.max(34, clip.duration * pxPerSec);
                   const isSelected = selectedClipId === clip.id;
                   return (
                     <div
@@ -1372,18 +1932,66 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                         left: `${clipLeft}px`,
                         width: `${clipWidth}px`,
                       }}
+                      onTouchStart={(e) => handleTextDragTouchStart(clip, e)}
+                      onTouchMove={handleTextDragTouchMove}
+                      onTouchEnd={handleTextDragTouchEnd}
+                      onTouchCancel={handleTextDragTouchEnd}
+                      onMouseDown={(e) => handleTextDragMouseDown(clip, e)}
                       onClick={(e) => {
                         e.stopPropagation();
-                        onSelectClip(clip.id);
+                        if (isSelected) {
+                          setTextEditTab('text');
+                          setActiveDrawer('text_edit');
+                        } else {
+                          onSelectClip(clip.id);
+                        }
                       }}
-                      className={`absolute h-5 rounded-full border px-2 flex items-center gap-1 text-[8.5px] font-bold truncate cursor-pointer transition-all ${
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        onSelectClip(clip.id);
+                        setTextEditTab('text');
+                        setActiveDrawer('text_edit');
+                      }}
+                      className={`absolute h-5 rounded-full border px-1 flex items-center gap-1 text-[8.5px] font-bold truncate cursor-pointer transition-all select-none ${
                         isSelected
-                          ? 'bg-[#F97316] text-white border-white ring-2 ring-[#F97316]/50'
+                          ? 'bg-[#F97316] text-white border-2 border-white ring-2 ring-[#F97316]/50 z-10'
                           : 'bg-[#C2410C]/25 text-[#FB923C] border-[#F97316]'
                       }`}
                     >
-                      <Type className="w-2.5 h-2.5 shrink-0" />
-                      <span className="truncate">{clip.subtitleText || clip.name}</span>
+                      {/* Left Trim Handle for Text */}
+                      {isSelected && (
+                        <div
+                          onTouchStart={(e) => handleTextTrimTouchStart(clip, true, e)}
+                          onTouchMove={handleTextTrimTouchMove}
+                          onTouchEnd={handleTextTrimTouchEnd}
+                          onTouchCancel={handleTextTrimTouchEnd}
+                          onMouseDown={(e) => handleTextTrimMouseDown(clip, true, e)}
+                          onClick={(e) => e.stopPropagation()}
+                          title="Kéo mép trái để chỉnh điểm bắt đầu văn bản"
+                          className="absolute left-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-l-full touch-none select-none active:bg-[#FB923C]"
+                        >
+                          <div className="w-[1px] h-2 bg-black/80 pointer-events-none" />
+                        </div>
+                      )}
+
+                      <Type className="w-2.5 h-2.5 shrink-0 ml-1.5" />
+                      <span className="truncate flex-1">{clip.subtitleText || clip.name}</span>
+
+                      {/* Right Trim Handle for Text */}
+                      {isSelected && (
+                        <div
+                          onTouchStart={(e) => handleTextTrimTouchStart(clip, false, e)}
+                          onTouchMove={handleTextTrimTouchMove}
+                          onTouchEnd={handleTextTrimTouchEnd}
+                          onTouchCancel={handleTextTrimTouchEnd}
+                          onMouseDown={(e) => handleTextTrimMouseDown(clip, false, e)}
+                          onClick={(e) => e.stopPropagation()}
+                          title="Kéo mép phải để kéo dài hoặc thu ngắn thời lượng văn bản"
+                          className="absolute right-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-r-full touch-none select-none active:bg-[#FB923C]"
+                        >
+                          <div className="w-[1px] h-2 bg-black/80 pointer-events-none" />
+                        </div>
+                      )}
                     </div>
                   );
                 })
@@ -1449,148 +2057,375 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
         }`}
       >
         {selectedClipId && currentClip ? (
-          /* SUB-ACTION DOCK WHEN CLIP IS SELECTED (CapCut Clean Icons) */
-          <div className="flex items-center gap-1 min-w-full">
-            {/* Back Button '‹' to Deselect Clip */}
-            <button
-              type="button"
-              onClick={() => onSelectClip(null)}
-              className={`flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] active:scale-90 transition-transform cursor-pointer ${
-                isLight ? 'text-[#0F172A] hover:text-[#00A89A]' : 'text-white hover:text-[#00E5CC]'
-              }`}
-            >
-              <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center mb-0.5">
-                <ChevronLeft className="w-4 h-4 text-[#00E5CC]" />
-              </div>
-              <span className="text-[9.5px] font-semibold text-[#00E5CC] whitespace-nowrap">Quay lại</span>
-            </button>
+          (() => {
+            const isTextSelected = Boolean(currentClip.trackIndex === 2 || currentClip.subtitleText);
+            const isAudioSelected = Boolean(currentClip.trackIndex === 1);
 
-            {/* Split (Tách) */}
-            <button
-              type="button"
-              onClick={onSplitClip}
-              className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
-            >
-              <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
-                <Split className="w-4 h-4" />
-              </div>
-              <span className="text-[9.5px] font-medium text-current whitespace-nowrap">Tách</span>
-            </button>
+            if (isTextSelected) {
+              return (
+                /* SUB-ACTION DOCK FOR TEXT CLIPS */
+                <div className="flex items-center gap-1 min-w-full">
+                  <button
+                    type="button"
+                    onClick={() => onSelectClip(null)}
+                    className={`flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] active:scale-90 transition-transform cursor-pointer ${
+                      isLight ? 'text-[#0F172A]' : 'text-white'
+                    }`}
+                  >
+                    <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center mb-0.5">
+                      <ChevronLeft className="w-4 h-4 text-[#00E5CC]" />
+                    </div>
+                    <span className="text-[9.5px] font-semibold text-[#00E5CC] whitespace-nowrap">Quay lại</span>
+                  </button>
 
-            {/* Ripple Trim Left (Xóa trái) */}
-            <button
-              type="button"
-              onClick={onTrimStartToPlayhead}
-              className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
-            >
-              <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mb-0.5 text-amber-400 font-mono font-bold text-[10px]">
-                ][←
-              </div>
-              <span className="text-[9.5px] font-medium text-current whitespace-nowrap">Xóa trái</span>
-            </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTextEditTab('text');
+                      setActiveDrawer('text_edit');
+                    }}
+                    className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-[#00E5CC]/20 border border-[#00E5CC] flex items-center justify-center mb-0.5 text-[#00E5CC]">
+                      <Type className="w-4 h-4" />
+                    </div>
+                    <span className="text-[9.5px] font-medium text-[#00E5CC] whitespace-nowrap">Sửa chữ</span>
+                  </button>
 
-            {/* Ripple Trim Right (Xóa phải) */}
-            <button
-              type="button"
-              onClick={onTrimEndToPlayhead}
-              className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
-            >
-              <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mb-0.5 text-amber-400 font-mono font-bold text-[10px]">
-                →][
-              </div>
-              <span className="text-[9.5px] font-medium text-current whitespace-nowrap">Xóa phải</span>
-            </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTextEditTab('font');
+                      setActiveDrawer('text_edit');
+                    }}
+                    className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-purple-400">
+                      <span className="font-serif font-black text-xs">F</span>
+                    </div>
+                    <span className="text-[9.5px] font-medium whitespace-nowrap">Phông chữ</span>
+                  </button>
 
-            {/* Delete (Xóa) */}
-            <button
-              type="button"
-              onClick={onDeleteSelected}
-              className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] text-rose-500 cursor-pointer active:scale-95 transition-transform"
-            >
-              <div className="w-7 h-7 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center mb-0.5">
-                <Trash2 className="w-4 h-4 text-rose-500" />
-              </div>
-              <span className="text-[9.5px] font-medium whitespace-nowrap">Xóa</span>
-            </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTextEditTab('color');
+                      setActiveDrawer('text_edit');
+                    }}
+                    className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-amber-400">
+                      <Sliders className="w-4 h-4" />
+                    </div>
+                    <span className="text-[9.5px] font-medium whitespace-nowrap">Cỡ & Màu</span>
+                  </button>
 
-            {/* Speed (Tốc độ) */}
-            <button
-              type="button"
-              onClick={() => setActiveDrawer('speed')}
-              className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
-            >
-              <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
-                <Gauge className="w-4 h-4" />
-              </div>
-              <span className="text-[9.5px] font-medium text-current whitespace-nowrap">Tốc độ</span>
-            </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTextEditTab('stroke');
+                      setActiveDrawer('text_edit');
+                    }}
+                    className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-rose-400">
+                      <Sparkles className="w-4 h-4" />
+                    </div>
+                    <span className="text-[9.5px] font-medium whitespace-nowrap">Viền chữ</span>
+                  </button>
 
-            {/* Volume (Âm lượng) */}
-            <button
-              type="button"
-              onClick={() => setActiveDrawer('volume')}
-              className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
-            >
-              <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
-                <Volume2 className="w-4 h-4" />
-              </div>
-              <span className="text-[9.5px] font-medium text-current whitespace-nowrap">Âm lượng</span>
-            </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTextEditTab('style');
+                      setActiveDrawer('text_edit');
+                    }}
+                    className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-sky-400">
+                      <span className="font-mono font-bold text-xs">B/I</span>
+                    </div>
+                    <span className="text-[9.5px] font-medium whitespace-nowrap">Kiểu dáng</span>
+                  </button>
 
-            {/* Auto Cutout (Xóa nền) */}
-            <button
-              type="button"
-              onClick={() => {
-                onUpdateClipProp('autoCutout', !currentClip.autoCutout);
-              }}
-              className={`flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform ${
-                currentClip.autoCutout ? 'text-[#00E5CC]' : ''
-              }`}
-            >
-              <div className={`w-7 h-7 rounded-lg border flex items-center justify-center mb-0.5 ${
-                currentClip.autoCutout ? 'bg-[#00E5CC]/20 border-[#00E5CC]' : 'bg-white/5 border-white/10'
-              }`}>
-                <Wand2 className="w-4 h-4" />
-              </div>
-              <span className="text-[9.5px] font-medium whitespace-nowrap">Xóa nền</span>
-            </button>
+                  <button
+                    type="button"
+                    onClick={onSplitClip}
+                    className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
+                      <Split className="w-4 h-4" />
+                    </div>
+                    <span className="text-[9.5px] font-medium whitespace-nowrap">Tách</span>
+                  </button>
 
-            {/* Crop (Cắt cúp) */}
-            <button
-              type="button"
-              onClick={onOpenCropModal}
-              className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
-            >
-              <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
-                <Crop className="w-4 h-4" />
-              </div>
-              <span className="text-[9.5px] font-medium whitespace-nowrap">Cắt cúp</span>
-            </button>
+                  <button
+                    type="button"
+                    onClick={onDeleteSelected}
+                    className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] text-rose-500 cursor-pointer active:scale-95 transition-transform"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center mb-0.5">
+                      <Trash2 className="w-4 h-4 text-rose-500" />
+                    </div>
+                    <span className="text-[9.5px] font-medium whitespace-nowrap">Xóa</span>
+                  </button>
 
-            {/* Flip Horizontal (Lật) */}
-            <button
-              type="button"
-              onClick={onFlipHorizontal}
-              className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
-            >
-              <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
-                <FlipHorizontal2 className="w-4 h-4" />
-              </div>
-              <span className="text-[9.5px] font-medium whitespace-nowrap">Lật</span>
-            </button>
+                  <button
+                    type="button"
+                    onClick={() => onDuplicateClip?.(currentClip.id)}
+                    className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-teal-400">
+                      <Copy className="w-4 h-4" />
+                    </div>
+                    <span className="text-[9.5px] font-medium whitespace-nowrap">Nhân bản</span>
+                  </button>
+                </div>
+              );
+            }
 
-            {/* Filters (Bộ lọc cho clip) */}
-            <button
-              type="button"
-              onClick={() => setActiveDrawer('filters')}
-              className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
-            >
-              <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
-                <Filter className="w-4 h-4" />
+            if (isAudioSelected) {
+              return (
+                /* SUB-ACTION DOCK FOR AUDIO CLIPS */
+                <div className="flex items-center gap-1 min-w-full">
+                  <button
+                    type="button"
+                    onClick={() => onSelectClip(null)}
+                    className={`flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] active:scale-90 transition-transform cursor-pointer ${
+                      isLight ? 'text-[#0F172A]' : 'text-white'
+                    }`}
+                  >
+                    <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center mb-0.5">
+                      <ChevronLeft className="w-4 h-4 text-[#00E5CC]" />
+                    </div>
+                    <span className="text-[9.5px] font-semibold text-[#00E5CC] whitespace-nowrap">Quay lại</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={onSplitClip}
+                    className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
+                      <Split className="w-4 h-4" />
+                    </div>
+                    <span className="text-[9.5px] font-medium whitespace-nowrap">Tách</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={onTrimStartToPlayhead}
+                    className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mb-0.5 text-amber-400 font-mono font-bold text-[10px]">
+                      ][←
+                    </div>
+                    <span className="text-[9.5px] font-medium whitespace-nowrap">Xóa trái</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={onTrimEndToPlayhead}
+                    className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mb-0.5 text-amber-400 font-mono font-bold text-[10px]">
+                      →][
+                    </div>
+                    <span className="text-[9.5px] font-medium whitespace-nowrap">Xóa phải</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveDrawer('volume')}
+                    className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
+                      <Volume2 className="w-4 h-4" />
+                    </div>
+                    <span className="text-[9.5px] font-medium whitespace-nowrap">Âm lượng</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveDrawer('speed')}
+                    className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
+                      <Gauge className="w-4 h-4" />
+                    </div>
+                    <span className="text-[9.5px] font-medium whitespace-nowrap">Tốc độ</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={onDeleteSelected}
+                    className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] text-rose-500 cursor-pointer active:scale-95 transition-transform"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center mb-0.5">
+                      <Trash2 className="w-4 h-4 text-rose-500" />
+                    </div>
+                    <span className="text-[9.5px] font-medium whitespace-nowrap">Xóa</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => onDuplicateClip?.(currentClip.id)}
+                    className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-teal-400">
+                      <Copy className="w-4 h-4" />
+                    </div>
+                    <span className="text-[9.5px] font-medium whitespace-nowrap">Nhân bản</span>
+                  </button>
+                </div>
+              );
+            }
+
+            return (
+              /* SUB-ACTION DOCK FOR VIDEO CLIPS */
+              <div className="flex items-center gap-1 min-w-full">
+                {/* Back Button '‹' to Deselect Clip */}
+                <button
+                  type="button"
+                  onClick={() => onSelectClip(null)}
+                  className={`flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] active:scale-90 transition-transform cursor-pointer ${
+                    isLight ? 'text-[#0F172A] hover:text-[#00A89A]' : 'text-white hover:text-[#00E5CC]'
+                  }`}
+                >
+                  <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center mb-0.5">
+                    <ChevronLeft className="w-4 h-4 text-[#00E5CC]" />
+                  </div>
+                  <span className="text-[9.5px] font-semibold text-[#00E5CC] whitespace-nowrap">Quay lại</span>
+                </button>
+
+                {/* Split (Tách) */}
+                <button
+                  type="button"
+                  onClick={onSplitClip}
+                  className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
+                    <Split className="w-4 h-4" />
+                  </div>
+                  <span className="text-[9.5px] font-medium text-current whitespace-nowrap">Tách</span>
+                </button>
+
+                {/* Ripple Trim Left (Xóa trái) */}
+                <button
+                  type="button"
+                  onClick={onTrimStartToPlayhead}
+                  className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mb-0.5 text-amber-400 font-mono font-bold text-[10px]">
+                    ][←
+                  </div>
+                  <span className="text-[9.5px] font-medium text-current whitespace-nowrap">Xóa trái</span>
+                </button>
+
+                {/* Ripple Trim Right (Xóa phải) */}
+                <button
+                  type="button"
+                  onClick={onTrimEndToPlayhead}
+                  className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mb-0.5 text-amber-400 font-mono font-bold text-[10px]">
+                    →][
+                  </div>
+                  <span className="text-[9.5px] font-medium text-current whitespace-nowrap">Xóa phải</span>
+                </button>
+
+                {/* Delete (Xóa) */}
+                <button
+                  type="button"
+                  onClick={onDeleteSelected}
+                  className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] text-rose-500 cursor-pointer active:scale-95 transition-transform"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center mb-0.5">
+                    <Trash2 className="w-4 h-4 text-rose-500" />
+                  </div>
+                  <span className="text-[9.5px] font-medium whitespace-nowrap">Xóa</span>
+                </button>
+
+                {/* Speed (Tốc độ) */}
+                <button
+                  type="button"
+                  onClick={() => setActiveDrawer('speed')}
+                  className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
+                    <Gauge className="w-4 h-4" />
+                  </div>
+                  <span className="text-[9.5px] font-medium text-current whitespace-nowrap">Tốc độ</span>
+                </button>
+
+                {/* Volume (Âm lượng) */}
+                <button
+                  type="button"
+                  onClick={() => setActiveDrawer('volume')}
+                  className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
+                    <Volume2 className="w-4 h-4" />
+                  </div>
+                  <span className="text-[9.5px] font-medium text-current whitespace-nowrap">Âm lượng</span>
+                </button>
+
+                {/* Auto Cutout (Xóa nền) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    onUpdateClipProp('autoCutout', !currentClip.autoCutout);
+                  }}
+                  className={`flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform ${
+                    currentClip.autoCutout ? 'text-[#00E5CC]' : ''
+                  }`}
+                >
+                  <div className={`w-7 h-7 rounded-lg border flex items-center justify-center mb-0.5 ${
+                    currentClip.autoCutout ? 'bg-[#00E5CC]/20 border-[#00E5CC]' : 'bg-white/5 border-white/10'
+                  }`}>
+                    <Wand2 className="w-4 h-4" />
+                  </div>
+                  <span className="text-[9.5px] font-medium whitespace-nowrap">Xóa nền</span>
+                </button>
+
+                {/* Crop (Cắt cúp) */}
+                <button
+                  type="button"
+                  onClick={onOpenCropModal}
+                  className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
+                    <Crop className="w-4 h-4" />
+                  </div>
+                  <span className="text-[9.5px] font-medium whitespace-nowrap">Cắt cúp</span>
+                </button>
+
+                {/* Flip Horizontal (Lật) */}
+                <button
+                  type="button"
+                  onClick={onFlipHorizontal}
+                  className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
+                    <FlipHorizontal2 className="w-4 h-4" />
+                  </div>
+                  <span className="text-[9.5px] font-medium whitespace-nowrap">Lật</span>
+                </button>
+
+                {/* Filters (Bộ lọc cho clip) */}
+                <button
+                  type="button"
+                  onClick={() => setActiveDrawer('filters')}
+                  className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
+                    <Filter className="w-4 h-4" />
+                  </div>
+                  <span className="text-[9.5px] font-medium whitespace-nowrap">Bộ lọc</span>
+                </button>
               </div>
-              <span className="text-[9.5px] font-medium whitespace-nowrap">Bộ lọc</span>
-            </button>
-          </div>
+            );
+          })()
         ) : (
           /* ROOT DOCK WHEN NO CLIP IS SELECTED (CapCut Mobile style) */
           <div className="flex items-center gap-1.5 min-w-full">
@@ -2194,11 +3029,13 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
               <button
                 type="button"
                 onClick={() => {
+                  const initialFontSize = resolveDefaultTextFontSizeByAspectRatio(aspectRatio);
                   onDropResource(
                     {
                       kind: 'text',
-                      name: 'Văn bản mẫu',
-                      subtitleText: 'Nhập chữ của bạn ở đây',
+                      name: 'Văn bản',
+                      subtitleText: 'Nhập chữ của bạn tại đây',
+                      fontSize: initialFontSize,
                       duration: 4.0,
                     },
                     2,
@@ -2230,11 +3067,13 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                       key={tpl.title}
                       type="button"
                       onClick={() => {
+                        const initialFontSize = resolveDefaultTextFontSizeByAspectRatio(aspectRatio);
                         onDropResource(
                           {
                             kind: 'text',
                             name: tpl.title,
                             subtitleText: tpl.text,
+                            fontSize: initialFontSize,
                             duration: 4.0,
                           },
                           2,
@@ -2254,6 +3093,327 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
           </div>
         </div>
       )}
+
+      {/* DRAWER 4.5: TEXT EDIT DRAWER */}
+      {activeDrawer === 'text_edit' && (() => {
+        const targetTextClip =
+          currentClip && (currentClip.trackIndex === 2 || Boolean(currentClip.subtitleText))
+            ? currentClip
+            : textClips.find((c) => c.id === selectedClipId) || textClips[0];
+
+        if (!targetTextClip) return null;
+
+        const currentSubtitle = targetTextClip.subtitleText ?? targetTextClip.name;
+        const currentFontSize = targetTextClip.fontSize ?? resolveDefaultTextFontSizeByAspectRatio(aspectRatio);
+        const currentFontFamily = targetTextClip.fontFamily || 'Plus Jakarta Sans';
+        const currentTextColor = targetTextClip.textColor || '#FFFFFF';
+        const currentStrokeColor = targetTextClip.textStrokeColor || 'rgba(0,0,0,0.95)';
+        const currentStrokeWidth = targetTextClip.textStrokeWidth ?? 2;
+        const currentBgColor = targetTextClip.textBgColor || 'transparent';
+        const isBold = targetTextClip.textBold !== false;
+        const isItalic = Boolean(targetTextClip.textItalic);
+        const hasShadow = targetTextClip.textShadow !== false;
+        const currentCurve = targetTextClip.textCurveDeg || 0;
+
+        return (
+          <div className="fixed inset-0 z-50 flex flex-col justify-end">
+            <div
+              className="absolute inset-0 bg-black/60 backdrop-blur-xs animate-in fade-in"
+              onClick={() => setActiveDrawer(null)}
+            />
+            <div
+              className={`relative z-10 w-full max-h-[85vh] rounded-t-3xl border-t shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-200 ${
+                isLight ? 'bg-white border-[#CBD5E1] text-[#0F172A]' : 'bg-[#161720] border-[#2C2E3C] text-white'
+              }`}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-3.5 border-b border-inherit shrink-0">
+                <div className="flex items-center gap-2 font-bold text-sm">
+                  <Type className="w-4 h-4 text-[#00E5CC]" />
+                  <span>{isEn ? 'Edit Text Style & Content' : 'Chỉnh sửa Văn bản & Kiểu chữ'}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveDrawer(null)}
+                  className="px-3 py-1 rounded-full bg-[#00E5CC] text-black font-bold text-xs shadow-sm active:scale-95 cursor-pointer"
+                >
+                  Xong
+                </button>
+              </div>
+
+              {/* Sub-tabs: Nội dung | Phông chữ | Cỡ & Màu | Viền & Nền | Kiểu dáng */}
+              <div className="flex items-center gap-1 px-3 py-2 border-b border-inherit overflow-x-auto no-scrollbar shrink-0">
+                {[
+                  { id: 'text', label: 'Nội dung' },
+                  { id: 'font', label: 'Phông chữ' },
+                  { id: 'color', label: 'Cỡ & Màu' },
+                  { id: 'stroke', label: 'Viền & Nền' },
+                  { id: 'style', label: 'Kiểu dáng' },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setTextEditTab(tab.id as any)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                      textEditTab === tab.id
+                        ? 'bg-[#00E5CC] text-[#090D12] shadow-sm'
+                        : isLight
+                        ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        : 'bg-white/5 text-[#94A3B8] hover:bg-white/10'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Tab Contents */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {/* 1. Tab Text Content */}
+                {textEditTab === 'text' && (
+                  <div className="space-y-3">
+                    <label className="text-xs font-bold text-[#94A3B8] block">Nội dung văn bản</label>
+                    <textarea
+                      rows={3}
+                      value={currentSubtitle}
+                      onChange={(e) => onUpdateClipProp('subtitleText', e.target.value, targetTextClip.id)}
+                      placeholder="Nhập chữ của bạn tại đây..."
+                      className={`w-full p-3 rounded-xl border text-sm font-semibold focus:outline-none focus:border-[#00E5CC] transition-colors resize-none ${
+                        isLight ? 'bg-gray-50 border-gray-300 text-black' : 'bg-[#1C1E2A] border-[#2E3140] text-white'
+                      }`}
+                    />
+                    <div className="text-xs font-bold text-[#94A3B8] pt-1">Gợi ý nhanh</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {['Tiêu đề video', 'Đăng ký kênh nhé', 'Like & Share', 'Cảm ơn các bạn!', 'Xem đến cuối nhé 🔥'].map((phrase) => (
+                        <button
+                          key={phrase}
+                          type="button"
+                          onClick={() => onUpdateClipProp('subtitleText', phrase, targetTextClip.id)}
+                          className="px-2.5 py-1 rounded-lg text-xs bg-white/5 hover:bg-white/10 border border-white/10 active:scale-95 cursor-pointer text-[#00E5CC]"
+                        >
+                          {phrase}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. Tab Font Family */}
+                {textEditTab === 'font' && (
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-[#94A3B8] block">Chọn phông chữ</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { id: 'Plus Jakarta Sans', label: 'Jakarta Sans (Mặc định)' },
+                        { id: 'Montserrat', label: 'Montserrat (Hiện đại)' },
+                        { id: 'Be Vietnam Pro', label: 'Be Vietnam Pro (Chuẩn Việt)' },
+                        { id: 'Playfair Display', label: 'Playfair (Cổ điển)' },
+                        { id: 'Caveat', label: 'Caveat (Viết tay)' },
+                        { id: 'Impact', label: 'Impact (Đậm nét)' },
+                        { id: 'Oswald', label: 'Oswald (Thon cao)' },
+                        { id: 'Roboto', label: 'Roboto (Google)' },
+                      ].map((f) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => onUpdateClipProp('fontFamily', f.id, targetTextClip.id)}
+                          style={{ fontFamily: f.id }}
+                          className={`p-3 rounded-xl border text-left text-xs font-bold transition-all cursor-pointer ${
+                            currentFontFamily === f.id
+                              ? 'border-[#00E5CC] bg-[#00E5CC]/20 text-[#00E5CC]'
+                              : isLight
+                              ? 'border-gray-200 bg-gray-50 text-gray-800'
+                              : 'border-white/10 bg-[#1E202B] text-white hover:bg-white/5'
+                          }`}
+                        >
+                          <div className="text-sm font-black mb-0.5">Aa Bb Cc</div>
+                          <div className="text-[10px] opacity-75">{f.label}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Tab Font Size & Text Color */}
+                {textEditTab === 'color' && (
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex items-center justify-between text-xs font-bold mb-2">
+                        <span className="text-[#94A3B8]">Kích thước phông chữ</span>
+                        <span className="font-mono text-[#00E5CC]">{currentFontSize}px</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={14}
+                        max={84}
+                        step={1}
+                        value={currentFontSize}
+                        onChange={(e) => onUpdateClipProp('fontSize', Number(e.target.value), targetTextClip.id)}
+                        className="w-full accent-[#00E5CC] cursor-pointer"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-[#94A3B8] block mb-2">Màu sắc chữ</label>
+                      <div className="grid grid-cols-6 gap-2">
+                        {[
+                          '#FFFFFF', '#000000', '#00E5CC', '#FACC15',
+                          '#F43F5E', '#38BDF8', '#A855F7', '#4ADE80',
+                          '#FB923C', '#E2E8F0', '#EC4899', '#10B981',
+                        ].map((hex) => (
+                          <button
+                            key={hex}
+                            type="button"
+                            onClick={() => onUpdateClipProp('textColor', hex, targetTextClip.id)}
+                            style={{ backgroundColor: hex }}
+                            className={`w-full aspect-square rounded-xl border-2 transition-transform active:scale-90 cursor-pointer shadow-xs ${
+                              currentTextColor.toLowerCase() === hex.toLowerCase()
+                                ? 'border-[#00E5CC] scale-110 ring-2 ring-[#00E5CC]/60'
+                                : 'border-white/20'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. Tab Stroke & Background */}
+                {textEditTab === 'stroke' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs font-bold text-[#94A3B8] block mb-2">Màu viền chữ</label>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {[
+                          { color: 'transparent', label: 'Không viền' },
+                          { color: 'rgba(0,0,0,0.95)', label: 'Đen' },
+                          { color: '#FFFFFF', label: 'Trắng' },
+                          { color: '#EF4444', label: 'Đỏ' },
+                          { color: '#10B981', label: 'Xanh' },
+                          { color: '#3B82F6', label: 'Lam' },
+                          { color: '#F59E0B', label: 'Vàng' },
+                        ].map((sw) => (
+                          <button
+                            key={sw.color}
+                            type="button"
+                            onClick={() => onUpdateClipProp('textStrokeColor', sw.color, targetTextClip.id)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                              currentStrokeColor === sw.color
+                                ? 'border-[#00E5CC] bg-[#00E5CC]/20 text-[#00E5CC]'
+                                : 'border-white/10 bg-white/5'
+                            }`}
+                          >
+                            {sw.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between text-xs font-bold mb-2">
+                        <span className="text-[#94A3B8]">Độ dày viền chữ</span>
+                        <span className="font-mono text-[#00E5CC]">{currentStrokeWidth}px</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={12}
+                        step={1}
+                        value={currentStrokeWidth}
+                        onChange={(e) => onUpdateClipProp('textStrokeWidth', Number(e.target.value), targetTextClip.id)}
+                        className="w-full accent-[#00E5CC] cursor-pointer"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-[#94A3B8] block mb-2">Màu nền khung chữ</label>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {[
+                          { bg: 'transparent', label: 'Không nền' },
+                          { bg: 'rgba(0,0,0,0.85)', label: 'Nền đen mờ' },
+                          { bg: 'rgba(255,255,255,0.9)', label: 'Nền trắng' },
+                          { bg: 'rgba(220,38,38,0.9)', label: 'Nền đỏ' },
+                          { bg: 'rgba(245,158,11,0.9)', label: 'Nền vàng' },
+                          { bg: 'rgba(2,132,199,0.9)', label: 'Nền lam' },
+                        ].map((bgItem) => (
+                          <button
+                            key={bgItem.bg}
+                            type="button"
+                            onClick={() => onUpdateClipProp('textBgColor', bgItem.bg, targetTextClip.id)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                              currentBgColor === bgItem.bg
+                                ? 'border-[#00E5CC] bg-[#00E5CC]/20 text-[#00E5CC]'
+                                : 'border-white/10 bg-white/5'
+                            }`}
+                          >
+                            {bgItem.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 5. Tab Styles */}
+                {textEditTab === 'style' && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onUpdateClipProp('textBold', !isBold, targetTextClip.id)}
+                        className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 font-bold text-xs cursor-pointer ${
+                          isBold ? 'border-[#00E5CC] bg-[#00E5CC]/20 text-[#00E5CC]' : 'border-white/10 bg-white/5'
+                        }`}
+                      >
+                        <Bold className="w-5 h-5 stroke-[3]" />
+                        <span>In đậm</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => onUpdateClipProp('textItalic', !isItalic, targetTextClip.id)}
+                        className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 font-bold text-xs cursor-pointer ${
+                          isItalic ? 'border-[#00E5CC] bg-[#00E5CC]/20 text-[#00E5CC]' : 'border-white/10 bg-white/5'
+                        }`}
+                      >
+                        <Italic className="w-5 h-5 stroke-[2.5]" />
+                        <span>In nghiêng</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => onUpdateClipProp('textShadow', !hasShadow, targetTextClip.id)}
+                        className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 font-bold text-xs cursor-pointer ${
+                          hasShadow ? 'border-[#00E5CC] bg-[#00E5CC]/20 text-[#00E5CC]' : 'border-white/10 bg-white/5'
+                        }`}
+                      >
+                        <Sparkles className="w-5 h-5" />
+                        <span>Đổ bóng</span>
+                      </button>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between text-xs font-bold mb-2">
+                        <span className="text-[#94A3B8]">Độ cong chữ (Text Curve)</span>
+                        <span className="font-mono text-[#00E5CC]">{currentCurve}°</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={-90}
+                        max={90}
+                        step={5}
+                        value={currentCurve}
+                        onChange={(e) => onUpdateClipProp('textCurveDeg', Number(e.target.value), targetTextClip.id)}
+                        className="w-full accent-[#00E5CC] cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* DRAWER 5: ASPECT RATIO DRAWER */}
       {activeDrawer === 'ratio' && (

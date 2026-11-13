@@ -124,6 +124,7 @@ import {
   extractFlagIsoCode,
   findGraphicBadgeByIconOrText,
   detectAspectRatioFromDimensions,
+  resolveDefaultTextFontSizeByAspectRatio,
   deleteMediaCardsAndLinkedClips,
   formatTimecode,
   getProjectFullDirPath,
@@ -1703,9 +1704,11 @@ export default function App() {
           flipH: false,
           cropRatio: 1.0,
           subtitleText: payload.subtitleText || payload.name,
-          fontSize: 28,
-          textColor: '#FFFFFF',
-          textStrokeColor: '#000000',
+          fontSize:
+            payload.fontSize || resolveDefaultTextFontSizeByAspectRatio(aspectRatio),
+          textColor: payload.textColor || '#FFFFFF',
+          textStrokeColor: payload.textStrokeColor || '#000000',
+          fontFamily: payload.fontFamily || 'Plus Jakarta Sans',
           colorHex: '#A45A49',
         },
       ]);
@@ -2938,7 +2941,11 @@ export default function App() {
       return snapEnabled ? packTrackClipsContiguously(updated, 0) : updated;
     });
     if (newTimelineClips[0]) {
-      setSelectedClipId(newTimelineClips[0].id);
+      if (!isMobile) {
+        setSelectedClipId(newTimelineClips[0].id);
+      } else {
+        setSelectedClipId(null);
+      }
       setPlayheadSec(newTimelineClips[0].startTime);
     }
     showToast(
@@ -4706,7 +4713,7 @@ export default function App() {
   return (
     <div
       data-theme={themeMode}
-      className="flex flex-col h-screen w-screen bg-[#111114] text-[#E4E4E7] font-sans overflow-hidden select-none transition-colors duration-150"
+      className="flex flex-col h-screen h-[100dvh] max-h-[100dvh] w-screen max-w-[100vw] bg-[#111114] text-[#E4E4E7] font-sans overflow-hidden select-none transition-colors duration-150"
     >
       {/* Hidden File Inputs */}
       <input
@@ -5495,7 +5502,7 @@ export default function App() {
                 return { ...c, [key]: value };
               });
               const target = updated.find((c) => c.id === targetId);
-              if (target && target.trackIndex === 0 && (key === 'duration' || key === 'startTime')) {
+              if (target && target.trackIndex === 0 && key === 'duration') {
                 return packTrackClipsContiguously(updated, 0);
               }
               return updated;
@@ -5508,6 +5515,23 @@ export default function App() {
               updateSelectedClipProp('flipH', !currentClip.flipH);
               showToast(language === 'en' ? 'Flipped video horizontally!' : 'Đã lật ngang khung hình!');
             }
+          }}
+          onReorderClips={(newClips) => commitClips(newClips)}
+          onDuplicateClip={(clipId) => {
+            const target = clips.find((c) => c.id === clipId);
+            if (!target) return;
+            const copy: TimelineClip = {
+              ...target,
+              id: `${target.id}-dup-${Date.now()}`,
+              name: `${target.name} (Copy)`,
+              startTime: Number((target.startTime + target.duration).toFixed(2)),
+            };
+            commitClips((prev) =>
+              target.trackIndex === 0
+                ? packTrackClipsContiguously([...prev, copy], 0)
+                : [...prev, copy]
+            );
+            showToast(`Đã nhân bản clip "${target.name}"!`);
           }}
           onSetAspectRatio={setAspectRatio}
           onSetPreviewQuality={setPreviewQuality}
@@ -11316,7 +11340,7 @@ export default function App() {
                         type="button"
                         onClick={() => {
                           const newId = `txt-${Date.now()}`;
-                          const defaultTxt = language === 'en' ? 'Default Text' : 'Văn bản mẫu';
+                          const defaultTxt = language === 'en' ? 'Enter your text here' : 'Nhập chữ của bạn tại đây';
                           commitClips((prev) => [
                             ...prev,
                             {
@@ -11332,7 +11356,7 @@ export default function App() {
                               flipH: false,
                               cropRatio: 1.0,
                               subtitleText: defaultTxt,
-                              fontSize: 32,
+                              fontSize: resolveDefaultTextFontSizeByAspectRatio(aspectRatio),
                               textColor: '#FFFFFF',
                               textStrokeColor: '#000000',
                               colorHex: '#A45A49',

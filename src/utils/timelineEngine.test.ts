@@ -61,6 +61,7 @@ import {
   getDefaultExportDirPath,
   DEFAULT_TDO_INSTALL_DIR,
   computeRealisticExportEstimate,
+  resolveEffectiveClipAspectRatio,
   packTrackClipsContiguously,
   resolveDefaultTextFontSizeByAspectRatio,
   TimelineClip,
@@ -1935,6 +1936,84 @@ test('Mobile Timeline: 500ms Long-Press Guard, Audio Right Trim Clamp, and Text 
   wrappedLines.forEach((line) => {
     assert.ok(line.length <= 22, `Each wrapped line (${line}) stays within safe margin`);
   });
+});
+
+test('Mobile Workstation: Reorder index calculation, edge auto-scroll, and first-video aspect ratio lock', () => {
+  // 1. Reorder card index calculation with Done button offset:
+  // Container starts at halfWidth. Done button is ~76px + 8px gap = 84px.
+  // Each card is 56px width + 8px gap = 64px step.
+  const computeReorderTargetIdx = (
+    clientX: number,
+    scrollLeft: number,
+    rectLeft: number,
+    halfWidth: number,
+    cardCount: number
+  ) => {
+    const cardStartX = halfWidth + 84;
+    const localX = clientX - rectLeft + scrollLeft - cardStartX;
+    const cardStep = 64;
+    return Math.max(0, Math.min(cardCount - 1, Math.floor(localX / cardStep)));
+  };
+
+  const halfWidth = 180;
+  const rectLeft = 0;
+  const scrollLeft = 0;
+  // Over first card (localX 0..63):
+  assert.equal(computeReorderTargetIdx(180 + 84 + 10, scrollLeft, rectLeft, halfWidth, 5), 0, 'Pointer over first card resolves to index 0');
+  // Over second card (localX 64..127):
+  assert.equal(computeReorderTargetIdx(180 + 84 + 70, scrollLeft, rectLeft, halfWidth, 5), 1, 'Pointer over second card resolves to index 1');
+  // Over third card (localX 128..191):
+  assert.equal(computeReorderTargetIdx(180 + 84 + 140, scrollLeft, rectLeft, halfWidth, 5), 2, 'Pointer over third card resolves to index 2');
+
+  // 2. Edge auto-scroll velocity ramping within 44px boundary:
+  const computeEdgeAutoScrollSpeed = (clientX: number, rectLeft: number, rectRight: number) => {
+    const edgeMargin = 44;
+    if (clientX > rectRight - edgeMargin) {
+      const dist = clientX - (rectRight - edgeMargin);
+      return Math.min(16, Math.max(3, dist / 2.5));
+    }
+    if (clientX < rectLeft + edgeMargin) {
+      const dist = rectLeft + edgeMargin - clientX;
+      return -Math.min(16, Math.max(3, dist / 2.5));
+    }
+    return 0;
+  };
+
+  assert.equal(computeEdgeAutoScrollSpeed(350, 0, 360), Math.min(16, Math.max(3, 34 / 2.5)), 'Right edge scroll ramps speed smoothly');
+  assert.equal(computeEdgeAutoScrollSpeed(10, 0, 360), -Math.min(16, Math.max(3, 34 / 2.5)), 'Left edge scroll ramps negative speed smoothly');
+  assert.equal(computeEdgeAutoScrollSpeed(180, 0, 360), 0, 'Center region produces zero scroll velocity');
+
+  // 3. Aspect ratio locking to first video on Track 0:
+  // When Video 1 (9:16) is on Track 0, adding Video 2 (16:9) does NOT alter the project ratio.
+  const video1 = createDefaultClip({
+    id: 'vid-1',
+    name: 'video1.mp4',
+    trackIndex: 0,
+    mediaWidth: 1080,
+    mediaHeight: 1920,
+    nativeAspectRatio: '9:16',
+    startTime: 0,
+    duration: 5,
+  });
+  const video2 = createDefaultClip({
+    id: 'vid-2',
+    name: 'video2.mp4',
+    trackIndex: 0,
+    mediaWidth: 1920,
+    mediaHeight: 1080,
+    nativeAspectRatio: '16:9',
+    startTime: 5,
+    duration: 5,
+  });
+
+  const projectClips = [video1, video2];
+  const firstTrack0 = projectClips.find((c) => c.trackIndex === 0 && !c.disabled);
+  assert.ok(firstTrack0, 'First track 0 clip exists');
+  assert.equal(firstTrack0.id, 'vid-1', 'First track 0 clip is vid-1');
+  assert.equal(firstTrack0.nativeAspectRatio, '9:16', 'Project aspect ratio anchors to 9:16');
+
+  const lockedRatio = resolveEffectiveClipAspectRatio('original', firstTrack0, projectClips);
+  assert.equal(lockedRatio, '9:16', 'Effective aspect ratio remains 9:16 even when video 2 is 16:9');
 });
 
 

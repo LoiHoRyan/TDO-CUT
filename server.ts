@@ -1087,7 +1087,7 @@ async function startServer() {
           });
 
           const finalVLabel = '[vfinal]';
-          filterParts.push(`${currentVLabel}format=yuv420p${finalVLabel}`);
+          filterParts.push(`${currentVLabel}setpts=PTS-STARTPTS,format=yuv420p${finalVLabel}`);
 
           // Mix any external Track 1 / PIP audio clips if present
           let currentALabel = '[acat]';
@@ -1108,7 +1108,7 @@ async function startServer() {
             filterParts.push(
               `${mixInputs.join('')}amix=inputs=${
                 mixInputs.length
-              }:duration=first:dropout_transition=0:normalize=0,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[amixed]`
+              }:duration=first:dropout_transition=0:normalize=0,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,asetpts=PTS-STARTPTS[amixed]`
             );
             currentALabel = '[amixed]';
           }
@@ -1150,7 +1150,7 @@ async function startServer() {
               '0',
               '-start_at_zero',
               '-avoid_negative_ts',
-              'disabled',
+              'make_zero',
               '-c:a',
               'libopus',
               '-b:a',
@@ -1191,7 +1191,9 @@ async function startServer() {
               '0',
               '-start_at_zero',
               '-avoid_negative_ts',
-              'disabled',
+              'make_zero',
+              '-use_editlist',
+              '0',
               '-pix_fmt',
               'yuv420p',
               '-color_primaries',
@@ -1211,7 +1213,7 @@ async function startServer() {
               '-ac',
               '2',
               '-movflags',
-              '+faststart+negative_cts_offsets'
+              '+faststart'
             );
           }
 

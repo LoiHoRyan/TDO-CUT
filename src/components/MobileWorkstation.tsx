@@ -129,7 +129,7 @@ export interface MobileWorkstationProps {
   onOpenCropModal: () => void;
   onToggleTrackMute: (trackIdx: number) => void;
   onCaptureCover?: () => void;
-  renderPlayer: () => React.ReactNode;
+  renderPlayer: (helpers?: { openTextEditor?: (clipId: string) => void }) => React.ReactNode;
   onReorderClips?: (reorderedTrack0Clips: TimelineClip[]) => void;
   onDuplicateClip?: (clipId: string) => void;
 }
@@ -235,6 +235,13 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
 
   // Active bottom drawer state
   const [activeDrawer, setActiveDrawer] = useState<MobileDrawerType>(null);
+  const [textEditTab, setTextEditTab] = useState<'text' | 'font' | 'color' | 'stroke' | 'style'>('text');
+
+  const openTextEditDrawer = useCallback((clipId?: string) => {
+    if (clipId) onSelectClip(clipId);
+    setTextEditTab('text');
+    setActiveDrawer('text_edit');
+  }, [onSelectClip]);
 
   // Transition Target Clip ID (the clip that receives the transition at its start seam)
   const [targetTransitionClipId, setTargetTransitionClipId] = useState<string | null>(null);
@@ -829,7 +836,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       window.addEventListener('touchcancel', onWindowTouchEnd);
       window.addEventListener('mousemove', onWindowMouseMove);
       window.addEventListener('mouseup', onWindowMouseUp);
-    }, 900);
+    }, 1000);
   };
 
   const cancelReorderTimer = () => {
@@ -843,7 +850,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
   const checkCancelReorder = (clientX: number, clientY: number) => {
     if (longPressTimerRef.current && longPressStartPos.current) {
       const dist = Math.hypot(clientX - longPressStartPos.current.x, clientY - longPressStartPos.current.y);
-      if (dist > 8) {
+      if (dist > 15) {
         cancelReorderTimer();
       }
     }
@@ -854,7 +861,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     const scrollEl = timelineScrollRef.current;
     if (!scrollEl) return;
     const rect = scrollEl.getBoundingClientRect();
-    const cardStartX = halfWidth + 12;
+    const cardStartX = halfWidth + 84;
     const localX = clientX - rect.left + scrollEl.scrollLeft - cardStartX;
     const cardStep = 64;
     const currentClips = reorderClipsRef.current;
@@ -897,11 +904,85 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     }
   };
 
+  // Auto-scroll timeline when dragging Text or Audio clips near viewport edges (Requirement 3)
+  const edgeAutoScrollRafRef = useRef<number | null>(null);
+  const edgeAutoScrollStateRef = useRef<{
+    active: boolean;
+    speed: number;
+    clipId: string;
+    onScrollStep: (deltaPx: number) => void;
+  } | null>(null);
+
+  const stopEdgeAutoScroll = () => {
+    if (edgeAutoScrollRafRef.current !== null) {
+      cancelAnimationFrame(edgeAutoScrollRafRef.current);
+      edgeAutoScrollRafRef.current = null;
+    }
+    edgeAutoScrollStateRef.current = null;
+  };
+
+  const checkAndUpdateEdgeAutoScroll = (
+    clientX: number,
+    clipId: string,
+    onScrollStep: (deltaPx: number) => void
+  ) => {
+    const scrollEl = timelineScrollRef.current;
+    if (!scrollEl) return;
+    const rect = scrollEl.getBoundingClientRect();
+    const edgeMargin = 44;
+    let speed = 0;
+
+    if (clientX > rect.right - edgeMargin) {
+      const dist = clientX - (rect.right - edgeMargin);
+      speed = Math.min(16, Math.max(3, dist / 2.5));
+    } else if (clientX < rect.left + edgeMargin) {
+      const dist = rect.left + edgeMargin - clientX;
+      speed = -Math.min(16, Math.max(3, dist / 2.5));
+    }
+
+    if (speed === 0) {
+      stopEdgeAutoScroll();
+      return;
+    }
+
+    edgeAutoScrollStateRef.current = {
+      active: true,
+      speed,
+      clipId,
+      onScrollStep,
+    };
+
+    if (edgeAutoScrollRafRef.current === null) {
+      const loop = () => {
+        const state = edgeAutoScrollStateRef.current;
+        const el = timelineScrollRef.current;
+        if (!state || !state.active || !el) {
+          edgeAutoScrollRafRef.current = null;
+          return;
+        }
+
+        const prevScroll = el.scrollLeft;
+        isProgrammaticScrollRef.current = true;
+        el.scrollLeft += state.speed;
+        const actualDeltaPx = el.scrollLeft - prevScroll;
+
+        if (actualDeltaPx !== 0) {
+          state.onScrollStep(actualDeltaPx);
+        }
+
+        edgeAutoScrollRafRef.current = requestAnimationFrame(loop);
+      };
+      edgeAutoScrollRafRef.current = requestAnimationFrame(loop);
+    }
+  };
+
   // Audio Timeline Drag & Trim Handlers (with 500ms long-press guard, magnetic snapping & source duration clamp)
   const handleAudioDragTouchStart = (clip: TimelineClip, e: React.TouchEvent) => {
     // Note: Do not call e.stopPropagation() here so swipe gestures can scroll the timeline naturally!
     const startX = e.touches[0].clientX;
     const startY = e.touches[0].clientY;
+    let accumulatedScrollDeltaPx = 0;
+    let curFingerDx = 0;
     const origStartTime = clip.startTime;
     const snapThreshold = 14 / pxPerSec;
     const snapPoints = [
@@ -913,6 +994,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     let timer: number | null = null;
 
     const cleanup = () => {
+      stopEdgeAutoScroll();
       if (timer !== null) {
         clearTimeout(timer);
         timer = null;
@@ -938,8 +1020,8 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       const dist = Math.hypot(curX - startX, curY - startY);
 
       if (!isUnlocked) {
-        // If finger moved > 5px before 500ms, abort long-press and let timeline scroll
-        if (dist > 5) {
+        // If finger moved > 14px before 500ms, abort long-press and let timeline scroll
+        if (dist > 14) {
           cleanup();
         }
         return;
@@ -948,8 +1030,9 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       // 500ms held: lock timeline scroll and drag clip
       if (ev.cancelable) ev.preventDefault();
       isDraggingTimeline.current = false;
-      const dx = curX - startX;
-      const deltaSec = dx / pxPerSec;
+      curFingerDx = curX - startX;
+      const totalDx = curFingerDx + accumulatedScrollDeltaPx;
+      const deltaSec = totalDx / pxPerSec;
       let newStart = Math.max(0, origStartTime + deltaSec);
 
       // Magnetic snap
@@ -967,6 +1050,23 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       }
 
       onUpdateClipProp('startTime', Number(newStart.toFixed(2)), clip.id);
+
+      checkAndUpdateEdgeAutoScroll(curX, clip.id, (deltaPx) => {
+        accumulatedScrollDeltaPx += deltaPx;
+        const scrollTotalDx = curFingerDx + accumulatedScrollDeltaPx;
+        let scrollStart = Math.max(0, origStartTime + scrollTotalDx / pxPerSec);
+        for (const sp of snapPoints) {
+          if (Math.abs(scrollStart - sp) <= snapThreshold) {
+            scrollStart = sp;
+            break;
+          }
+          if (Math.abs(scrollStart + clip.duration - sp) <= snapThreshold) {
+            scrollStart = Math.max(0, sp - clip.duration);
+            break;
+          }
+        }
+        onUpdateClipProp('startTime', Number(scrollStart.toFixed(2)), clip.id);
+      });
     };
 
     const onTouchEnd = () => {
@@ -983,8 +1083,11 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
 
   const handleAudioDragMouseDown = (clip: TimelineClip, e: React.MouseEvent) => {
     e.stopPropagation();
+    setActiveLongPressClipId(clip.id);
     isDraggingTimeline.current = false;
     const startX = e.clientX;
+    let accumulatedScrollDeltaPx = 0;
+    let curMouseDx = 0;
     const origStartTime = clip.startTime;
     const snapThreshold = 14 / pxPerSec;
     const snapPoints = [
@@ -993,8 +1096,9 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     ];
 
     const onMouseMove = (ev: MouseEvent) => {
-      const dx = ev.clientX - startX;
-      const deltaSec = dx / pxPerSec;
+      curMouseDx = ev.clientX - startX;
+      const totalDx = curMouseDx + accumulatedScrollDeltaPx;
+      const deltaSec = totalDx / pxPerSec;
       let newStart = Math.max(0, origStartTime + deltaSec);
 
       for (const sp of snapPoints) {
@@ -1009,9 +1113,28 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       }
 
       onUpdateClipProp('startTime', Number(newStart.toFixed(2)), clip.id);
+
+      checkAndUpdateEdgeAutoScroll(ev.clientX, clip.id, (deltaPx) => {
+        accumulatedScrollDeltaPx += deltaPx;
+        const scrollTotalDx = curMouseDx + accumulatedScrollDeltaPx;
+        let scrollStart = Math.max(0, origStartTime + scrollTotalDx / pxPerSec);
+        for (const sp of snapPoints) {
+          if (Math.abs(scrollStart - sp) <= snapThreshold) {
+            scrollStart = sp;
+            break;
+          }
+          if (Math.abs(scrollStart + clip.duration - sp) <= snapThreshold) {
+            scrollStart = Math.max(0, sp - clip.duration);
+            break;
+          }
+        }
+        onUpdateClipProp('startTime', Number(scrollStart.toFixed(2)), clip.id);
+      });
     };
 
     const onMouseUp = () => {
+      stopEdgeAutoScroll();
+      setActiveLongPressClipId(null);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
@@ -1180,11 +1303,13 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     window.addEventListener('mouseup', onMouseUp);
   };
 
-  // Text Timeline Drag & Trim Handlers (with 500ms long-press guard & magnetic snapping)
+  // Text Timeline Drag & Trim Handlers (with 500ms long-press guard, magnetic snapping & edge auto-scroll)
   const handleTextDragTouchStart = (clip: TimelineClip, e: React.TouchEvent) => {
     // Note: Do not call e.stopPropagation() here so swipe gestures can scroll the timeline naturally!
     const startX = e.touches[0].clientX;
     const startY = e.touches[0].clientY;
+    let accumulatedScrollDeltaPx = 0;
+    let curFingerDx = 0;
     const origStartTime = clip.startTime;
     const snapThreshold = 14 / pxPerSec;
     const snapPoints = [
@@ -1196,6 +1321,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     let timer: number | null = null;
 
     const cleanup = () => {
+      stopEdgeAutoScroll();
       if (timer !== null) {
         clearTimeout(timer);
         timer = null;
@@ -1221,8 +1347,8 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       const dist = Math.hypot(curX - startX, curY - startY);
 
       if (!isUnlocked) {
-        // If moved > 5px before 500ms, cancel long-press and allow normal timeline scrolling
-        if (dist > 5) {
+        // If moved > 14px before 500ms, cancel long-press and allow normal timeline scrolling
+        if (dist > 14) {
           cleanup();
         }
         return;
@@ -1231,8 +1357,9 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       // 500ms held: lock timeline scroll and drag clip
       if (ev.cancelable) ev.preventDefault();
       isDraggingTimeline.current = false;
-      const dx = curX - startX;
-      const deltaSec = dx / pxPerSec;
+      curFingerDx = curX - startX;
+      const totalDx = curFingerDx + accumulatedScrollDeltaPx;
+      const deltaSec = totalDx / pxPerSec;
       let newStart = Math.max(0, origStartTime + deltaSec);
 
       for (const sp of snapPoints) {
@@ -1249,6 +1376,23 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       }
 
       onUpdateClipProp('startTime', Number(newStart.toFixed(2)), clip.id);
+
+      checkAndUpdateEdgeAutoScroll(curX, clip.id, (deltaPx) => {
+        accumulatedScrollDeltaPx += deltaPx;
+        const scrollTotalDx = curFingerDx + accumulatedScrollDeltaPx;
+        let scrollStart = Math.max(0, origStartTime + scrollTotalDx / pxPerSec);
+        for (const sp of snapPoints) {
+          if (Math.abs(scrollStart - sp) <= snapThreshold) {
+            scrollStart = sp;
+            break;
+          }
+          if (Math.abs(scrollStart + clip.duration - sp) <= snapThreshold) {
+            scrollStart = Math.max(0, sp - clip.duration);
+            break;
+          }
+        }
+        onUpdateClipProp('startTime', Number(scrollStart.toFixed(2)), clip.id);
+      });
     };
 
     const onTouchEnd = () => {
@@ -1265,8 +1409,11 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
 
   const handleTextDragMouseDown = (clip: TimelineClip, e: React.MouseEvent) => {
     e.stopPropagation();
+    setActiveLongPressClipId(clip.id);
     isDraggingTimeline.current = false;
     const startX = e.clientX;
+    let accumulatedScrollDeltaPx = 0;
+    let curMouseDx = 0;
     const origStartTime = clip.startTime;
     const snapThreshold = 14 / pxPerSec;
     const snapPoints = [
@@ -1275,8 +1422,9 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     ];
 
     const onMouseMove = (ev: MouseEvent) => {
-      const dx = ev.clientX - startX;
-      const deltaSec = dx / pxPerSec;
+      curMouseDx = ev.clientX - startX;
+      const totalDx = curMouseDx + accumulatedScrollDeltaPx;
+      const deltaSec = totalDx / pxPerSec;
       let newStart = Math.max(0, origStartTime + deltaSec);
 
       for (const sp of snapPoints) {
@@ -1291,9 +1439,28 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       }
 
       onUpdateClipProp('startTime', Number(newStart.toFixed(2)), clip.id);
+
+      checkAndUpdateEdgeAutoScroll(ev.clientX, clip.id, (deltaPx) => {
+        accumulatedScrollDeltaPx += deltaPx;
+        const scrollTotalDx = curMouseDx + accumulatedScrollDeltaPx;
+        let scrollStart = Math.max(0, origStartTime + scrollTotalDx / pxPerSec);
+        for (const sp of snapPoints) {
+          if (Math.abs(scrollStart - sp) <= snapThreshold) {
+            scrollStart = sp;
+            break;
+          }
+          if (Math.abs(scrollStart + clip.duration - sp) <= snapThreshold) {
+            scrollStart = Math.max(0, sp - clip.duration);
+            break;
+          }
+        }
+        onUpdateClipProp('startTime', Number(scrollStart.toFixed(2)), clip.id);
+      });
     };
 
     const onMouseUp = () => {
+      stopEdgeAutoScroll();
+      setActiveLongPressClipId(null);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
@@ -1442,8 +1609,6 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
 
   const handleTextTrimTouchEnd = () => {};
 
-  const [textEditTab, setTextEditTab] = useState<'text' | 'font' | 'color' | 'stroke' | 'style'>('text');
-
   // Mouse dragging on desktop with window listeners so mouse release is never lost
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
@@ -1578,7 +1743,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
 
           {/* Edge-to-edge full screen video preview */}
           <div className="flex-1 w-full h-full flex items-center justify-center p-0">
-            {renderPlayer()}
+            {renderPlayer({ openTextEditor: openTextEditDrawer })}
           </div>
 
           {/* Floating Bottom Bar in Fullscreen */}
@@ -1755,7 +1920,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
             </div>
           ) : (
             <div className="relative w-full h-full flex items-center justify-center">
-              {!isFullCanvasMode && renderPlayer()}
+              {!isFullCanvasMode && renderPlayer({ openTextEditor: openTextEditDrawer })}
             </div>
           )}
         </div>
@@ -2215,12 +2380,12 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                           e.stopPropagation();
                           onSelectClip(clip.id);
                         }}
-                        className={`absolute h-7 rounded-md border flex items-center px-1.5 gap-1.5 text-[9px] font-semibold truncate cursor-grab active:cursor-grabbing shadow-xs transition-transform duration-150 ${
+                        className={`absolute h-7 rounded-[3px] border flex items-center px-1.5 gap-1.5 text-[9px] font-semibold truncate cursor-grab active:cursor-grabbing shadow-xs ${
                           activeLongPressClipId === clip.id
-                            ? 'scale-[1.03] ring-2 ring-[#00E5CC] shadow-xl shadow-cyan-500/40 z-30 bg-[#0284C7] text-white'
+                            ? 'scale-[1.03] ring-2 ring-[#00E5CC] shadow-xl shadow-cyan-500/40 z-30 bg-[#0284C7] text-white transition-none'
                             : isSelected
-                            ? 'bg-[#0284C7]/50 border-2 border-white ring-2 ring-[#0284C7]/60 text-white z-10'
-                            : 'bg-[#0284C7]/30 border-[#0284C7] text-[#38BDF8]'
+                            ? 'bg-[#0284C7]/50 border-2 border-white ring-2 ring-[#0284C7]/60 text-white z-10 transition-transform duration-150'
+                            : 'bg-[#0284C7]/30 border-[#0284C7] text-[#38BDF8] transition-transform duration-150'
                         }`}
                       >
                         {/* Left Trim Handle for Audio */}
@@ -2233,7 +2398,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                             onMouseDown={(e) => handleAudioTrimMouseDown(clip, true, e)}
                             onClick={(e) => e.stopPropagation()}
                             title="Kéo mép trái để cắt đầu âm thanh"
-                            className="absolute left-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-l-md touch-none select-none active:bg-[#38BDF8]"
+                            className="absolute left-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-l-[3px] touch-none select-none active:bg-[#38BDF8]"
                           >
                             <div className="w-[1px] h-2.5 bg-black/80 pointer-events-none" />
                           </div>
@@ -2252,7 +2417,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                             onMouseDown={(e) => handleAudioTrimMouseDown(clip, false, e)}
                             onClick={(e) => e.stopPropagation()}
                             title="Kéo mép phải để thu ngắn / kéo dài âm thanh"
-                            className="absolute right-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-r-md touch-none select-none active:bg-[#38BDF8]"
+                            className="absolute right-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-r-[3px] touch-none select-none active:bg-[#38BDF8]"
                           >
                             <div className="w-[1px] h-2.5 bg-black/80 pointer-events-none" />
                           </div>
@@ -2282,7 +2447,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
 
             {/* ROW 3: TRACK 2 (TEXT TRACK - Multi-lane stacking & drag reposition & trim handles) */}
             <div
-              style={{ height: `${Math.max(26, textLanes.length * 24 + 4)}px` }}
+              style={{ height: `${Math.max(34, textLanes.length * 30 + 4)}px` }}
               className="relative flex items-center"
             >
               {/* Left runway before 00:00: Text Icon button */}
@@ -2310,7 +2475,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     const clipLeft = halfWidth + clip.startTime * pxPerSec;
                     const clipWidth = Math.max(34, clip.duration * pxPerSec);
                     const isSelected = selectedClipId === clip.id;
-                    const topPos = laneIdx * 24 + 2;
+                    const topPos = laneIdx * 30 + 2;
                     return (
                       <div
                         key={clip.id}
@@ -2339,12 +2504,12 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                           setTextEditTab('text');
                           setActiveDrawer('text_edit');
                         }}
-                        className={`absolute h-5 rounded-full border px-1 flex items-center gap-1 text-[8.5px] font-bold truncate cursor-grab active:cursor-grabbing transition-all select-none duration-150 ${
+                        className={`absolute h-7 rounded-[3px] border px-1.5 flex items-center gap-1.5 text-[9px] font-semibold truncate cursor-grab active:cursor-grabbing shadow-xs select-none ${
                           activeLongPressClipId === clip.id
-                            ? 'scale-[1.03] ring-2 ring-[#00E5CC] shadow-xl shadow-cyan-500/40 z-30 bg-[#F97316] text-white'
+                            ? 'scale-[1.02] ring-2 ring-[#00E5CC] shadow-xl shadow-cyan-500/40 z-30 bg-[#F97316] text-white transition-none'
                             : isSelected
-                            ? 'bg-[#F97316] text-white border-2 border-white ring-2 ring-[#F97316]/50 z-10'
-                            : 'bg-[#C2410C]/25 text-[#FB923C] border-[#F97316]'
+                            ? 'bg-[#F97316] text-white border-2 border-white ring-2 ring-[#F97316]/50 z-10 transition-transform duration-150'
+                            : 'bg-[#C2410C]/25 text-[#FB923C] border-[#F97316] transition-transform duration-150'
                         }`}
                       >
                         {/* Left Trim Handle for Text */}
@@ -2357,13 +2522,13 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                             onMouseDown={(e) => handleTextTrimMouseDown(clip, true, e)}
                             onClick={(e) => e.stopPropagation()}
                             title="Kéo mép trái để chỉnh điểm bắt đầu văn bản"
-                            className="absolute left-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-l-full touch-none select-none active:bg-[#FB923C]"
+                            className="absolute left-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-l-[3px] touch-none select-none active:bg-[#FB923C]"
                           >
-                            <div className="w-[1px] h-2 bg-black/80 pointer-events-none" />
+                            <div className="w-[1px] h-2.5 bg-black/80 pointer-events-none" />
                           </div>
                         )}
 
-                        <Type className="w-2.5 h-2.5 shrink-0 ml-1.5" />
+                        <Type className="w-3.5 h-3.5 shrink-0" />
                         <span className="truncate flex-1">{clip.subtitleText || clip.name}</span>
 
                         {/* Right Trim Handle for Text */}
@@ -2376,9 +2541,9 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                             onMouseDown={(e) => handleTextTrimMouseDown(clip, false, e)}
                             onClick={(e) => e.stopPropagation()}
                             title="Kéo mép phải để kéo dài hoặc thu ngắn thời lượng văn bản"
-                            className="absolute right-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-r-full touch-none select-none active:bg-[#FB923C]"
+                            className="absolute right-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-r-[3px] touch-none select-none active:bg-[#FB923C]"
                           >
-                            <div className="w-[1px] h-2 bg-black/80 pointer-events-none" />
+                            <div className="w-[1px] h-2.5 bg-black/80 pointer-events-none" />
                           </div>
                         )}
                       </div>
@@ -2396,9 +2561,9 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     left: `${halfWidth}px`,
                     width: `${Math.max(160, totalTimelineDuration * pxPerSec)}px`,
                   }}
-                  className="absolute h-5 px-3 rounded-full border border-dashed border-[#F97316]/60 text-[#FB923C] bg-[#EA580C]/10 hover:bg-[#EA580C]/20 flex items-center gap-1.5 text-[8.5px] font-bold cursor-pointer transition-colors shadow-xs"
+                  className="absolute h-7 px-3 rounded-[3px] border border-dashed border-[#F97316]/60 text-[#FB923C] bg-[#EA580C]/10 hover:bg-[#EA580C]/20 flex items-center gap-1.5 text-[9.5px] font-bold cursor-pointer transition-colors shadow-xs"
                 >
-                  <Plus className="w-3 text-[#FB923C] shrink-0" />
+                  <Plus className="w-3.5 h-3.5 text-[#FB923C] shrink-0" />
                   <span>{isEn ? 'Add text' : 'Thêm văn bản'}</span>
                 </button>
               )}

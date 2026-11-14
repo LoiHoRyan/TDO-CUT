@@ -2934,7 +2934,9 @@ export default function App() {
     }
 
     const firstVideoItem = newMediaItems.find((m) => m.type === 'video' && m.nativeAspectRatio);
-    if (firstVideoItem?.nativeAspectRatio) {
+    // Requirement 5: The first video on Track 0 sets the project's aspect ratio; subsequent imports do not alter it
+    const hasExistingTrack0Video = clips.some((c) => c.trackIndex === 0 && !c.disabled);
+    if (!hasExistingTrack0Video && firstVideoItem?.nativeAspectRatio) {
       setAspectRatio(firstVideoItem.nativeAspectRatio as AspectRatioOption);
     }
 
@@ -5596,7 +5598,7 @@ export default function App() {
             }));
           }}
           onCaptureCover={handleCaptureCover}
-          renderPlayer={() => (
+          renderPlayer={(helpers) => (
             <VideoPreviewCanvas
               canvasRefExternal={previewCanvasRef}
               isMobile={true}
@@ -5617,6 +5619,7 @@ export default function App() {
               activeSubtitleClip={activeSubtitleClip}
               activeAudioClip={activeAudioClip}
               activeClipsAtPlayhead={activeClipsAtPlayhead}
+              allClips={clips}
               videoTrackHidden={trackHidden[0]}
               videoTrackMuted={trackMuted[0]}
               overlayTrackHidden={trackHidden[3]}
@@ -5627,6 +5630,7 @@ export default function App() {
               antiDetectSpoof={antiDetect.spoofIphoneMeta}
               onTogglePlay={() => setIsPlaying((p) => !p)}
               onAspectRatioChange={setAspectRatio}
+              onOpenTextEditor={helpers?.openTextEditor}
               onDetectedClipDimensions={(clipId, width, height, detectedRatio) => {
                 setClips((prev) =>
                   prev.map((c) =>
@@ -5641,7 +5645,10 @@ export default function App() {
                   )
                 );
                 if (aspectRatio === 'original') {
-                  setAspectRatio(detectedRatio);
+                  const firstT0 = clips.find((c) => c.trackIndex === 0 && !c.disabled);
+                  if (!firstT0 || firstT0.id === clipId) {
+                    setAspectRatio(detectedRatio);
+                  }
                 }
               }}
               onStepFrame={(delta) =>
@@ -8305,6 +8312,7 @@ export default function App() {
                 activeSubtitleClip={activeSubtitleClip}
                 activeAudioClip={activeAudioClip}
                 activeClipsAtPlayhead={activeClipsAtPlayhead}
+                allClips={clips}
                 videoTrackHidden={trackHidden[0]}
                 videoTrackMuted={trackMuted[0]}
                 overlayTrackHidden={trackHidden[3]}
@@ -8314,6 +8322,11 @@ export default function App() {
                 blurredPadding916={blurredPadding916}
                 antiDetectSpoof={antiDetect.spoofIphoneMeta}
                 onTogglePlay={() => setIsPlaying((p) => !p)}
+                onOpenTextEditor={(clipId) => {
+                  setSelectedClipId(clipId);
+                  setSelectedClipIds([clipId]);
+                  setInspectorMode('clip');
+                }}
                 onStepFrame={(delta) =>
                   setPlayheadSec((prev) => Math.max(0, Number((prev + delta / 30).toFixed(3))))
                 }
@@ -8334,6 +8347,12 @@ export default function App() {
                         : c
                     )
                   );
+                  if (aspectRatio === 'original') {
+                    const firstT0 = clips.find((c) => c.trackIndex === 0 && !c.disabled);
+                    if (!firstT0 || firstT0.id === clipId) {
+                      setAspectRatio(detectedRatio);
+                    }
+                  }
                 }}
                 onPreviewQualityChange={setPreviewQuality}
                 onJumpToTimecode={(sec) => {

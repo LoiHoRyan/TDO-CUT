@@ -100,6 +100,7 @@ interface VideoPreviewCanvasProps {
   activeAudioClip?: TimelineClip;
   activeOverlayClip?: TimelineClip;
   activeClipsAtPlayhead?: TimelineClip[];
+  allClips?: TimelineClip[];
   videoTrackHidden?: boolean;
   videoTrackMuted?: boolean;
   textTrackHidden?: boolean;
@@ -149,6 +150,7 @@ interface VideoPreviewCanvasProps {
   onQuickRotate90?: () => void;
   onQuickAddText?: () => void;
   onQuickAddSticker?: (badgeIcon?: string, label?: string) => void;
+  onOpenTextEditor?: (clipId: string) => void;
   language?: 'vi' | 'en';
   canvasRefExternal?: React.RefObject<HTMLCanvasElement | null>;
   exportDimensionsOverride?: { width: number; height: number } | null;
@@ -195,6 +197,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
   activeAudioClip,
   activeOverlayClip,
   activeClipsAtPlayhead = [],
+  allClips = [],
   videoTrackHidden = false,
   videoTrackMuted = false,
   textTrackHidden = false,
@@ -223,6 +226,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
   onQuickRotate90,
   onQuickAddText,
   onQuickAddSticker,
+  onOpenTextEditor,
   language = 'vi',
   canvasRefExternal,
   exportDimensionsOverride = null,
@@ -285,10 +289,6 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
   const [showScopes, setShowScopes] = useState(false);
   const [playerZoom, setPlayerZoom] = useState<'fit' | '50' | '100' | '200' | '300' | '400' | '500'>('fit');
   const [showCanvasBoundingBox, setShowCanvasBoundingBox] = useState(false);
-  const [inlineEditingTextClip, setInlineEditingTextClip] = useState<{
-    clipId: string;
-    value: string;
-  } | null>(null);
   const [draggingCanvasObj, setDraggingCanvasObj] = useState<{
     clipId: string;
     mode: 'move' | 'resize' | 'rotate';
@@ -721,9 +721,25 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
     }
   }, [playheadSec, isPlaying, activeAudioClip, activeSubtitleClip, audioTrackMuted, loadedAudioUrl]);
 
+  const primaryTrack0Clip =
+    (allClips || []).find(
+      (c) =>
+        c.trackIndex === 0 &&
+        !c.disabled &&
+        ((c.mediaWidth && c.mediaHeight) || (c.nativeAspectRatio && c.nativeAspectRatio !== 'original') || Boolean(c.mediaUrl))
+    ) ||
+    activeClipsAtPlayhead.find(
+      (c) =>
+        c.trackIndex === 0 &&
+        !c.disabled &&
+        ((c.mediaWidth && c.mediaHeight) || (c.nativeAspectRatio && c.nativeAspectRatio !== 'original'))
+    ) ||
+    activeVideoClip;
+
   const effectiveAspectRatio = resolveEffectiveClipAspectRatio(
     aspectRatio,
-    activeVideoClip
+    primaryTrack0Clip,
+    activeClipsAtPlayhead
   );
 
   const getAspectNumericRatio = (): number => {
@@ -764,15 +780,16 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
       };
     }
     const scaleMult = previewQuality === 'full' ? 1.0 : previewQuality === 'half' ? 0.65 : 0.45;
+    const ratioAnchorClip = primaryTrack0Clip || activeVideoClip;
     if (
       aspectRatio === 'original' &&
-      activeVideoClip &&
-      typeof activeVideoClip.mediaWidth === 'number' &&
-      activeVideoClip.mediaWidth > 0 &&
-      typeof activeVideoClip.mediaHeight === 'number' &&
-      activeVideoClip.mediaHeight > 0
+      ratioAnchorClip &&
+      typeof ratioAnchorClip.mediaWidth === 'number' &&
+      ratioAnchorClip.mediaWidth > 0 &&
+      typeof ratioAnchorClip.mediaHeight === 'number' &&
+      ratioAnchorClip.mediaHeight > 0
     ) {
-      const natRatio = activeVideoClip.mediaWidth / activeVideoClip.mediaHeight;
+      const natRatio = ratioAnchorClip.mediaWidth / ratioAnchorClip.mediaHeight;
       const toEven = (n: number) => Math.max(2, Math.round(n / 2) * 2);
       const baseShort = 1080 * scaleMult;
       if (natRatio >= 1) {
@@ -2831,19 +2848,9 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
             onCanvasDragStart?.();
             onSelectClipFromCanvas?.(b.clipId);
             setShowCanvasBoundingBox(true);
-            // If already selected, tap opens inline text editing
-            if (selectedClipId === b.clipId && matchedClip && (matchedClip.subtitleText || matchedClip.stickerEmoji || matchedClip.trackIndex === 2)) {
-              const badge = matchedClip.stickerEmoji
-                ? findGraphicBadgeByIconOrText(matchedClip.stickerEmoji) ||
-                  findGraphicBadgeByIconOrText(matchedClip.name)
-                : null;
-              const initialVal = matchedClip.stickerEmoji
-                ? matchedClip.stickerText ?? badge?.badgeText ?? ''
-                : matchedClip.subtitleText || matchedClip.name;
-              setInlineEditingTextClip({
-                clipId: matchedClip.id,
-                value: initialVal,
-              });
+            // Requirement 1: Directly open bottom text editor drawer instead of floating black overlay
+            if (matchedClip && (matchedClip.subtitleText || matchedClip.stickerEmoji || matchedClip.trackIndex === 2)) {
+              onOpenTextEditor?.(matchedClip.id);
             }
             setLiveDragTransform({
               clipId: b.clipId,
@@ -3043,6 +3050,9 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
           onCanvasDragStart?.();
           onSelectClipFromCanvas?.(b.clipId);
           setShowCanvasBoundingBox(true);
+          if (matchedClip && (matchedClip.subtitleText || matchedClip.stickerEmoji || matchedClip.trackIndex === 2)) {
+            onOpenTextEditor?.(b.clipId);
+          }
           setLiveDragTransform({
             clipId: b.clipId,
             posX: b.origPosX,
@@ -3798,17 +3808,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 const target = getActiveSelectedCanvasClip();
                 if (target && (target.subtitleText || target.stickerEmoji || target.trackIndex === 2)) {
                   onSelectClipFromCanvas?.(target.id);
-                  const badge = target.stickerEmoji
-                    ? findGraphicBadgeByIconOrText(target.stickerEmoji) ||
-                      findGraphicBadgeByIconOrText(target.name)
-                    : null;
-                  const initialVal = target.stickerEmoji
-                    ? target.stickerText ?? badge?.badgeText ?? ''
-                    : target.subtitleText || target.name;
-                  setInlineEditingTextClip({
-                    clipId: target.id,
-                    value: initialVal,
-                  });
+                  onOpenTextEditor?.(target.id);
                 }
               }}
               style={{
@@ -3822,41 +3822,6 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
               }}
               className="w-full h-full block cursor-move select-none"
             />
-
-            {/* Inline On-Canvas Text Input Overlay (Double-click text or sticker on canvas) */}
-            {inlineEditingTextClip && (
-              <div
-                onMouseDown={(e) => e.stopPropagation()}
-                className="absolute inset-x-6 bottom-6 z-30 p-2 bg-black/90 border-2 border-[#00E5CC] rounded-md shadow-2xl flex items-center gap-2"
-              >
-                <input
-                  type="text"
-                  autoFocus
-                  placeholder="Nhập nội dung chữ cho nhãn dán / phụ đề..."
-                  aria-label="Sửa trực tiếp văn bản trên màn hình"
-                  value={inlineEditingTextClip.value}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setInlineEditingTextClip({ ...inlineEditingTextClip, value: val });
-                    onUpdateClipText?.(inlineEditingTextClip.clipId, val);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === 'Escape') {
-                      setInlineEditingTextClip(null);
-                    }
-                  }}
-                  onBlur={() => setInlineEditingTextClip(null)}
-                  className="flex-1 bg-[#141418] text-white text-xs font-semibold px-2.5 py-1.5 rounded border border-[#32323E] focus:outline-none focus:border-[#00E5CC]"
-                />
-                <button
-                  type="button"
-                  onClick={() => setInlineEditingTextClip(null)}
-                  className="px-2.5 py-1.5 bg-[#00E5CC] text-[#090D12] font-bold text-xs rounded cursor-pointer"
-                >
-                  {language === 'en' ? 'Done' : 'Xong'}
-                </button>
-              </div>
-            )}
 
           {/* Cyan Magnetic Snap Selection Frame & Corner + Edge Resize Handles */}
           {showCanvasBoundingBox && selectedClipId && activeCanvasTarget && (() => {
@@ -3890,39 +3855,31 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                   }}
                   className="border-2 border-[#00E5CC] rounded-md shadow-[0_0_12px_rgba(0,229,204,0.4)] z-20"
                 >
-                  {/* 4 Corner Round Handles for Text */}
+                  {/* 4 Corner Round Handles for Text (Requirement 1: 8px-10px slim circles like CapCut) */}
                   <div
                     onMouseDown={(e) => handleStartResizeHandle(e, 'nw')}
                     onTouchStart={(e) => handleStartResizeHandle(e, 'nw')}
                     title="Kéo góc để thu phóng văn bản"
-                    className="pointer-events-auto absolute -top-3 -left-3 w-6 h-6 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nwse-resize flex items-center justify-center hover:scale-110 active:scale-125 transition-transform touch-none"
-                  >
-                    <div className="w-1.5 h-1.5 rounded-full bg-[#00E5CC]" />
-                  </div>
+                    className="pointer-events-auto absolute -top-1.25 -left-1.25 w-2.5 h-2.5 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-nwse-resize hover:scale-125 active:scale-125 transition-transform touch-none after:absolute after:-inset-2.5 after:content-['']"
+                  />
                   <div
                     onMouseDown={(e) => handleStartResizeHandle(e, 'ne')}
                     onTouchStart={(e) => handleStartResizeHandle(e, 'ne')}
                     title="Kéo góc để thu phóng văn bản"
-                    className="pointer-events-auto absolute -top-3 -right-3 w-6 h-6 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nesw-resize flex items-center justify-center hover:scale-110 active:scale-125 transition-transform touch-none"
-                  >
-                    <div className="w-1.5 h-1.5 rounded-full bg-[#00E5CC]" />
-                  </div>
+                    className="pointer-events-auto absolute -top-1.25 -right-1.25 w-2.5 h-2.5 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-nesw-resize hover:scale-125 active:scale-125 transition-transform touch-none after:absolute after:-inset-2.5 after:content-['']"
+                  />
                   <div
                     onMouseDown={(e) => handleStartResizeHandle(e, 'sw')}
                     onTouchStart={(e) => handleStartResizeHandle(e, 'sw')}
                     title="Kéo góc để thu phóng văn bản"
-                    className="pointer-events-auto absolute -bottom-3 -left-3 w-6 h-6 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nesw-resize flex items-center justify-center hover:scale-110 active:scale-125 transition-transform touch-none"
-                  >
-                    <div className="w-1.5 h-1.5 rounded-full bg-[#00E5CC]" />
-                  </div>
+                    className="pointer-events-auto absolute -bottom-1.25 -left-1.25 w-2.5 h-2.5 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-nesw-resize hover:scale-125 active:scale-125 transition-transform touch-none after:absolute after:-inset-2.5 after:content-['']"
+                  />
                   <div
                     onMouseDown={(e) => handleStartResizeHandle(e, 'se')}
                     onTouchStart={(e) => handleStartResizeHandle(e, 'se')}
                     title="Kéo góc để thu phóng văn bản"
-                    className="pointer-events-auto absolute -bottom-3 -right-3 w-6 h-6 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nwse-resize flex items-center justify-center hover:scale-110 active:scale-125 transition-transform touch-none"
-                  >
-                    <div className="w-1.5 h-1.5 rounded-full bg-[#00E5CC]" />
-                  </div>
+                    className="pointer-events-auto absolute -bottom-1.25 -right-1.25 w-2.5 h-2.5 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-nwse-resize hover:scale-125 active:scale-125 transition-transform touch-none after:absolute after:-inset-2.5 after:content-['']"
+                  />
                 </div>
               );
             }

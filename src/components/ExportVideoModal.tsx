@@ -1339,14 +1339,9 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
     const stopAudioKeepAlive = webAudioEngine.startExportAudioKeepAlive();
     stopAudioKeepAliveRef.current = stopAudioKeepAlive;
 
-    // Cap in-browser canvas resolution on mobile devices to prevent GPU driver OOM tab crash
-    let renderExportW = targetExportW;
-    let renderExportH = targetExportH;
-    if (isMobile && Math.max(renderExportW, renderExportH) > 1920) {
-      const scale = 1920 / Math.max(renderExportW, renderExportH);
-      renderExportW = Math.max(2, Math.round((renderExportW * scale) / 2) * 2);
-      renderExportH = Math.max(2, Math.round((renderExportH * scale) / 2) * 2);
-    }
+    // Requirement 6: Maintain exact user-selected resolution (no mobile downscaling for 1080p / 2K / 4K)
+    const renderExportW = targetExportW;
+    const renderExportH = targetExportH;
 
     const exportCanvas = document.createElement('canvas');
     exportCanvas.width = renderExportW;
@@ -1890,12 +1885,10 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
 
         const testBitrates = [
           effectiveTargetBps,
-          Math.round(effectiveTargetBps * 0.8),
+          Math.round(effectiveTargetBps * 0.85),
           12_000_000,
-          9_000_000,
-          6_000_000,
-          4_500_000,
-          3_000_000,
+          10_000_000,
+          8_000_000,
         ];
         let recorder: MediaRecorder | null = null;
         for (const bps of testBitrates) {
@@ -1908,7 +1901,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
         }
         if (!recorder) {
           try {
-            recorder = new MediaRecorder(videoStream, { videoBitsPerSecond: 4_000_000 });
+            recorder = new MediaRecorder(videoStream, { videoBitsPerSecond: Math.max(8_000_000, effectiveTargetBps) });
           } catch {
             recorder = new MediaRecorder(videoStream);
           }
@@ -1931,7 +1924,9 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
 
         const fullTimelineSec = Math.max(1.0, totalDuration);
 
-        // Pre-roll first video clip and verify active playback motion BEFORE recording begins to eliminate 0.8s initial freeze
+        // Pre-roll and start first video playback BEFORE recorder.start() so playback motion and recording
+        // are locked 1:1 at frame 0, completely eliminating the initial 0.8s freeze and audio desync
+        let recordStartMs = performance.now();
         if (firstClip) {
           const firstEntry = preloadedVideos.get(firstClip.id);
           if (firstEntry) {
@@ -1939,33 +1934,42 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             const spd = Math.max(0.25, Math.min(4.0, firstClip.speed || 1.0));
             firstEntry.el.playbackRate = spd;
             firstEntry.el.currentTime = startSec;
-            try {
-              await firstEntry.el.play();
-            } catch {
-              // Ignore
-            }
+
             await new Promise<void>((resolve) => {
-              let done = false;
+              let settled = false;
               const finish = () => {
-                if (done) return;
-                done = true;
-                firstEntry.el.removeEventListener('timeupdate', checkMotion);
+                if (settled) return;
+                settled = true;
+                firstEntry.el.removeEventListener('playing', finish);
+                firstEntry.el.removeEventListener('timeupdate', onTimeUpdate);
                 resolve();
               };
-              const checkMotion = () => {
-                if (firstEntry.el.currentTime > startSec + 0.015) {
+              const onTimeUpdate = () => {
+                if (firstEntry.el.currentTime > startSec) {
                   finish();
                 }
               };
-              firstEntry.el.addEventListener('timeupdate', checkMotion);
-              window.setTimeout(finish, 320);
+              firstEntry.el.addEventListener('playing', finish, { once: true });
+              firstEntry.el.addEventListener('timeupdate', onTimeUpdate);
+              firstEntry.el.play().catch(() => finish());
+              window.setTimeout(finish, 600);
             });
+
+            const currentMediaOffset = Math.max(0, firstEntry.el.currentTime - startSec);
+            recordStartMs = performance.now() - (currentMediaOffset / spd) * 1000;
           }
         }
+
         drawCompositeExportFrame(0, 0);
+        if (videoTrack && typeof videoTrack.requestFrame === 'function') {
+          try {
+            videoTrack.requestFrame();
+          } catch {
+            // Ignore
+          }
+        }
 
         recorder.start(250);
-        const recordStartMs = performance.now();
         let frameCounter = 0;
         let lastProgressUpdateMs = 0;
 
@@ -2004,13 +2008,13 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               }
               // Dynamic playbackRate micro-sync: smoothly eliminate clock drift without hard seek stalls
               const timeDiff = el.currentTime - targetMediaTime;
-              if (Math.abs(timeDiff) > 1.2 && !el.seeking) {
+              if (Math.abs(timeDiff) > 0.35 && !el.seeking) {
                 try {
                   el.currentTime = targetMediaTime;
                 } catch {
                   // Ignore
                 }
-              } else if (Math.abs(timeDiff) > 0.05) {
+              } else if (Math.abs(timeDiff) > 0.04) {
                 const rateAdj = Math.max(-0.25, Math.min(0.25, -timeDiff * 0.6));
                 el.playbackRate = Math.max(0.25, Math.min(4.0, spd * (1 + rateAdj)));
               } else if (Math.abs(el.playbackRate - spd) > 0.01) {

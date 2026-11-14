@@ -346,9 +346,11 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
         </div>
       </aside>
 
-      {/* Center & Right Launcher Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto p-3 sm:p-4 md:p-6 pb-24 md:pb-6 space-y-4 md:space-y-6">
-        {/* Top Launcher Header */}
+      {/* Center & Right Launcher Area (Flex column with permanently fixed bottom navigation on mobile) */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 h-full overflow-hidden relative">
+        {/* Scrollable Launcher Content */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 md:p-6 pb-6 space-y-4 md:space-y-6">
+          {/* Top Launcher Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <img
@@ -1118,43 +1120,44 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
         </div>
       </div>
 
-      {/* Mobile Fixed Bottom Navigation Bar (CapCut Mobile style - Permanently fixed at bottom) */}
-      <nav
-        aria-label="Thanh điều hướng trang chủ"
-        className={`fixed md:hidden bottom-0 left-0 right-0 z-50 flex items-center justify-around px-2 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t select-none backdrop-blur-xl ${
-          themeMode === 'light'
-            ? 'bg-white/95 border-[#E2E8F0] text-[#0F172A] shadow-[0_-4px_16px_rgba(0,0,0,0.06)]'
-            : 'bg-[#14151B]/95 border-[#22242D] text-white shadow-[0_-4px_16px_rgba(0,0,0,0.5)]'
-        }`}
-      >
-        {(
-          [
-            { id: 'home', label: isEn ? 'Edit' : 'Chỉnh sửa', icon: Scissors },
-            { id: 'templates', label: isEn ? 'Templates' : 'Mẫu', icon: LayoutTemplate },
-            { id: 'spaces', label: isEn ? 'Spaces' : 'Không gian', icon: Cloud },
-            { id: 'ai_design', label: isEn ? 'Cover' : 'Ảnh bìa', icon: ImageIcon },
-            { id: 'trash', label: isEn ? 'Trash' : 'Thùng rác', icon: Trash2 },
-          ] as const
-        ).map((item) => {
-          const Icon = item.icon;
-          const active = navTab === item.id;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setNavTab(item.id)}
-              className={`flex flex-col items-center justify-center px-2 py-1 rounded-lg cursor-pointer transition-colors active:scale-95 ${
-                active
-                  ? 'text-[#00E5CC] font-bold'
-                  : 'text-[#94A3B8] hover:text-current'
-              }`}
-            >
-              <Icon className="w-5 h-5 mb-0.5" />
-              <span className="text-[10px] leading-tight font-medium">{item.label}</span>
-            </button>
-          );
-        })}
-      </nav>
+      {/* Mobile Fixed Bottom Navigation Bar (Permanently fixed at bottom of screen, never scrolls away) */}
+        <nav
+          aria-label="Thanh điều hướng trang chủ"
+          className={`md:hidden shrink-0 z-50 flex items-center justify-around px-2 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t select-none backdrop-blur-xl ${
+            themeMode === 'light'
+              ? 'bg-white/95 border-[#E2E8F0] text-[#0F172A] shadow-[0_-4px_16px_rgba(0,0,0,0.06)]'
+              : 'bg-[#14151B]/95 border-[#22242D] text-white shadow-[0_-4px_16px_rgba(0,0,0,0.5)]'
+          }`}
+        >
+          {(
+            [
+              { id: 'home', label: isEn ? 'Edit' : 'Chỉnh sửa', icon: Scissors },
+              { id: 'templates', label: isEn ? 'Templates' : 'Mẫu', icon: LayoutTemplate },
+              { id: 'spaces', label: isEn ? 'Spaces' : 'Không gian', icon: Cloud },
+              { id: 'ai_design', label: isEn ? 'Cover' : 'Ảnh bìa', icon: ImageIcon },
+              { id: 'trash', label: isEn ? 'Trash' : 'Thùng rác', icon: Trash2 },
+            ] as const
+          ).map((item) => {
+            const Icon = item.icon;
+            const active = navTab === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setNavTab(item.id)}
+                className={`flex flex-col items-center justify-center px-2 py-1 rounded-lg cursor-pointer transition-colors active:scale-95 ${
+                  active
+                    ? 'text-[#00E5CC] font-bold'
+                    : 'text-[#94A3B8] hover:text-current'
+                }`}
+              >
+                <Icon className="w-5 h-5 mb-0.5" />
+                <span className="text-[10px] leading-tight font-medium">{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      </div>
     </div>
   );
 };

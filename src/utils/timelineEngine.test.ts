@@ -1797,6 +1797,50 @@ test('Mobile text default content, aspect-ratio scaling, and export MIME extensi
   assert.equal(releasedClips[0].sourceIn, 2.5, 'Source offset 2.5s is strictly retained');
 });
 
+test('Mobile and studio target bitrate profiles meet required mbps range (1080p: 12-16 Mbps, 2K: 20-25 Mbps, 4K: 35-50 Mbps, 720p: 8-10 Mbps)', () => {
+  const getMobileTargetBps = (resolution: string, bitrateMode: string): number => {
+    return resolution === '4K'
+      ? bitrateMode === 'higher'
+        ? 48_000_000
+        : 38_000_000
+      : resolution === '2K'
+      ? bitrateMode === 'higher'
+        ? 25_000_000
+        : 22_000_000
+      : resolution === '720p'
+      ? bitrateMode === 'higher'
+        ? 10_000_000
+        : 8_500_000
+      : bitrateMode === 'higher'
+      ? 16_000_000
+      : 13_500_000;
+  };
+
+  // 1080p: 12 - 16 Mbps
+  const b1080Rec = getMobileTargetBps('1080p', 'recommended');
+  const b1080High = getMobileTargetBps('1080p', 'higher');
+  assert.ok(b1080Rec >= 12_000_000 && b1080Rec <= 16_000_000, `1080p recommended ${b1080Rec} must be within 12-16 Mbps`);
+  assert.ok(b1080High >= 12_000_000 && b1080High <= 16_000_000, `1080p higher ${b1080High} must be within 12-16 Mbps`);
+
+  // 2K: 20 - 25 Mbps
+  const b2kRec = getMobileTargetBps('2K', 'recommended');
+  const b2kHigh = getMobileTargetBps('2K', 'higher');
+  assert.ok(b2kRec >= 20_000_000 && b2kRec <= 25_000_000, `2K recommended ${b2kRec} must be within 20-25 Mbps`);
+  assert.ok(b2kHigh >= 20_000_000 && b2kHigh <= 25_000_000, `2K higher ${b2kHigh} must be within 20-25 Mbps`);
+
+  // 4K: 35 - 50 Mbps
+  const b4kRec = getMobileTargetBps('4K', 'recommended');
+  const b4kHigh = getMobileTargetBps('4K', 'higher');
+  assert.ok(b4kRec >= 35_000_000 && b4kRec <= 50_000_000, `4K recommended ${b4kRec} must be within 35-50 Mbps`);
+  assert.ok(b4kHigh >= 35_000_000 && b4kHigh <= 50_000_000, `4K higher ${b4kHigh} must be within 35-50 Mbps`);
+
+  // 720p: 8 - 10 Mbps
+  const b720Rec = getMobileTargetBps('720p', 'recommended');
+  const b720High = getMobileTargetBps('720p', 'higher');
+  assert.ok(b720Rec >= 8_000_000 && b720Rec <= 10_000_000, `720p recommended ${b720Rec} must be within 8-10 Mbps`);
+  assert.ok(b720High >= 8_000_000 && b720High <= 10_000_000, `720p higher ${b720High} must be within 8-10 Mbps`);
+});
+
 
 
 

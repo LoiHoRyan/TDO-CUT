@@ -1649,8 +1649,13 @@ export default function App() {
           ? packTrackClipsContiguously(updated, 0)
           : updated;
       });
-      setSelectedClipId(newId);
-      setSelectedClipIds([newId]);
+      if (!isMobile) {
+        setSelectedClipId(newId);
+        setSelectedClipIds([newId]);
+      } else {
+        setSelectedClipId(null);
+        setSelectedClipIds([]);
+      }
       showToast(`Đã kéo thả "${payload.name}" vào tầng Layer ${trackToUse} tại ${startSec}s!`);
       return;
     }
@@ -3066,10 +3071,15 @@ export default function App() {
     setMediaCards((prev) => [...newMediaItems, ...prev]);
     commitClips((prev) => [...prev, ...newOverlayClips]);
     if (newOverlayClips[0]) {
-      setSelectedClipId(newOverlayClips[0].id);
-      setSelectedClipIds([newOverlayClips[0].id]);
-      setInspectorMode('clip');
-      setInspectorTab('video');
+      if (!isMobile) {
+        setSelectedClipId(newOverlayClips[0].id);
+        setSelectedClipIds([newOverlayClips[0].id]);
+        setInspectorMode('clip');
+        setInspectorTab('video');
+      } else {
+        setSelectedClipId(null);
+        setSelectedClipIds([]);
+      }
     }
     showToast(`Đã thêm ${newOverlayClips.length} tệp Lớp phủ (PIP) vào Timeline tại ${playheadSec.toFixed(2)}s!`);
     e.target.value = '';
@@ -5599,6 +5609,7 @@ export default function App() {
               aspectRatio={aspectRatio}
               previewQuality={previewQuality}
               selectedClipId={selectedClipId}
+              selectedClip={currentClip}
               activeVideoClip={activeVideoClip}
               prevVideoClip={prevVideoClip}
               nextVideoClip={nextVideoClip}
@@ -5680,6 +5691,24 @@ export default function App() {
                         }
                       : c
                   )
+                );
+              }}
+              onUpdateClipText={(clipId, newText, newSubText) => {
+                commitClips(
+                  (prev) =>
+                    prev.map((c) => {
+                      if (c.id !== clipId) return c;
+                      if (c.stickerEmoji) {
+                        return {
+                          ...c,
+                          stickerText: newText,
+                          ...(newSubText !== undefined ? { stickerSubText: newSubText } : {}),
+                          name: newText ? `${c.stickerEmoji} ${newText}` : c.name,
+                        };
+                      }
+                      return { ...c, subtitleText: newText, name: newText || 'Phụ đề' };
+                    }),
+                  `inline-text:${clipId}`
                 );
               }}
             />

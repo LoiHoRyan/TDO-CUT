@@ -276,11 +276,51 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     [clips]
   );
 
+  // Audio sub-track lanes to cleanly stack overlapping audio clips
+  const audioLanes = useMemo(() => {
+    const lanes: TimelineClip[][] = [];
+    audioClips.forEach((clip) => {
+      let placed = false;
+      for (const lane of lanes) {
+        const lastClip = lane[lane.length - 1];
+        if (lastClip.startTime + lastClip.duration <= clip.startTime + 0.05) {
+          lane.push(clip);
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        lanes.push([clip]);
+      }
+    });
+    return lanes;
+  }, [audioClips]);
+
   // Text clips (Track 2)
   const textClips = useMemo(
     () => clips.filter((c) => c.trackIndex === 2 || Boolean(c.subtitleText)).sort((a, b) => a.startTime - b.startTime),
     [clips]
   );
+
+  // Text sub-track lanes to cleanly stack overlapping text clips
+  const textLanes = useMemo(() => {
+    const lanes: TimelineClip[][] = [];
+    textClips.forEach((clip) => {
+      let placed = false;
+      for (const lane of lanes) {
+        const lastClip = lane[lane.length - 1];
+        if (lastClip.startTime + lastClip.duration <= clip.startTime + 0.05) {
+          lane.push(clip);
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        lanes.push([clip]);
+      }
+    });
+    return lanes;
+  }, [textClips]);
 
   // Sticker clips (Track 3)
   const stickerClips = useMemo(
@@ -613,11 +653,11 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       const dx = ev.touches[0].clientX - startX;
       if (Math.abs(dx) > 3) hasMoved = true;
       const deltaSec = dx / pxPerSec;
-      const maxDelta = origDuration - 0.4;
-      const minDelta = clip.sourceDuration ? -sourceIn / speed : -Infinity;
-      const clampedDelta = Math.max(-origStartTime, minDelta, Math.min(maxDelta, deltaSec));
+      const maxDelta = origDuration - 0.3;
+      const minDelta = -sourceIn / speed;
+      const clampedDelta = Math.max(minDelta, Math.min(maxDelta, deltaSec));
       lastNewStart = Number((origStartTime + clampedDelta).toFixed(2));
-      lastNewDur = Number((origDuration - clampedDelta).toFixed(2));
+      lastNewDur = Number(Math.max(0.3, origDuration - clampedDelta).toFixed(2));
       lastNewSourceIn = Number(Math.max(0, sourceIn + clampedDelta * speed).toFixed(2));
       const trimState = {
         clipId: clip.id,
@@ -646,11 +686,11 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
           onReorderClips?.(updatedClips);
           onPlayheadChange(0);
           if (timelineScrollRef.current) {
+            isProgrammaticScrollRef.current = true;
+            lastProgrammaticScrollTimeRef.current = Date.now();
             timelineScrollRef.current.scrollLeft = 0;
           }
         }
-      } else {
-        onTrimStartToPlayhead?.();
       }
     };
 
@@ -681,11 +721,11 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       const dx = ev.clientX - startX;
       if (Math.abs(dx) > 3) hasMoved = true;
       const deltaSec = dx / pxPerSec;
-      const maxDelta = origDuration - 0.4;
-      const minDelta = clip.sourceDuration ? -sourceIn / speed : -Infinity;
-      const clampedDelta = Math.max(-origStartTime, minDelta, Math.min(maxDelta, deltaSec));
+      const maxDelta = origDuration - 0.3;
+      const minDelta = -sourceIn / speed;
+      const clampedDelta = Math.max(minDelta, Math.min(maxDelta, deltaSec));
       lastNewStart = Number((origStartTime + clampedDelta).toFixed(2));
-      lastNewDur = Number((origDuration - clampedDelta).toFixed(2));
+      lastNewDur = Number(Math.max(0.3, origDuration - clampedDelta).toFixed(2));
       lastNewSourceIn = Number(Math.max(0, sourceIn + clampedDelta * speed).toFixed(2));
       const trimState = {
         clipId: clip.id,
@@ -713,11 +753,11 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
           onReorderClips?.(updatedClips);
           onPlayheadChange(0);
           if (timelineScrollRef.current) {
+            isProgrammaticScrollRef.current = true;
+            lastProgrammaticScrollTimeRef.current = Date.now();
             timelineScrollRef.current.scrollLeft = 0;
           }
         }
-      } else {
-        onTrimStartToPlayhead?.();
       }
     };
 
@@ -786,7 +826,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       window.addEventListener('touchcancel', onWindowTouchEnd);
       window.addEventListener('mousemove', onWindowMouseMove);
       window.addEventListener('mouseup', onWindowMouseUp);
-    }, 800);
+    }, 900);
   };
 
   const cancelReorderTimer = () => {
@@ -811,10 +851,11 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     const scrollEl = timelineScrollRef.current;
     if (!scrollEl) return;
     const rect = scrollEl.getBoundingClientRect();
-    const relX = clientX - rect.left + scrollEl.scrollLeft - halfWidth - 68;
+    const cardStartX = halfWidth + 12;
+    const localX = clientX - rect.left + scrollEl.scrollLeft - cardStartX;
     const cardStep = 64;
     const currentClips = reorderClipsRef.current;
-    const targetIdx = Math.max(0, Math.min(currentClips.length - 1, Math.floor(relX / cardStep)));
+    const targetIdx = Math.max(0, Math.min(currentClips.length - 1, Math.floor(localX / cardStep)));
     const currentIdx = currentClips.findIndex((c) => c.id === reorderDraggingClipIdRef.current);
     if (currentIdx !== -1 && currentIdx !== targetIdx) {
       const next = [...currentClips];
@@ -853,7 +894,96 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     }
   };
 
-  // Audio Left & Right Trim Handlers
+  // Audio Timeline Drag & Trim Handlers (with magnetic snapping & source duration clamp)
+  const handleAudioDragTouchStart = (clip: TimelineClip, e: React.TouchEvent) => {
+    e.stopPropagation();
+    isDraggingTimeline.current = false;
+    const startX = e.touches[0].clientX;
+    const origStartTime = clip.startTime;
+    const snapThreshold = 14 / pxPerSec;
+    const snapPoints = [
+      playheadSec,
+      ...clips.filter((c) => c.id !== clip.id).flatMap((c) => [c.startTime, c.startTime + c.duration]),
+    ];
+
+    const onTouchMove = (ev: TouchEvent) => {
+      if (ev.touches.length === 0) return;
+      if (ev.cancelable) ev.preventDefault();
+      const dx = ev.touches[0].clientX - startX;
+      const deltaSec = dx / pxPerSec;
+      let newStart = Math.max(0, origStartTime + deltaSec);
+
+      // Magnetic snap
+      for (const sp of snapPoints) {
+        if (Math.abs(newStart - sp) <= snapThreshold) {
+          newStart = sp;
+          try { navigator.vibrate?.(12); } catch {}
+          break;
+        }
+        if (Math.abs(newStart + clip.duration - sp) <= snapThreshold) {
+          newStart = Math.max(0, sp - clip.duration);
+          try { navigator.vibrate?.(12); } catch {}
+          break;
+        }
+      }
+
+      onUpdateClipProp('startTime', Number(newStart.toFixed(2)), clip.id);
+    };
+
+    const onTouchEnd = () => {
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchcancel', onTouchEnd);
+    };
+
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', onTouchEnd);
+    window.addEventListener('touchcancel', onTouchEnd);
+  };
+
+  const handleAudioDragMouseDown = (clip: TimelineClip, e: React.MouseEvent) => {
+    e.stopPropagation();
+    isDraggingTimeline.current = false;
+    const startX = e.clientX;
+    const origStartTime = clip.startTime;
+    const snapThreshold = 14 / pxPerSec;
+    const snapPoints = [
+      playheadSec,
+      ...clips.filter((c) => c.id !== clip.id).flatMap((c) => [c.startTime, c.startTime + c.duration]),
+    ];
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - startX;
+      const deltaSec = dx / pxPerSec;
+      let newStart = Math.max(0, origStartTime + deltaSec);
+
+      for (const sp of snapPoints) {
+        if (Math.abs(newStart - sp) <= snapThreshold) {
+          newStart = sp;
+          break;
+        }
+        if (Math.abs(newStart + clip.duration - sp) <= snapThreshold) {
+          newStart = Math.max(0, sp - clip.duration);
+          break;
+        }
+      }
+
+      onUpdateClipProp('startTime', Number(newStart.toFixed(2)), clip.id);
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
+  const handleAudioDragTouchMove = () => {};
+  const handleAudioDragTouchEnd = () => {};
+
+  // Audio Left & Right Trim Handlers (clamps strictly up to maximum source duration)
   const handleAudioTrimTouchStart = (clip: TimelineClip, isLeft: boolean, e: React.TouchEvent) => {
     e.stopPropagation();
     isDraggingTimeline.current = false;
@@ -862,7 +992,12 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     const origDuration = clip.duration;
     const sourceIn = clip.sourceIn || 0;
     const speed = clip.speed || 1.0;
-    const maxSourceDur = clip.sourceDuration && clip.sourceDuration > 0 ? clip.sourceDuration : 3600;
+    const maxSourceDur = clip.sourceDuration && clip.sourceDuration > 0 ? clip.sourceDuration : (origDuration + 120);
+    const snapThreshold = 14 / pxPerSec;
+    const snapPoints = [
+      playheadSec,
+      ...clips.filter((c) => c.id !== clip.id).flatMap((c) => [c.startTime, c.startTime + c.duration]),
+    ];
 
     const onTouchMove = (ev: TouchEvent) => {
       if (ev.touches.length === 0) return;
@@ -873,17 +1008,44 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
         const maxDelta = origDuration - 0.3;
         const minDelta = -sourceIn / speed;
         const clampedDelta = Math.max(minDelta, Math.min(maxDelta, deltaSec));
-        const newStart = Number(Math.max(0, origStartTime + clampedDelta).toFixed(2));
-        const newDur = Number((origDuration - clampedDelta).toFixed(2));
-        const newSourceIn = Number(Math.max(0, sourceIn + clampedDelta * speed).toFixed(2));
-        onUpdateClipProp('startTime', newStart, clip.id);
-        onUpdateClipProp('duration', newDur, clip.id);
-        onUpdateClipProp('sourceIn', newSourceIn, clip.id);
+        let newStart = Math.max(0, origStartTime + clampedDelta);
+        let newDur = Math.max(0.3, origDuration - clampedDelta);
+        let newSourceIn = Math.max(0, sourceIn + clampedDelta * speed);
+
+        for (const sp of snapPoints) {
+          if (Math.abs(newStart - sp) <= snapThreshold) {
+            const snapAdj = sp - origStartTime;
+            if (snapAdj >= minDelta && snapAdj <= maxDelta) {
+              newStart = sp;
+              newDur = Math.max(0.3, origDuration - snapAdj);
+              newSourceIn = Math.max(0, sourceIn + snapAdj * speed);
+              try { navigator.vibrate?.(12); } catch {}
+            }
+            break;
+          }
+        }
+
+        onUpdateClipProp('startTime', Number(newStart.toFixed(2)), clip.id);
+        onUpdateClipProp('duration', Number(newDur.toFixed(2)), clip.id);
+        onUpdateClipProp('sourceIn', Number(newSourceIn.toFixed(2)), clip.id);
       } else {
         const maxAllowedDur = Math.max(0.3, (maxSourceDur - sourceIn) / speed);
         const desiredDur = origDuration + deltaSec;
-        const clampedDur = Number(Math.max(0.3, Math.min(maxAllowedDur, desiredDur)).toFixed(2));
-        onUpdateClipProp('duration', clampedDur, clip.id);
+        let clampedDur = Math.max(0.3, Math.min(maxAllowedDur, desiredDur));
+        const targetEnd = clip.startTime + clampedDur;
+
+        for (const sp of snapPoints) {
+          if (Math.abs(targetEnd - sp) <= snapThreshold) {
+            const snappedDur = sp - clip.startTime;
+            if (snappedDur >= 0.3 && snappedDur <= maxAllowedDur) {
+              clampedDur = snappedDur;
+              try { navigator.vibrate?.(12); } catch {}
+            }
+            break;
+          }
+        }
+
+        onUpdateClipProp('duration', Number(clampedDur.toFixed(2)), clip.id);
       }
     };
 
@@ -899,7 +1061,6 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
   };
 
   const handleAudioTrimTouchMove = () => {};
-
   const handleAudioTrimTouchEnd = () => {};
 
   const handleAudioTrimMouseDown = (clip: TimelineClip, isLeft: boolean, e: React.MouseEvent) => {
@@ -911,7 +1072,12 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     const origDuration = clip.duration;
     const sourceIn = clip.sourceIn || 0;
     const speed = clip.speed || 1.0;
-    const maxSourceDur = clip.sourceDuration && clip.sourceDuration > 0 ? clip.sourceDuration : 3600;
+    const maxSourceDur = clip.sourceDuration && clip.sourceDuration > 0 ? clip.sourceDuration : (origDuration + 120);
+    const snapThreshold = 14 / pxPerSec;
+    const snapPoints = [
+      playheadSec,
+      ...clips.filter((c) => c.id !== clip.id).flatMap((c) => [c.startTime, c.startTime + c.duration]),
+    ];
 
     const onMouseMove = (ev: MouseEvent) => {
       const dx = ev.clientX - startX;
@@ -920,17 +1086,42 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
         const maxDelta = origDuration - 0.3;
         const minDelta = -sourceIn / speed;
         const clampedDelta = Math.max(minDelta, Math.min(maxDelta, deltaSec));
-        const newStart = Number(Math.max(0, origStartTime + clampedDelta).toFixed(2));
-        const newDur = Number((origDuration - clampedDelta).toFixed(2));
-        const newSourceIn = Number(Math.max(0, sourceIn + clampedDelta * speed).toFixed(2));
-        onUpdateClipProp('startTime', newStart, clip.id);
-        onUpdateClipProp('duration', newDur, clip.id);
-        onUpdateClipProp('sourceIn', newSourceIn, clip.id);
+        let newStart = Math.max(0, origStartTime + clampedDelta);
+        let newDur = Math.max(0.3, origDuration - clampedDelta);
+        let newSourceIn = Math.max(0, sourceIn + clampedDelta * speed);
+
+        for (const sp of snapPoints) {
+          if (Math.abs(newStart - sp) <= snapThreshold) {
+            const snapAdj = sp - origStartTime;
+            if (snapAdj >= minDelta && snapAdj <= maxDelta) {
+              newStart = sp;
+              newDur = Math.max(0.3, origDuration - snapAdj);
+              newSourceIn = Math.max(0, sourceIn + snapAdj * speed);
+            }
+            break;
+          }
+        }
+
+        onUpdateClipProp('startTime', Number(newStart.toFixed(2)), clip.id);
+        onUpdateClipProp('duration', Number(newDur.toFixed(2)), clip.id);
+        onUpdateClipProp('sourceIn', Number(newSourceIn.toFixed(2)), clip.id);
       } else {
         const maxAllowedDur = Math.max(0.3, (maxSourceDur - sourceIn) / speed);
         const desiredDur = origDuration + deltaSec;
-        const clampedDur = Number(Math.max(0.3, Math.min(maxAllowedDur, desiredDur)).toFixed(2));
-        onUpdateClipProp('duration', clampedDur, clip.id);
+        let clampedDur = Math.max(0.3, Math.min(maxAllowedDur, desiredDur));
+        const targetEnd = clip.startTime + clampedDur;
+
+        for (const sp of snapPoints) {
+          if (Math.abs(targetEnd - sp) <= snapThreshold) {
+            const snappedDur = sp - clip.startTime;
+            if (snappedDur >= 0.3 && snappedDur <= maxAllowedDur) {
+              clampedDur = snappedDur;
+            }
+            break;
+          }
+        }
+
+        onUpdateClipProp('duration', Number(clampedDur.toFixed(2)), clip.id);
       }
     };
 
@@ -943,20 +1134,39 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     window.addEventListener('mouseup', onMouseUp);
   };
 
-  // Text Timeline Drag & Trim Handlers
+  // Text Timeline Drag & Trim Handlers (with magnetic snapping)
   const handleTextDragTouchStart = (clip: TimelineClip, e: React.TouchEvent) => {
     e.stopPropagation();
     isDraggingTimeline.current = false;
     const startX = e.touches[0].clientX;
     const origStartTime = clip.startTime;
+    const snapThreshold = 14 / pxPerSec;
+    const snapPoints = [
+      playheadSec,
+      ...clips.filter((c) => c.id !== clip.id).flatMap((c) => [c.startTime, c.startTime + c.duration]),
+    ];
 
     const onTouchMove = (ev: TouchEvent) => {
       if (ev.touches.length === 0) return;
       if (ev.cancelable) ev.preventDefault();
       const dx = ev.touches[0].clientX - startX;
       const deltaSec = dx / pxPerSec;
-      const newStart = Number(Math.max(0, origStartTime + deltaSec).toFixed(2));
-      onUpdateClipProp('startTime', newStart, clip.id);
+      let newStart = Math.max(0, origStartTime + deltaSec);
+
+      for (const sp of snapPoints) {
+        if (Math.abs(newStart - sp) <= snapThreshold) {
+          newStart = sp;
+          try { navigator.vibrate?.(12); } catch {}
+          break;
+        }
+        if (Math.abs(newStart + clip.duration - sp) <= snapThreshold) {
+          newStart = Math.max(0, sp - clip.duration);
+          try { navigator.vibrate?.(12); } catch {}
+          break;
+        }
+      }
+
+      onUpdateClipProp('startTime', Number(newStart.toFixed(2)), clip.id);
     };
 
     const onTouchEnd = () => {
@@ -975,12 +1185,29 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     isDraggingTimeline.current = false;
     const startX = e.clientX;
     const origStartTime = clip.startTime;
+    const snapThreshold = 14 / pxPerSec;
+    const snapPoints = [
+      playheadSec,
+      ...clips.filter((c) => c.id !== clip.id).flatMap((c) => [c.startTime, c.startTime + c.duration]),
+    ];
 
     const onMouseMove = (ev: MouseEvent) => {
       const dx = ev.clientX - startX;
       const deltaSec = dx / pxPerSec;
-      const newStart = Number(Math.max(0, origStartTime + deltaSec).toFixed(2));
-      onUpdateClipProp('startTime', newStart, clip.id);
+      let newStart = Math.max(0, origStartTime + deltaSec);
+
+      for (const sp of snapPoints) {
+        if (Math.abs(newStart - sp) <= snapThreshold) {
+          newStart = sp;
+          break;
+        }
+        if (Math.abs(newStart + clip.duration - sp) <= snapThreshold) {
+          newStart = Math.max(0, sp - clip.duration);
+          break;
+        }
+      }
+
+      onUpdateClipProp('startTime', Number(newStart.toFixed(2)), clip.id);
     };
 
     const onMouseUp = () => {
@@ -993,7 +1220,6 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
   };
 
   const handleTextDragTouchMove = () => {};
-
   const handleTextDragTouchEnd = () => {};
 
   const handleTextTrimTouchStart = (clip: TimelineClip, isLeft: boolean, e: React.TouchEvent) => {
@@ -1002,6 +1228,11 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     const startX = e.touches[0].clientX;
     const origStartTime = clip.startTime;
     const origDuration = clip.duration;
+    const snapThreshold = 14 / pxPerSec;
+    const snapPoints = [
+      playheadSec,
+      ...clips.filter((c) => c.id !== clip.id).flatMap((c) => [c.startTime, c.startTime + c.duration]),
+    ];
 
     const onTouchMove = (ev: TouchEvent) => {
       if (ev.touches.length === 0) return;
@@ -1012,14 +1243,40 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
         const maxDelta = origDuration - 0.3;
         const minDelta = -origStartTime;
         const clampedDelta = Math.max(minDelta, Math.min(maxDelta, deltaSec));
-        const newStart = Number((origStartTime + clampedDelta).toFixed(2));
-        const newDur = Number((origDuration - clampedDelta).toFixed(2));
-        onUpdateClipProp('startTime', newStart, clip.id);
-        onUpdateClipProp('duration', newDur, clip.id);
+        let newStart = Math.max(0, origStartTime + clampedDelta);
+        let newDur = Math.max(0.3, origDuration - clampedDelta);
+
+        for (const sp of snapPoints) {
+          if (Math.abs(newStart - sp) <= snapThreshold) {
+            const snapAdj = sp - origStartTime;
+            if (snapAdj >= minDelta && snapAdj <= maxDelta) {
+              newStart = sp;
+              newDur = Math.max(0.3, origDuration - snapAdj);
+              try { navigator.vibrate?.(12); } catch {}
+            }
+            break;
+          }
+        }
+
+        onUpdateClipProp('startTime', Number(newStart.toFixed(2)), clip.id);
+        onUpdateClipProp('duration', Number(newDur.toFixed(2)), clip.id);
       } else {
         const desiredDur = origDuration + deltaSec;
-        const clampedDur = Number(Math.max(0.3, desiredDur).toFixed(2));
-        onUpdateClipProp('duration', clampedDur, clip.id);
+        let clampedDur = Number(Math.max(0.3, desiredDur).toFixed(2));
+        const targetEnd = clip.startTime + clampedDur;
+
+        for (const sp of snapPoints) {
+          if (Math.abs(targetEnd - sp) <= snapThreshold) {
+            const snappedDur = sp - clip.startTime;
+            if (snappedDur >= 0.3) {
+              clampedDur = snappedDur;
+              try { navigator.vibrate?.(12); } catch {}
+            }
+            break;
+          }
+        }
+
+        onUpdateClipProp('duration', Number(clampedDur.toFixed(2)), clip.id);
       }
     };
 
@@ -1041,6 +1298,11 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     const startX = e.clientX;
     const origStartTime = clip.startTime;
     const origDuration = clip.duration;
+    const snapThreshold = 14 / pxPerSec;
+    const snapPoints = [
+      playheadSec,
+      ...clips.filter((c) => c.id !== clip.id).flatMap((c) => [c.startTime, c.startTime + c.duration]),
+    ];
 
     const onMouseMove = (ev: MouseEvent) => {
       const dx = ev.clientX - startX;
@@ -1049,14 +1311,38 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
         const maxDelta = origDuration - 0.3;
         const minDelta = -origStartTime;
         const clampedDelta = Math.max(minDelta, Math.min(maxDelta, deltaSec));
-        const newStart = Number((origStartTime + clampedDelta).toFixed(2));
-        const newDur = Number((origDuration - clampedDelta).toFixed(2));
-        onUpdateClipProp('startTime', newStart, clip.id);
-        onUpdateClipProp('duration', newDur, clip.id);
+        let newStart = Math.max(0, origStartTime + clampedDelta);
+        let newDur = Math.max(0.3, origDuration - clampedDelta);
+
+        for (const sp of snapPoints) {
+          if (Math.abs(newStart - sp) <= snapThreshold) {
+            const snapAdj = sp - origStartTime;
+            if (snapAdj >= minDelta && snapAdj <= maxDelta) {
+              newStart = sp;
+              newDur = Math.max(0.3, origDuration - snapAdj);
+            }
+            break;
+          }
+        }
+
+        onUpdateClipProp('startTime', Number(newStart.toFixed(2)), clip.id);
+        onUpdateClipProp('duration', Number(newDur.toFixed(2)), clip.id);
       } else {
         const desiredDur = origDuration + deltaSec;
-        const clampedDur = Number(Math.max(0.3, desiredDur).toFixed(2));
-        onUpdateClipProp('duration', clampedDur, clip.id);
+        let clampedDur = Number(Math.max(0.3, desiredDur).toFixed(2));
+        const targetEnd = clip.startTime + clampedDur;
+
+        for (const sp of snapPoints) {
+          if (Math.abs(targetEnd - sp) <= snapThreshold) {
+            const snappedDur = sp - clip.startTime;
+            if (snappedDur >= 0.3) {
+              clampedDur = snappedDur;
+            }
+            break;
+          }
+        }
+
+        onUpdateClipProp('duration', Number(clampedDur.toFixed(2)), clip.id);
       }
     };
 
@@ -1523,6 +1809,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
               )}px`,
               minWidth: '100%',
             }}
+            onClick={() => onSelectClip(null)}
             className="relative space-y-1.5 select-none flex flex-col"
           >
             {/* ROW 0: TIMELINE RULER STRIP (00:00 starts at halfWidth) */}
@@ -1800,8 +2087,11 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
               )}
             </div>
 
-            {/* ROW 2: TRACK 1 (AUDIO TRACK) */}
-            <div className="h-9 relative flex items-center">
+            {/* ROW 2: TRACK 1 (AUDIO TRACK - Multi-lane stacking & drag reposition & trim handles) */}
+            <div
+              style={{ height: `${Math.max(34, audioLanes.length * 30 + 4)}px` }}
+              className="relative flex items-center"
+            >
               {/* Left runway before 00:00: Audio Icon button */}
               <div
                 style={{ width: `${halfWidth}px` }}
@@ -1821,65 +2111,71 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
               </div>
 
               {/* Audio Track Content starting at halfWidth (00:00) */}
-              {audioClips.length > 0 ? (
-                audioClips.map((clip) => {
-                  const clipLeft = halfWidth + clip.startTime * pxPerSec;
-                  const clipWidth = Math.max(30, clip.duration * pxPerSec);
-                  const isSelected = selectedClipId === clip.id;
-                  return (
-                    <div
-                      key={clip.id}
-                      style={{
-                        left: `${clipLeft}px`,
-                        width: `${clipWidth}px`,
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSelectClip(clip.id);
-                      }}
-                      className={`absolute h-7 rounded-md border flex items-center px-1.5 gap-1.5 text-[9px] font-semibold truncate cursor-pointer shadow-xs ${
-                        isSelected
-                          ? 'bg-[#0284C7]/50 border-2 border-white ring-2 ring-[#0284C7]/60 text-white z-10'
-                          : 'bg-[#0284C7]/30 border-[#0284C7] text-[#38BDF8]'
-                      }`}
-                    >
-                      {/* Left Trim Handle for Audio */}
-                      {isSelected && (
-                        <div
-                          onTouchStart={(e) => handleAudioTrimTouchStart(clip, true, e)}
-                          onTouchMove={handleAudioTrimTouchMove}
-                          onTouchEnd={handleAudioTrimTouchEnd}
-                          onTouchCancel={handleAudioTrimTouchEnd}
-                          onMouseDown={(e) => handleAudioTrimMouseDown(clip, true, e)}
-                          onClick={(e) => e.stopPropagation()}
-                          title="Kéo mép trái để cắt đầu âm thanh"
-                          className="absolute left-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-l-md touch-none select-none active:bg-[#38BDF8]"
-                        >
-                          <div className="w-[1px] h-2.5 bg-black/80 pointer-events-none" />
-                        </div>
-                      )}
+              {audioLanes.length > 0 ? (
+                audioLanes.flatMap((lane, laneIdx) =>
+                  lane.map((clip) => {
+                    const clipLeft = halfWidth + clip.startTime * pxPerSec;
+                    const clipWidth = Math.max(30, clip.duration * pxPerSec);
+                    const isSelected = selectedClipId === clip.id;
+                    const topPos = laneIdx * 30 + 2;
+                    return (
+                      <div
+                        key={clip.id}
+                        style={{
+                          left: `${clipLeft}px`,
+                          width: `${clipWidth}px`,
+                          top: `${topPos}px`,
+                        }}
+                        onTouchStart={(e) => handleAudioDragTouchStart(clip, e)}
+                        onMouseDown={(e) => handleAudioDragMouseDown(clip, e)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectClip(clip.id);
+                        }}
+                        className={`absolute h-7 rounded-md border flex items-center px-1.5 gap-1.5 text-[9px] font-semibold truncate cursor-grab active:cursor-grabbing shadow-xs ${
+                          isSelected
+                            ? 'bg-[#0284C7]/50 border-2 border-white ring-2 ring-[#0284C7]/60 text-white z-10'
+                            : 'bg-[#0284C7]/30 border-[#0284C7] text-[#38BDF8]'
+                        }`}
+                      >
+                        {/* Left Trim Handle for Audio */}
+                        {isSelected && (
+                          <div
+                            onTouchStart={(e) => handleAudioTrimTouchStart(clip, true, e)}
+                            onTouchMove={handleAudioTrimTouchMove}
+                            onTouchEnd={handleAudioTrimTouchEnd}
+                            onTouchCancel={handleAudioTrimTouchEnd}
+                            onMouseDown={(e) => handleAudioTrimMouseDown(clip, true, e)}
+                            onClick={(e) => e.stopPropagation()}
+                            title="Kéo mép trái để cắt đầu âm thanh"
+                            className="absolute left-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-l-md touch-none select-none active:bg-[#38BDF8]"
+                          >
+                            <div className="w-[1px] h-2.5 bg-black/80 pointer-events-none" />
+                          </div>
+                        )}
 
-                      <Music className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate flex-1">{clip.name}</span>
+                        <Music className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate flex-1">{clip.name}</span>
 
-                      {/* Right Trim Handle for Audio */}
-                      {isSelected && (
-                        <div
-                          onTouchStart={(e) => handleAudioTrimTouchStart(clip, false, e)}
-                          onTouchMove={handleAudioTrimTouchMove}
-                          onTouchEnd={handleAudioTrimTouchEnd}
-                          onTouchCancel={handleAudioTrimTouchEnd}
-                          onMouseDown={(e) => handleAudioTrimMouseDown(clip, false, e)}
-                          onClick={(e) => e.stopPropagation()}
-                          title="Kéo mép phải để thu ngắn / kéo dài âm thanh"
-                          className="absolute right-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-r-md touch-none select-none active:bg-[#38BDF8]"
-                        >
-                          <div className="w-[1px] h-2.5 bg-black/80 pointer-events-none" />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
+                        {/* Right Trim Handle for Audio */}
+                        {isSelected && (
+                          <div
+                            onTouchStart={(e) => handleAudioTrimTouchStart(clip, false, e)}
+                            onTouchMove={handleAudioTrimTouchMove}
+                            onTouchEnd={handleAudioTrimTouchEnd}
+                            onTouchCancel={handleAudioTrimTouchEnd}
+                            onMouseDown={(e) => handleAudioTrimMouseDown(clip, false, e)}
+                            onClick={(e) => e.stopPropagation()}
+                            title="Kéo mép phải để thu ngắn / kéo dài âm thanh"
+                            className="absolute right-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-r-md touch-none select-none active:bg-[#38BDF8]"
+                          >
+                            <div className="w-[1px] h-2.5 bg-black/80 pointer-events-none" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )
               ) : (
                 <button
                   type="button"
@@ -1899,8 +2195,11 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
               )}
             </div>
 
-            {/* ROW 3: TRACK 2 (TEXT TRACK - Drag horizontal reposition & trim handles) */}
-            <div className="h-7 relative flex items-center">
+            {/* ROW 3: TRACK 2 (TEXT TRACK - Multi-lane stacking & drag reposition & trim handles) */}
+            <div
+              style={{ height: `${Math.max(26, textLanes.length * 24 + 4)}px` }}
+              className="relative flex items-center"
+            >
               {/* Left runway before 00:00: Text Icon button */}
               <div
                 style={{ width: `${halfWidth}px` }}
@@ -1920,81 +2219,85 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
               </div>
 
               {/* Text Track Content starting at halfWidth (00:00) */}
-              {textClips.length > 0 ? (
-                textClips.map((clip) => {
-                  const clipLeft = halfWidth + clip.startTime * pxPerSec;
-                  const clipWidth = Math.max(34, clip.duration * pxPerSec);
-                  const isSelected = selectedClipId === clip.id;
-                  return (
-                    <div
-                      key={clip.id}
-                      style={{
-                        left: `${clipLeft}px`,
-                        width: `${clipWidth}px`,
-                      }}
-                      onTouchStart={(e) => handleTextDragTouchStart(clip, e)}
-                      onTouchMove={handleTextDragTouchMove}
-                      onTouchEnd={handleTextDragTouchEnd}
-                      onTouchCancel={handleTextDragTouchEnd}
-                      onMouseDown={(e) => handleTextDragMouseDown(clip, e)}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (isSelected) {
+              {textLanes.length > 0 ? (
+                textLanes.flatMap((lane, laneIdx) =>
+                  lane.map((clip) => {
+                    const clipLeft = halfWidth + clip.startTime * pxPerSec;
+                    const clipWidth = Math.max(34, clip.duration * pxPerSec);
+                    const isSelected = selectedClipId === clip.id;
+                    const topPos = laneIdx * 24 + 2;
+                    return (
+                      <div
+                        key={clip.id}
+                        style={{
+                          left: `${clipLeft}px`,
+                          width: `${clipWidth}px`,
+                          top: `${topPos}px`,
+                        }}
+                        onTouchStart={(e) => handleTextDragTouchStart(clip, e)}
+                        onTouchMove={handleTextDragTouchMove}
+                        onTouchEnd={handleTextDragTouchEnd}
+                        onTouchCancel={handleTextDragTouchEnd}
+                        onMouseDown={(e) => handleTextDragMouseDown(clip, e)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isSelected) {
+                            setTextEditTab('text');
+                            setActiveDrawer('text_edit');
+                          } else {
+                            onSelectClip(clip.id);
+                          }
+                        }}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          onSelectClip(clip.id);
                           setTextEditTab('text');
                           setActiveDrawer('text_edit');
-                        } else {
-                          onSelectClip(clip.id);
-                        }
-                      }}
-                      onDoubleClick={(e) => {
-                        e.stopPropagation();
-                        onSelectClip(clip.id);
-                        setTextEditTab('text');
-                        setActiveDrawer('text_edit');
-                      }}
-                      className={`absolute h-5 rounded-full border px-1 flex items-center gap-1 text-[8.5px] font-bold truncate cursor-pointer transition-all select-none ${
-                        isSelected
-                          ? 'bg-[#F97316] text-white border-2 border-white ring-2 ring-[#F97316]/50 z-10'
-                          : 'bg-[#C2410C]/25 text-[#FB923C] border-[#F97316]'
-                      }`}
-                    >
-                      {/* Left Trim Handle for Text */}
-                      {isSelected && (
-                        <div
-                          onTouchStart={(e) => handleTextTrimTouchStart(clip, true, e)}
-                          onTouchMove={handleTextTrimTouchMove}
-                          onTouchEnd={handleTextTrimTouchEnd}
-                          onTouchCancel={handleTextTrimTouchEnd}
-                          onMouseDown={(e) => handleTextTrimMouseDown(clip, true, e)}
-                          onClick={(e) => e.stopPropagation()}
-                          title="Kéo mép trái để chỉnh điểm bắt đầu văn bản"
-                          className="absolute left-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-l-full touch-none select-none active:bg-[#FB923C]"
-                        >
-                          <div className="w-[1px] h-2 bg-black/80 pointer-events-none" />
-                        </div>
-                      )}
+                        }}
+                        className={`absolute h-5 rounded-full border px-1 flex items-center gap-1 text-[8.5px] font-bold truncate cursor-grab active:cursor-grabbing transition-all select-none ${
+                          isSelected
+                            ? 'bg-[#F97316] text-white border-2 border-white ring-2 ring-[#F97316]/50 z-10'
+                            : 'bg-[#C2410C]/25 text-[#FB923C] border-[#F97316]'
+                        }`}
+                      >
+                        {/* Left Trim Handle for Text */}
+                        {isSelected && (
+                          <div
+                            onTouchStart={(e) => handleTextTrimTouchStart(clip, true, e)}
+                            onTouchMove={handleTextTrimTouchMove}
+                            onTouchEnd={handleTextTrimTouchEnd}
+                            onTouchCancel={handleTextTrimTouchEnd}
+                            onMouseDown={(e) => handleTextTrimMouseDown(clip, true, e)}
+                            onClick={(e) => e.stopPropagation()}
+                            title="Kéo mép trái để chỉnh điểm bắt đầu văn bản"
+                            className="absolute left-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-l-full touch-none select-none active:bg-[#FB923C]"
+                          >
+                            <div className="w-[1px] h-2 bg-black/80 pointer-events-none" />
+                          </div>
+                        )}
 
-                      <Type className="w-2.5 h-2.5 shrink-0 ml-1.5" />
-                      <span className="truncate flex-1">{clip.subtitleText || clip.name}</span>
+                        <Type className="w-2.5 h-2.5 shrink-0 ml-1.5" />
+                        <span className="truncate flex-1">{clip.subtitleText || clip.name}</span>
 
-                      {/* Right Trim Handle for Text */}
-                      {isSelected && (
-                        <div
-                          onTouchStart={(e) => handleTextTrimTouchStart(clip, false, e)}
-                          onTouchMove={handleTextTrimTouchMove}
-                          onTouchEnd={handleTextTrimTouchEnd}
-                          onTouchCancel={handleTextTrimTouchEnd}
-                          onMouseDown={(e) => handleTextTrimMouseDown(clip, false, e)}
-                          onClick={(e) => e.stopPropagation()}
-                          title="Kéo mép phải để kéo dài hoặc thu ngắn thời lượng văn bản"
-                          className="absolute right-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-r-full touch-none select-none active:bg-[#FB923C]"
-                        >
-                          <div className="w-[1px] h-2 bg-black/80 pointer-events-none" />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
+                        {/* Right Trim Handle for Text */}
+                        {isSelected && (
+                          <div
+                            onTouchStart={(e) => handleTextTrimTouchStart(clip, false, e)}
+                            onTouchMove={handleTextTrimTouchMove}
+                            onTouchEnd={handleTextTrimTouchEnd}
+                            onTouchCancel={handleTextTrimTouchEnd}
+                            onMouseDown={(e) => handleTextTrimMouseDown(clip, false, e)}
+                            onClick={(e) => e.stopPropagation()}
+                            title="Kéo mép phải để kéo dài hoặc thu ngắn thời lượng văn bản"
+                            className="absolute right-0 inset-y-0 w-3 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-r-full touch-none select-none active:bg-[#FB923C]"
+                          >
+                            <div className="w-[1px] h-2 bg-black/80 pointer-events-none" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )
               ) : (
                 <button
                   type="button"

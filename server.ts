@@ -1003,11 +1003,6 @@ async function startServer() {
             const vol = seg.muted ? 0 : Math.max(0, Math.min(2.0, (seg.volume ?? 100) / 100));
 
             if (hasAud && vol > 0.001) {
-              filterParts.push(
-                `anullsrc=r=48000:cl=stereo,atrim=0:${outDur.toFixed(
-                  3
-                )},asetpts=PTS-STARTPTS,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[asil${idx}]`
-              );
               const aChain: string[] = [
                 `atrim=start=${trimOffset.toFixed(3)}:duration=${(outDur * spd).toFixed(3)}`,
                 `asetpts=PTS-STARTPTS`,
@@ -1023,10 +1018,7 @@ async function startServer() {
                 `atrim=0:${outDur.toFixed(3)}`,
                 'asetpts=PTS-STARTPTS'
               );
-              filterParts.push(`[${inIdx}:a]${aChain.join(',')}[araw${idx}]`);
-              filterParts.push(
-                `[asil${idx}][araw${idx}]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[aseg${idx}]`
-              );
+              filterParts.push(`[${inIdx}:a]${aChain.join(',')}[aseg${idx}]`);
             } else {
               filterParts.push(
                 `anullsrc=r=48000:cl=stereo,atrim=0:${outDur.toFixed(
@@ -1116,7 +1108,7 @@ async function startServer() {
             currentALabel,
             '-r',
             String(safeFps),
-            '-vsync',
+            '-fps_mode',
             'cfr'
           );
 
@@ -1172,8 +1164,6 @@ async function startServer() {
               `${Math.round(targetKbps * 1.35)}k`,
               '-bufsize',
               `${bufSizeKbps}k`,
-              '-crf',
-              String(effectiveCrf),
               '-x264-params',
               'cabac=1:deblock=1,0,0:8x8dct=1:aq-mode=2:aq-strength=1.0:bframes=0',
               '-bf',
@@ -1181,7 +1171,7 @@ async function startServer() {
               '-g',
               String(safeFps),
               '-keyint_min',
-              String(safeFps),
+              String(Math.max(12, Math.round(safeFps / 2))),
               '-sc_threshold',
               '0',
               '-avoid_negative_ts',

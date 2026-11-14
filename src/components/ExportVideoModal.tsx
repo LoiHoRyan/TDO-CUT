@@ -1286,9 +1286,28 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
     const stopAudioKeepAlive = webAudioEngine.startExportAudioKeepAlive();
     stopAudioKeepAliveRef.current = stopAudioKeepAlive;
 
+    // Cap in-browser canvas resolution on mobile devices to prevent GPU driver OOM tab crash
+    let renderExportW = targetExportW;
+    let renderExportH = targetExportH;
+    if (isMobile && Math.max(renderExportW, renderExportH) > 1920) {
+      const scale = 1920 / Math.max(renderExportW, renderExportH);
+      renderExportW = Math.max(2, Math.round((renderExportW * scale) / 2) * 2);
+      renderExportH = Math.max(2, Math.round((renderExportH * scale) / 2) * 2);
+    }
+
     const exportCanvas = document.createElement('canvas');
-    exportCanvas.width = targetExportW;
-    exportCanvas.height = targetExportH;
+    exportCanvas.width = renderExportW;
+    exportCanvas.height = renderExportH;
+    exportCanvas.style.position = 'fixed';
+    exportCanvas.style.top = '0';
+    exportCanvas.style.left = '0';
+    exportCanvas.style.width = '100vw';
+    exportCanvas.style.height = '100vh';
+    exportCanvas.style.objectFit = 'contain';
+    exportCanvas.style.pointerEvents = 'none';
+    exportCanvas.style.zIndex = '45';
+    exportCanvas.style.opacity = '0.04';
+    document.body.appendChild(exportCanvas);
     const expCtx = exportCanvas.getContext('2d', { alpha: false });
 
     const AudioCtxClass =
@@ -1333,6 +1352,9 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
       preloadedAudios.clear();
       if (exportAudioCtx && exportAudioCtx.state !== 'closed') {
         exportAudioCtx.close().catch(() => {});
+      }
+      if (exportCanvas.parentNode) {
+        exportCanvas.parentNode.removeChild(exportCanvas);
       }
     };
 
@@ -1451,8 +1473,8 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
         if (abortExportRef.current) break;
         const sprite = await renderOverlayClipToSpriteData(
           ovClip,
-          targetExportW,
-          targetExportH
+          renderExportW,
+          renderExportH
         );
         if (sprite) {
           const img = await new Promise<HTMLImageElement | null>((resolve) => {
@@ -1479,8 +1501,8 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
 
       const drawCompositeExportFrame = (timelineSec: number, frameIdx: number) => {
         if (!expCtx) return;
-        const w = targetExportW;
-        const h = targetExportH;
+        const w = renderExportW;
+        const h = renderExportH;
         expCtx.save();
         expCtx.imageSmoothingEnabled = true;
         expCtx.imageSmoothingQuality = 'high';
@@ -1697,7 +1719,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           await new Promise((r) => setTimeout(r, 60));
         }
 
-        // Prime first video clip and verify active playback so frame 0 renders immediately with ZERO 0.8s freeze
+        // Prime first video clip frame 0 without premature background playback so there is zero clock drift or initial freeze
         const firstClip = activeV1Clips[0];
         if (firstClip) {
           const firstEntry = preloadedVideos.get(firstClip.id);
@@ -1705,6 +1727,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             const startSec = Math.max(0, firstClip.sourceIn || 0);
             const spd = Math.max(0.25, Math.min(4.0, firstClip.speed || 1.0));
             firstEntry.el.playbackRate = spd;
+            firstEntry.el.pause();
             firstEntry.el.currentTime = startSec;
             await new Promise<void>((resolve) => {
               let done = false;
@@ -1712,12 +1735,12 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                 if (done) return;
                 done = true;
                 firstEntry.el.removeEventListener('seeked', finish);
-                firstEntry.el.removeEventListener('playing', finish);
+                firstEntry.el.removeEventListener('canplay', finish);
                 resolve();
               };
               firstEntry.el.addEventListener('seeked', finish, { once: true });
-              firstEntry.el.addEventListener('playing', finish, { once: true });
-              window.setTimeout(finish, 250);
+              firstEntry.el.addEventListener('canplay', finish, { once: true });
+              window.setTimeout(finish, 350);
             });
           }
         }
@@ -1728,6 +1751,13 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
         const videoTrack = videoStream.getVideoTracks()[0] as
           | (MediaStreamTrack & { requestFrame?: () => void })
           | undefined;
+        if (videoTrack && typeof videoTrack.requestFrame === 'function') {
+          try {
+            videoTrack.requestFrame();
+          } catch {
+            // Ignore
+          }
+        }
 
         if (exportAudioDest && exportAudioDest.stream.getAudioTracks().length > 0) {
           exportAudioDest.stream.getAudioTracks().forEach((t) => videoStream.addTrack(t));
@@ -1769,17 +1799,23 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             (m) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)
           ) || '';
 
-        // True CapCut target bitrate (12-16 Mbps for 1080p, 8-10 Mbps for 720p, 20-30 Mbps for 2K/4K)
+        // True CapCut target bitrate (12-16 Mbps for 1080p, 8-10 Mbps for 720p, 20-25 Mbps for 2K, 35-50 Mbps for 4K)
         const mobileTargetBps =
-          resolution === '4K' || resolution === '2K'
-            ? 18_000_000
+          resolution === '4K'
+            ? bitrateMode === 'higher'
+              ? 48_000_000
+              : 38_000_000
+            : resolution === '2K'
+            ? bitrateMode === 'higher'
+              ? 25_000_000
+              : 22_000_000
             : resolution === '720p'
             ? bitrateMode === 'higher'
               ? 10_000_000
-              : 8_000_000
+              : 8_500_000
             : bitrateMode === 'higher'
             ? 16_000_000
-            : 12_000_000;
+            : 13_500_000;
 
         const effectiveTargetBps = isMobile
           ? mobileTargetBps
@@ -1804,12 +1840,16 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           recorder = buildRecorder(effectiveTargetBps);
         } catch {
           try {
-            recorder = buildRecorder(8_000_000);
+            recorder = buildRecorder(20_000_000);
           } catch {
             try {
-              recorder = buildRecorder(5_000_000);
+              recorder = buildRecorder(12_000_000);
             } catch {
-              recorder = new MediaRecorder(videoStream);
+              try {
+                recorder = buildRecorder(8_000_000);
+              } catch {
+                recorder = new MediaRecorder(videoStream);
+              }
             }
           }
         }
@@ -1832,18 +1872,14 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
         const fullTimelineSec = Math.max(1.0, totalDuration);
         const frameIntervalMs = Math.max(15, Math.round(1000 / targetFps));
 
+        recorder.start(250);
+        const recordStartMs = performance.now();
         if (firstClip) {
           const firstEntry = preloadedVideos.get(firstClip.id);
-          if (firstEntry && firstEntry.el.paused) {
-            try {
-              await firstEntry.el.play();
-            } catch {
-              // Ignore play error
-            }
+          if (firstEntry) {
+            firstEntry.el.play().catch(() => {});
           }
         }
-        recorder.start(1000);
-        const recordStartMs = performance.now();
         let frameCounter = 0;
         let lastProgressUpdateMs = 0;
 
@@ -2044,13 +2080,17 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
         generatedList.push({
           name: outName,
           url,
-          qualitySummary: `${targetExportW}×${targetExportH} · ${exportSpec.fps} FPS · ${actualMbps} Mbps · ${fullTimelineSec.toFixed(1)}s · ${actualMb} MB`,
+          qualitySummary: `${renderExportW}×${renderExportH} · ${exportSpec.fps} FPS · ${actualMbps} Mbps · ${fullTimelineSec.toFixed(1)}s · ${actualMb} MB`,
         });
 
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = outName;
-        a.click();
+        cleanupPreloadedMedia();
+
+        if (!isMobile) {
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = outName;
+          a.click();
+        }
       }
 
       if (!abortExportRef.current) {

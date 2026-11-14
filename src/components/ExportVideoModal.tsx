@@ -276,20 +276,66 @@ async function renderOverlayClipToSpriteData(
     };
   }
 
-  // Cropped single-frame Subtitle / Text overlay
+  // Cropped multi-line adaptive Subtitle / Text overlay bounded by active aspect ratio
   const text = itemClip.subtitleText || itemClip.name;
   const fontSize = Math.max(16, Math.round(((itemClip.fontSize ?? 28) / 540) * h));
+  const maxSafeTextW = Math.max(160, Math.round(w * 0.82));
+
+  // Multi-line auto-wrap helper for text overlays
+  const rawParas = text.split('\n');
   const measureCanvas = document.createElement('canvas');
   const mCtx = measureCanvas.getContext('2d');
-  let estTextW = fontSize * Math.max(4, text.length * 0.65);
   if (mCtx) {
     mCtx.font = `800 ${fontSize}px "${itemClip.fontFamily || 'Plus Jakarta Sans'}", sans-serif`;
-    estTextW = mCtx.measureText(text).width;
   }
-  const padX = fontSize * 0.85;
-  const padY = fontSize * 0.55;
-  const rawBoxW = (estTextW + padX * 2) * absScaleX + 28 * dpiScale;
-  const rawBoxH = (fontSize + padY * 2) * absScaleY + 28 * dpiScale;
+
+  const lines: string[] = [];
+  for (const para of rawParas) {
+    const words = para.split(/\s+/).filter(Boolean);
+    if (words.length <= 1) {
+      lines.push(para);
+      continue;
+    }
+    let cur = words[0];
+    for (let i = 1; i < words.length; i++) {
+      const word = words[i];
+      const test = cur + ' ' + word;
+      const testW = mCtx ? mCtx.measureText(test).width : test.length * fontSize * 0.65;
+      if (testW <= maxSafeTextW) {
+        cur = test;
+      } else {
+        lines.push(cur);
+        cur = word;
+      }
+    }
+    lines.push(cur);
+  }
+  const activeLines = lines.length > 0 ? lines : [text];
+  let maxLineW = 0;
+  activeLines.forEach((l) => {
+    const lw = mCtx ? mCtx.measureText(l).width : l.length * fontSize * 0.65;
+    if (lw > maxLineW) maxLineW = lw;
+  });
+
+  let effectiveFontSize = fontSize;
+  if (maxLineW > maxSafeTextW && maxLineW > 0) {
+    effectiveFontSize = Math.max(13, Math.round(fontSize * (maxSafeTextW / maxLineW)));
+    if (mCtx) {
+      mCtx.font = `800 ${effectiveFontSize}px "${itemClip.fontFamily || 'Plus Jakarta Sans'}", sans-serif`;
+    }
+    maxLineW = 0;
+    activeLines.forEach((l) => {
+      const lw = mCtx ? mCtx.measureText(l).width : l.length * effectiveFontSize * 0.65;
+      if (lw > maxLineW) maxLineW = lw;
+    });
+  }
+
+  const lineHeight = Math.round(effectiveFontSize * 1.25);
+  const totalTextH = activeLines.length * lineHeight;
+  const padX = effectiveFontSize * 0.8;
+  const padY = effectiveFontSize * 0.5;
+  const rawBoxW = (maxLineW + padX * 2) * absScaleX + 28 * dpiScale;
+  const rawBoxH = (totalTextH + padY * 2) * absScaleY + 28 * dpiScale;
   const frameWidth = Math.min(w, Math.max(64, Math.ceil(rawBoxW / 2) * 2));
   const frameHeight = Math.min(h, Math.max(40, Math.ceil(rawBoxH / 2) * 2));
   const boxX = Math.max(0, Math.min(w - frameWidth, Math.round(tx - frameWidth / 2)));
@@ -309,29 +355,36 @@ async function renderOverlayClipToSpriteData(
   }
   ctx.scale(scaleXFactor, scaleYFactor);
 
-  ctx.font = `800 ${fontSize}px "${itemClip.fontFamily || 'Plus Jakarta Sans'}", sans-serif`;
+  ctx.font = `800 ${effectiveFontSize}px "${itemClip.fontFamily || 'Plus Jakarta Sans'}", sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const textW = ctx.measureText(text).width;
+
   if (itemClip.textBgColor && itemClip.textBgColor !== 'transparent') {
-    const bgPadX = fontSize * 0.65;
-    const bgPadY = fontSize * 0.35;
+    const bgPadX = effectiveFontSize * 0.65;
+    const bgPadY = effectiveFontSize * 0.35;
+    const bgW = maxLineW + bgPadX * 2;
+    const bgH = totalTextH + bgPadY * 2;
     ctx.fillStyle = itemClip.textBgColor;
     ctx.beginPath();
     ctx.roundRect(
-      -textW / 2 - bgPadX,
-      -fontSize / 2 - bgPadY,
-      textW + bgPadX * 2,
-      fontSize + bgPadY * 2,
+      -bgW / 2,
+      -bgH / 2,
+      bgW,
+      bgH,
       8 * dpiScale
     );
     ctx.fill();
   }
-  ctx.lineWidth = Math.max(3, Math.round(fontSize * 0.16));
+  ctx.lineWidth = Math.max(3, Math.round(effectiveFontSize * 0.16));
   ctx.strokeStyle = itemClip.textStrokeColor || '#000000';
-  ctx.strokeText(text, 0, 0);
   ctx.fillStyle = itemClip.textColor || '#FFFFFF';
-  ctx.fillText(text, 0, 0);
+
+  const startY = -totalTextH / 2 + lineHeight * 0.5;
+  activeLines.forEach((l, idx) => {
+    const lineY = startY + idx * lineHeight;
+    ctx.strokeText(l, 0, lineY);
+    ctx.fillText(l, 0, lineY);
+  });
   ctx.restore();
 
   const pngBase64 = c.toDataURL('image/png');
@@ -1821,7 +1874,6 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           ? mobileTargetBps
           : Math.max(8_000_000, Math.min(85_000_000, exportSpec.videoBitsPerSecond || 24_000_000));
 
-        let recorder: MediaRecorder;
         const buildRecorder = (bps: number): MediaRecorder => {
           if (mimeType) {
             return new MediaRecorder(videoStream, {
@@ -1836,21 +1888,29 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           });
         };
 
-        try {
-          recorder = buildRecorder(effectiveTargetBps);
-        } catch {
+        const testBitrates = [
+          effectiveTargetBps,
+          Math.round(effectiveTargetBps * 0.8),
+          12_000_000,
+          9_000_000,
+          6_000_000,
+          4_500_000,
+          3_000_000,
+        ];
+        let recorder: MediaRecorder | null = null;
+        for (const bps of testBitrates) {
           try {
-            recorder = buildRecorder(20_000_000);
+            recorder = buildRecorder(bps);
+            break;
           } catch {
-            try {
-              recorder = buildRecorder(12_000_000);
-            } catch {
-              try {
-                recorder = buildRecorder(8_000_000);
-              } catch {
-                recorder = new MediaRecorder(videoStream);
-              }
-            }
+            // try next bitrate level
+          }
+        }
+        if (!recorder) {
+          try {
+            recorder = new MediaRecorder(videoStream, { videoBitsPerSecond: 4_000_000 });
+          } catch {
+            recorder = new MediaRecorder(videoStream);
           }
         }
         activeRecorderRef.current = recorder;
@@ -1870,16 +1930,42 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
         });
 
         const fullTimelineSec = Math.max(1.0, totalDuration);
-        const frameIntervalMs = Math.max(15, Math.round(1000 / targetFps));
 
-        recorder.start(250);
-        const recordStartMs = performance.now();
+        // Pre-roll first video clip and verify active playback motion BEFORE recording begins to eliminate 0.8s initial freeze
         if (firstClip) {
           const firstEntry = preloadedVideos.get(firstClip.id);
           if (firstEntry) {
-            firstEntry.el.play().catch(() => {});
+            const startSec = Math.max(0, firstClip.sourceIn || 0);
+            const spd = Math.max(0.25, Math.min(4.0, firstClip.speed || 1.0));
+            firstEntry.el.playbackRate = spd;
+            firstEntry.el.currentTime = startSec;
+            try {
+              await firstEntry.el.play();
+            } catch {
+              // Ignore
+            }
+            await new Promise<void>((resolve) => {
+              let done = false;
+              const finish = () => {
+                if (done) return;
+                done = true;
+                firstEntry.el.removeEventListener('timeupdate', checkMotion);
+                resolve();
+              };
+              const checkMotion = () => {
+                if (firstEntry.el.currentTime > startSec + 0.015) {
+                  finish();
+                }
+              };
+              firstEntry.el.addEventListener('timeupdate', checkMotion);
+              window.setTimeout(finish, 320);
+            });
           }
         }
+        drawCompositeExportFrame(0, 0);
+
+        recorder.start(250);
+        const recordStartMs = performance.now();
         let frameCounter = 0;
         let lastProgressUpdateMs = 0;
 
@@ -2008,7 +2094,15 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             setProgress(Math.max(18, pct));
           }
 
-          await new Promise((r) => setTimeout(r, frameIntervalMs));
+          // High-precision paced frame timing to lock exact 30fps without stutter or jitter on mobile
+          const nextTargetTimeMs = recordStartMs + frameCounter * (1000 / targetFps);
+          const curTimeMs = performance.now();
+          const sleepMs = Math.max(0, Math.round(nextTargetTimeMs - curTimeMs));
+          if (sleepMs > 0) {
+            await new Promise((r) => setTimeout(r, sleepMs));
+          } else {
+            await new Promise((r) => setTimeout(r, 0));
+          }
         }
 
         if (recorder.state !== 'inactive') {

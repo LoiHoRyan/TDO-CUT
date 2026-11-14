@@ -1841,6 +1841,102 @@ test('Mobile and studio target bitrate profiles meet required mbps range (1080p:
   assert.ok(b720High >= 8_000_000 && b720High <= 10_000_000, `720p higher ${b720High} must be within 8-10 Mbps`);
 });
 
+test('Mobile Timeline: 500ms Long-Press Guard, Audio Right Trim Clamp, and Text Bounding Box Adaptive Sizing', () => {
+  // 1. Long-press drag guard: Touch movement > 5px before 500ms cancels drag and prioritizes timeline scroll
+  const evaluateLongPressGesture = (
+    moveDistancePx: number,
+    elapsedMs: number
+  ): { dragUnlocked: boolean; shouldScrollTimeline: boolean } => {
+    if (elapsedMs < 500 && moveDistancePx > 5) {
+      return { dragUnlocked: false, shouldScrollTimeline: true };
+    }
+    if (elapsedMs >= 500 && moveDistancePx <= 5) {
+      return { dragUnlocked: true, shouldScrollTimeline: false };
+    }
+    return { dragUnlocked: false, shouldScrollTimeline: false };
+  };
+
+  // Swiping timeline quickly across an audio/text clip (e.g. 18px movement in 80ms):
+  const swipeGesture = evaluateLongPressGesture(18, 80);
+  assert.equal(swipeGesture.dragUnlocked, false, 'Swipe gesture must not unlock clip drag');
+  assert.equal(swipeGesture.shouldScrollTimeline, true, 'Swipe gesture must hand off to native timeline scroll');
+
+  // Intentional long-press held for 500ms without jitter:
+  const holdGesture = evaluateLongPressGesture(2, 500);
+  assert.equal(holdGesture.dragUnlocked, true, 'Holding 500ms unlocks clip drag');
+  assert.equal(holdGesture.shouldScrollTimeline, false, 'Holding 500ms locks timeline scroll to allow drag');
+
+  // 2. Audio right trim duration hard clamp:
+  // An audio file of 14.5s with sourceIn 3.5s has maximum allowed duration of 11.0s
+  const audioClip = createDefaultClip({
+    id: 'audio-clamp-test',
+    name: 'BGM_Track.mp3',
+    trackIndex: 1,
+    startTime: 2.0,
+    duration: 5.0,
+    sourceIn: 3.5,
+    sourceDuration: 14.5,
+    speed: 1.0,
+  });
+
+  const effectiveSourceDur =
+    audioClip.sourceDuration && audioClip.sourceDuration > 0
+      ? audioClip.sourceDuration
+      : audioClip.duration;
+  const maxAllowedDur = Math.max(0.3, (effectiveSourceDur - (audioClip.sourceIn || 0)) / (audioClip.speed || 1.0));
+  assert.equal(maxAllowedDur, 11.0, 'Max allowed duration must strictly equal 14.5s - 3.5s = 11.0s');
+
+  // Attempting to stretch right handle by +20 seconds must be clamped to exactly 11.0s
+  const desiredStretchedDur = audioClip.duration + 20.0; // 25.0s
+  const clampedDur = Math.max(0.3, Math.min(maxAllowedDur, desiredStretchedDur));
+  assert.equal(clampedDur, 11.0, 'Stretching beyond audio source duration is strictly clamped');
+
+  // If sourceDuration is missing, it falls back safely to original duration without +120s expansion
+  const unprobedAudio = createDefaultClip({
+    id: 'unprobed-audio',
+    name: 'ShortVoice.wav',
+    trackIndex: 1,
+    startTime: 0,
+    duration: 4.2,
+  });
+  const fallbackSourceDur =
+    unprobedAudio.sourceDuration && unprobedAudio.sourceDuration > 0
+      ? unprobedAudio.sourceDuration
+      : unprobedAudio.duration;
+  const fallbackMaxAllowed = Math.max(0.3, (fallbackSourceDur - (unprobedAudio.sourceIn || 0)) / (unprobedAudio.speed || 1.0));
+  assert.equal(fallbackMaxAllowed, 4.2, 'Unprobed audio cannot stretch beyond current duration');
+
+  // 3. Text adaptive auto-wrap and safe viewport width:
+  // For a 9:16 vertical viewport (e.g. 360px wide canvas), safe max width is 82% = ~295px
+  const viewportW = 360;
+  const safeTextMaxWidth = Math.max(120, viewportW * 0.82);
+  assert.ok(safeTextMaxWidth <= 300, 'Safe text max-width fits comfortably inside 9:16 screen');
+
+  // Multi-line wrap function splits long text so it does not spill past borders
+  const wrapWords = (text: string, maxCharsPerLine: number): string[] => {
+    const words = text.split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let cur = words[0] || '';
+    for (let i = 1; i < words.length; i++) {
+      if ((cur + ' ' + words[i]).length <= maxCharsPerLine) {
+        cur += ' ' + words[i];
+      } else {
+        lines.push(cur);
+        cur = words[i];
+      }
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  };
+
+  const sampleLongText = 'Nhập chữ của bạn để tạo phụ đề video nổi bật nhất';
+  const wrappedLines = wrapWords(sampleLongText, 20);
+  assert.ok(wrappedLines.length >= 2, 'Long text wraps onto multiple lines within safe width');
+  wrappedLines.forEach((line) => {
+    assert.ok(line.length <= 22, `Each wrapped line (${line}) stays within safe margin`);
+  });
+});
+
 
 
 

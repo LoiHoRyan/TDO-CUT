@@ -2441,9 +2441,50 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
           ctx.lineJoin = 'round';
           ctx.miterLimit = 2;
           const textStr = itemClip.subtitleText || itemClip.stickerText || itemClip.name;
-          const metrics = ctx.measureText(textStr);
-          const padX = Math.round(16 * dpiScale);
-          const padY = Math.round(9 * dpiScale);
+          const maxSafeTextW = Math.max(120, w * 0.82);
+
+          // Multi-line auto-wrap bounded by viewport safe zone
+          const rawParas = textStr.split('\n');
+          const lines: string[] = [];
+          for (const para of rawParas) {
+            const words = para.split(/\s+/).filter(Boolean);
+            if (words.length <= 1) {
+              lines.push(para);
+              continue;
+            }
+            let cur = words[0];
+            for (let i = 1; i < words.length; i++) {
+              const word = words[i];
+              const test = cur + ' ' + word;
+              if (ctx.measureText(test).width <= maxSafeTextW) {
+                cur = test;
+              } else {
+                lines.push(cur);
+                cur = word;
+              }
+            }
+            lines.push(cur);
+          }
+          const activeLines = lines.length > 0 ? lines : [textStr];
+          let maxLineW = Math.max(...activeLines.map((l) => ctx.measureText(l).width));
+
+          // Auto-scale font size down if text exceeds viewport width
+          let activeFontSize = fontSize;
+          if (maxLineW > maxSafeTextW && maxLineW > 0) {
+            const scaleDown = maxSafeTextW / maxLineW;
+            activeFontSize = Math.max(12, Math.round(activeFontSize * scaleDown));
+            ctx.font = `${style} ${weight} ${activeFontSize}px "${
+              itemClip.fontFamily || 'Plus Jakarta Sans'
+            }", sans-serif`;
+            maxLineW = Math.max(...activeLines.map((l) => ctx.measureText(l).width));
+          }
+
+          const lineHeight = Math.round(activeFontSize * 1.25);
+          const totalTextH = activeLines.length * lineHeight;
+          const padX = Math.round(14 * dpiScale);
+          const padY = Math.round(8 * dpiScale);
+          const boxW = maxLineW + padX * 2;
+          const boxH = totalTextH + padY * 2;
 
           if (
             itemClip.textBgColor &&
@@ -2452,10 +2493,10 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
             ctx.fillStyle = itemClip.textBgColor;
             ctx.beginPath();
             ctx.roundRect(
-              -metrics.width / 2 - padX,
-              -fontSize,
-              metrics.width + padX * 2,
-              fontSize + padY * 2,
+              -boxW / 2,
+              -boxH / 2,
+              boxW,
+              boxH,
               6 * dpiScale
             );
             ctx.fill();
@@ -2472,17 +2513,17 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
               ? itemClip.textStrokeWidth === 0
                 ? 0
                 : Math.max(0.5, itemClip.textStrokeWidth * dpiScale)
-              : Math.max(2.5, Math.round(fontSize * 0.16));
+              : Math.max(2.5, Math.round(activeFontSize * 0.16));
           const hasStroke = strokeW > 0 && itemClip.textStrokeColor !== 'transparent';
           ctx.lineWidth = strokeW;
           ctx.strokeStyle = itemClip.textStrokeColor || 'rgba(0,0,0,0.95)';
           ctx.fillStyle = itemClip.textColor || '#FFFFFF';
 
           const curveDeg = itemClip.textCurveDeg || 0;
-          if (Math.abs(curveDeg) >= 3 && textStr.length > 1) {
+          if (Math.abs(curveDeg) >= 3 && textStr.length > 1 && activeLines.length === 1) {
             const chars = Array.from(textStr);
             const totalAngleRad = (curveDeg * Math.PI) / 180;
-            const radius = Math.max(fontSize * 2, metrics.width / Math.max(0.25, Math.abs(totalAngleRad)));
+            const radius = Math.max(activeFontSize * 2, maxLineW / Math.max(0.25, Math.abs(totalAngleRad)));
             const dir = curveDeg >= 0 ? 1 : -1;
             ctx.save();
             ctx.translate(0, dir * radius * 0.35);
@@ -2498,8 +2539,12 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
             });
             ctx.restore();
           } else {
-            if (hasStroke) ctx.strokeText(textStr, 0, 0);
-            ctx.fillText(textStr, 0, 0);
+            const startY = -boxH / 2 + padY + activeFontSize * 0.85;
+            activeLines.forEach((l, idx) => {
+              const lineY = startY + idx * lineHeight;
+              if (hasStroke) ctx.strokeText(l, 0, lineY);
+              ctx.fillText(l, 0, lineY);
+            });
           }
 
           if (showCanvasBoundingBox && selectedClipId === itemClip.id && !isHighResExport) {
@@ -2507,16 +2552,16 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
             ctx.strokeStyle = '#00E5CC';
             ctx.lineWidth = 2 * dpiScale;
             ctx.strokeRect(
-              -metrics.width / 2 - padX,
-              -fontSize - 4 * dpiScale,
-              metrics.width + padX * 2,
-              fontSize + padY * 2
+              -boxW / 2,
+              -boxH / 2,
+              boxW,
+              boxH
             );
             const corners = [
-              [-metrics.width / 2 - padX, -fontSize - 4 * dpiScale],
-              [metrics.width / 2 + padX, -fontSize - 4 * dpiScale],
-              [-metrics.width / 2 - padX, padY * 2 - 4 * dpiScale],
-              [metrics.width / 2 + padX, padY * 2 - 4 * dpiScale],
+              [-boxW / 2, -boxH / 2],
+              [boxW / 2, -boxH / 2],
+              [-boxW / 2, boxH / 2],
+              [boxW / 2, boxH / 2],
             ];
             ctx.fillStyle = '#FFFFFF';
             for (const [cx, cy] of corners) {
@@ -2527,12 +2572,12 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
             }
           }
 
-          const totalBoxW = (metrics.width + padX * 2 + 16 * dpiScale) * textScale;
-          const totalBoxH = (fontSize + padY * 2 + 16 * dpiScale) * textScale;
+          const totalBoxW = (boxW + 8 * dpiScale) * textScale;
+          const totalBoxH = (boxH + 8 * dpiScale) * textScale;
           const boundEntry = {
             clipId: itemClip.id,
             x: (tx - totalBoxW / 2) / w,
-            y: (ty - fontSize * textScale - 8 * dpiScale) / h,
+            y: (ty - totalBoxH / 2) / h,
             w: totalBoxW / w,
             h: totalBoxH / h,
             origPosX: itemClip.posX || 0,

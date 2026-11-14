@@ -352,8 +352,14 @@ function startListening(
           const wasKilled = tryFreePort(port);
           if (wasKilled) {
             setTimeout(() => {
-              server.listen(port, host);
-            }, 250);
+              try {
+                server.close(() => {
+                  server.listen(port, host);
+                });
+              } catch {
+                server.listen(port, host);
+              }
+            }, 300);
             return;
           }
         }
@@ -363,7 +369,15 @@ function startListening(
           retriedCurrentPort = false;
           console.log(`[Server] Falling back to port ${port}...`);
           tryFreePort(port);
-          server.listen(port, host);
+          setTimeout(() => {
+            try {
+              server.close(() => {
+                server.listen(port, host);
+              });
+            } catch {
+              server.listen(port, host);
+            }
+          }, 150);
         } else {
           server.removeListener('listening', onListening);
           reject(err);
@@ -1134,8 +1148,9 @@ async function startServer() {
               String(safeFps),
               '-sc_threshold',
               '0',
+              '-start_at_zero',
               '-avoid_negative_ts',
-              'make_zero',
+              'disabled',
               '-c:a',
               'libopus',
               '-b:a',
@@ -1174,8 +1189,9 @@ async function startServer() {
               String(Math.max(12, Math.round(safeFps / 2))),
               '-sc_threshold',
               '0',
+              '-start_at_zero',
               '-avoid_negative_ts',
-              'make_zero',
+              'disabled',
               '-pix_fmt',
               'yuv420p',
               '-color_primaries',
@@ -1195,7 +1211,7 @@ async function startServer() {
               '-ac',
               '2',
               '-movflags',
-              '+faststart'
+              '+faststart+negative_cts_offsets'
             );
           }
 

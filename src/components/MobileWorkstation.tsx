@@ -254,6 +254,9 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
   const [audioSearch, setAudioSearch] = useState('');
   const [activePlayingAudioId, setActivePlayingAudioId] = useState<string | null>(null);
 
+  // 500ms Long-press Active State for Audio & Text Timeline Clips
+  const [activeLongPressClipId, setActiveLongPressClipId] = useState<string | null>(null);
+
   // Touch Timeline Drag Ref
   const timelineScrollRef = useRef<HTMLDivElement>(null);
   const isDraggingTimeline = useRef(false);
@@ -894,11 +897,11 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     }
   };
 
-  // Audio Timeline Drag & Trim Handlers (with magnetic snapping & source duration clamp)
+  // Audio Timeline Drag & Trim Handlers (with 500ms long-press guard, magnetic snapping & source duration clamp)
   const handleAudioDragTouchStart = (clip: TimelineClip, e: React.TouchEvent) => {
-    e.stopPropagation();
-    isDraggingTimeline.current = false;
+    // Note: Do not call e.stopPropagation() here so swipe gestures can scroll the timeline naturally!
     const startX = e.touches[0].clientX;
+    const startY = e.touches[0].clientY;
     const origStartTime = clip.startTime;
     const snapThreshold = 14 / pxPerSec;
     const snapPoints = [
@@ -906,10 +909,46 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       ...clips.filter((c) => c.id !== clip.id).flatMap((c) => [c.startTime, c.startTime + c.duration]),
     ];
 
+    let isUnlocked = false;
+    let timer: number | null = null;
+
+    const cleanup = () => {
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchcancel', onTouchEnd);
+    };
+
+    timer = window.setTimeout(() => {
+      isUnlocked = true;
+      setActiveLongPressClipId(clip.id);
+      isDraggingTimeline.current = false;
+      try {
+        navigator.vibrate?.(40);
+      } catch {}
+    }, 500);
+
     const onTouchMove = (ev: TouchEvent) => {
       if (ev.touches.length === 0) return;
+      const curX = ev.touches[0].clientX;
+      const curY = ev.touches[0].clientY;
+      const dist = Math.hypot(curX - startX, curY - startY);
+
+      if (!isUnlocked) {
+        // If finger moved > 5px before 500ms, abort long-press and let timeline scroll
+        if (dist > 5) {
+          cleanup();
+        }
+        return;
+      }
+
+      // 500ms held: lock timeline scroll and drag clip
       if (ev.cancelable) ev.preventDefault();
-      const dx = ev.touches[0].clientX - startX;
+      isDraggingTimeline.current = false;
+      const dx = curX - startX;
       const deltaSec = dx / pxPerSec;
       let newStart = Math.max(0, origStartTime + deltaSec);
 
@@ -931,9 +970,10 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     };
 
     const onTouchEnd = () => {
-      window.removeEventListener('touchmove', onTouchMove);
-      window.removeEventListener('touchend', onTouchEnd);
-      window.removeEventListener('touchcancel', onTouchEnd);
+      cleanup();
+      if (isUnlocked) {
+        setActiveLongPressClipId(null);
+      }
     };
 
     window.addEventListener('touchmove', onTouchMove, { passive: false });
@@ -992,7 +1032,11 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     const origDuration = clip.duration;
     const sourceIn = clip.sourceIn || 0;
     const speed = clip.speed || 1.0;
-    const maxSourceDur = clip.sourceDuration && clip.sourceDuration > 0 ? clip.sourceDuration : (origDuration + 120);
+    const effectiveSourceDur =
+      clip.sourceDuration && clip.sourceDuration > 0
+        ? clip.sourceDuration
+        : origDuration;
+    const maxAllowedDur = Math.max(0.3, (effectiveSourceDur - sourceIn) / speed);
     const snapThreshold = 14 / pxPerSec;
     const snapPoints = [
       playheadSec,
@@ -1029,7 +1073,6 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
         onUpdateClipProp('duration', Number(newDur.toFixed(2)), clip.id);
         onUpdateClipProp('sourceIn', Number(newSourceIn.toFixed(2)), clip.id);
       } else {
-        const maxAllowedDur = Math.max(0.3, (maxSourceDur - sourceIn) / speed);
         const desiredDur = origDuration + deltaSec;
         let clampedDur = Math.max(0.3, Math.min(maxAllowedDur, desiredDur));
         const targetEnd = clip.startTime + clampedDur;
@@ -1072,7 +1115,11 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     const origDuration = clip.duration;
     const sourceIn = clip.sourceIn || 0;
     const speed = clip.speed || 1.0;
-    const maxSourceDur = clip.sourceDuration && clip.sourceDuration > 0 ? clip.sourceDuration : (origDuration + 120);
+    const effectiveSourceDur =
+      clip.sourceDuration && clip.sourceDuration > 0
+        ? clip.sourceDuration
+        : origDuration;
+    const maxAllowedDur = Math.max(0.3, (effectiveSourceDur - sourceIn) / speed);
     const snapThreshold = 14 / pxPerSec;
     const snapPoints = [
       playheadSec,
@@ -1106,7 +1153,6 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
         onUpdateClipProp('duration', Number(newDur.toFixed(2)), clip.id);
         onUpdateClipProp('sourceIn', Number(newSourceIn.toFixed(2)), clip.id);
       } else {
-        const maxAllowedDur = Math.max(0.3, (maxSourceDur - sourceIn) / speed);
         const desiredDur = origDuration + deltaSec;
         let clampedDur = Math.max(0.3, Math.min(maxAllowedDur, desiredDur));
         const targetEnd = clip.startTime + clampedDur;
@@ -1134,11 +1180,11 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     window.addEventListener('mouseup', onMouseUp);
   };
 
-  // Text Timeline Drag & Trim Handlers (with magnetic snapping)
+  // Text Timeline Drag & Trim Handlers (with 500ms long-press guard & magnetic snapping)
   const handleTextDragTouchStart = (clip: TimelineClip, e: React.TouchEvent) => {
-    e.stopPropagation();
-    isDraggingTimeline.current = false;
+    // Note: Do not call e.stopPropagation() here so swipe gestures can scroll the timeline naturally!
     const startX = e.touches[0].clientX;
+    const startY = e.touches[0].clientY;
     const origStartTime = clip.startTime;
     const snapThreshold = 14 / pxPerSec;
     const snapPoints = [
@@ -1146,10 +1192,46 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       ...clips.filter((c) => c.id !== clip.id).flatMap((c) => [c.startTime, c.startTime + c.duration]),
     ];
 
+    let isUnlocked = false;
+    let timer: number | null = null;
+
+    const cleanup = () => {
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchcancel', onTouchEnd);
+    };
+
+    timer = window.setTimeout(() => {
+      isUnlocked = true;
+      setActiveLongPressClipId(clip.id);
+      isDraggingTimeline.current = false;
+      try {
+        navigator.vibrate?.(40);
+      } catch {}
+    }, 500);
+
     const onTouchMove = (ev: TouchEvent) => {
       if (ev.touches.length === 0) return;
+      const curX = ev.touches[0].clientX;
+      const curY = ev.touches[0].clientY;
+      const dist = Math.hypot(curX - startX, curY - startY);
+
+      if (!isUnlocked) {
+        // If moved > 5px before 500ms, cancel long-press and allow normal timeline scrolling
+        if (dist > 5) {
+          cleanup();
+        }
+        return;
+      }
+
+      // 500ms held: lock timeline scroll and drag clip
       if (ev.cancelable) ev.preventDefault();
-      const dx = ev.touches[0].clientX - startX;
+      isDraggingTimeline.current = false;
+      const dx = curX - startX;
       const deltaSec = dx / pxPerSec;
       let newStart = Math.max(0, origStartTime + deltaSec);
 
@@ -1170,9 +1252,10 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     };
 
     const onTouchEnd = () => {
-      window.removeEventListener('touchmove', onTouchMove);
-      window.removeEventListener('touchend', onTouchEnd);
-      window.removeEventListener('touchcancel', onTouchEnd);
+      cleanup();
+      if (isUnlocked) {
+        setActiveLongPressClipId(null);
+      }
     };
 
     window.addEventListener('touchmove', onTouchMove, { passive: false });
@@ -2132,8 +2215,10 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                           e.stopPropagation();
                           onSelectClip(clip.id);
                         }}
-                        className={`absolute h-7 rounded-md border flex items-center px-1.5 gap-1.5 text-[9px] font-semibold truncate cursor-grab active:cursor-grabbing shadow-xs ${
-                          isSelected
+                        className={`absolute h-7 rounded-md border flex items-center px-1.5 gap-1.5 text-[9px] font-semibold truncate cursor-grab active:cursor-grabbing shadow-xs transition-transform duration-150 ${
+                          activeLongPressClipId === clip.id
+                            ? 'scale-[1.03] ring-2 ring-[#00E5CC] shadow-xl shadow-cyan-500/40 z-30 bg-[#0284C7] text-white'
+                            : isSelected
                             ? 'bg-[#0284C7]/50 border-2 border-white ring-2 ring-[#0284C7]/60 text-white z-10'
                             : 'bg-[#0284C7]/30 border-[#0284C7] text-[#38BDF8]'
                         }`}
@@ -2254,8 +2339,10 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                           setTextEditTab('text');
                           setActiveDrawer('text_edit');
                         }}
-                        className={`absolute h-5 rounded-full border px-1 flex items-center gap-1 text-[8.5px] font-bold truncate cursor-grab active:cursor-grabbing transition-all select-none ${
-                          isSelected
+                        className={`absolute h-5 rounded-full border px-1 flex items-center gap-1 text-[8.5px] font-bold truncate cursor-grab active:cursor-grabbing transition-all select-none duration-150 ${
+                          activeLongPressClipId === clip.id
+                            ? 'scale-[1.03] ring-2 ring-[#00E5CC] shadow-xl shadow-cyan-500/40 z-30 bg-[#F97316] text-white'
+                            : isSelected
                             ? 'bg-[#F97316] text-white border-2 border-white ring-2 ring-[#F97316]/50 z-10'
                             : 'bg-[#C2410C]/25 text-[#FB923C] border-[#F97316]'
                         }`}
@@ -3333,12 +3420,13 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                 type="button"
                 onClick={() => {
                   const initialFontSize = resolveDefaultTextFontSizeByAspectRatio(aspectRatio);
+                  const safeFontSize = aspectRatio === '9:16' || aspectRatio === '5.8"' ? 22 : initialFontSize;
                   onDropResource(
                     {
                       kind: 'text',
                       name: 'Văn bản',
-                      subtitleText: 'Nhập chữ của bạn tại đây',
-                      fontSize: initialFontSize,
+                      subtitleText: 'Nhập chữ của bạn',
+                      fontSize: safeFontSize,
                       duration: 4.0,
                     },
                     2,

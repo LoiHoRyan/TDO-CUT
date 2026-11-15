@@ -139,6 +139,7 @@ import {
   translateSubtitleLine,
   TTS_VOICE_PRESETS,
   speakCaptionsSequentially,
+  synthesizeCaptionToAudioClip,
 } from './utils/whisperAutoCaptions';
 import {
   VideoPreviewCanvas,
@@ -1308,6 +1309,8 @@ export default function App() {
   const [isGeneratingCaptions, setIsGeneratingCaptions] = useState<boolean>(false);
   const [captionProgressText, setCaptionProgressText] = useState<string>('');
   const [captionProgressPct, setCaptionProgressPct] = useState<number>(0);
+  const [captionErrorText, setCaptionErrorText] = useState<string>('');
+  const [isGeneratingTts, setIsGeneratingTts] = useState<boolean>(false);
   const [aiFilterPrompt, setAiFilterPrompt] = useState<string>(
     'Giữ lại các cảnh chuyển động nhanh, kịch tính và tự động tạo phụ đề song ngữ Việt - Anh'
   );
@@ -3369,8 +3372,21 @@ export default function App() {
         ? [currentClip]
         : clips;
 
+    setCaptionErrorText('');
     setIsGeneratingCaptions(true);
     setCaptionProgressPct(5);
+    try {
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (AudioCtx) {
+        const unlockCtx = new AudioCtx();
+        await unlockCtx.resume().catch(() => {});
+        await unlockCtx.close().catch(() => {});
+      }
+    } catch {
+      // Ignore unlock error
+    }
     setCaptionProgressText(
       language === 'en' ? 'Preparing audio...' : 'Đang chuẩn bị tách âm thanh...'
     );
@@ -3512,10 +3528,11 @@ export default function App() {
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      setCaptionErrorText(
+        language === 'en' ? `Auto-caption error: ${msg}` : `Lỗi nhận diện phụ đề: ${msg}`
+      );
       showToast(
-        language === 'en'
-          ? `Auto-caption error: ${msg}`
-          : `Lỗi nhận diện phụ đề: ${msg}`
+        language === 'en' ? `Auto-caption error: ${msg}` : `Lỗi nhận diện phụ đề: ${msg}`
       );
     } finally {
       setIsGeneratingCaptions(false);
@@ -3524,23 +3541,92 @@ export default function App() {
     }
   };
 
-  // Batch Text-to-Audio (Dubbing): mutually exclusive between Original captions (Track 2) and Bilingual captions (Track 6)
-  const handleRunBatchTts = () => {
+  // Batch Text-to-Audio (Dubbing): generates real MP3/WAV Audio Clips onto Audio Track anchored at each caption's startTime
+  const handleRunBatchTts = async () => {
+    if (isGeneratingTts) return;
     const targetTrack = ttsSourceTrack === 'bilingual' ? 6 : 2;
-    const selectedSubs = clips
+    const selectedSubClips = clips
       .filter((c) => c.trackIndex === targetTrack && Boolean(c.subtitleText?.trim()))
-      .sort((a, b) => a.startTime - b.startTime)
-      .map((c) => c.subtitleText!.trim());
+      .sort((a, b) => a.startTime - b.startTime);
 
-    if (selectedSubs.length === 0) {
+    if (selectedSubClips.length === 0) {
       showToast(
         ttsSourceTrack === 'bilingual'
-          ? 'Chưa có phụ đề song ngữ (Track 2) để đọc giọng!'
-          : 'Chưa có phụ đề gốc trên Timeline để đọc giọng!'
+          ? 'Chưa có phụ đề song ngữ để chuyển thành giọng nói!'
+          : 'Chưa có phụ đề gốc trên Timeline để chuyển thành giọng nói!'
       );
       return;
     }
-    speakCaptionsSequentially(selectedSubs, ttsLang, ttsPresetId);
+
+    setIsGeneratingTts(true);
+    try {
+      const createdAudioClips: TimelineClip[] = [];
+      let track1End = -1;
+      let needsSecondAudioTrack = false;
+
+      for (let i = 0; i < selectedSubClips.length; i++) {
+        const sub = selectedSubClips[i];
+        const text = sub.subtitleText!.trim();
+        const { mediaUrl, duration, waveformPeaks, speed } = await synthesizeCaptionToAudioClip(
+          text,
+          ttsLang,
+          ttsPresetId
+        );
+
+        let assignedTrack = 1;
+        if (sub.startTime < track1End - 0.05) {
+          assignedTrack = 7;
+          needsSecondAudioTrack = true;
+        } else {
+          track1End = sub.startTime + duration;
+        }
+
+        createdAudioClips.push({
+          id: `tts-aud-${Date.now()}-${i}`,
+          name: `TTS: ${text.slice(0, 24)}`,
+          filePath: `TTS/${text.slice(0, 20)}.mp3`,
+          trackIndex: assignedTrack,
+          startTime: sub.startTime,
+          duration,
+          sourceIn: 0,
+          speed,
+          volume: 100,
+          flipH: false,
+          cropRatio: 1.0,
+          colorHex: '#1E4D5C',
+          mediaUrl,
+          waveformPeaks,
+        });
+      }
+
+      if (needsSecondAudioTrack) {
+        setTimelineTracks((prev) => {
+          if (prev.some((t) => t.index === 7)) return prev;
+          return [
+            ...prev,
+            {
+              id: 7,
+              index: 7,
+              name: 'Giọng đọc AI 2',
+              label: 'Giọng đọc AI 2',
+              type: 'audio' as const,
+              kind: 'audio' as const,
+              heightPx: 34,
+            },
+          ];
+        });
+      }
+
+      commitClips((prev) => [
+        ...prev.filter((c) => !c.id.startsWith('tts-aud-')),
+        ...createdAudioClips,
+      ]);
+      showToast(`Đã tạo ${createdAudioClips.length} thanh âm thanh giọng đọc lên Timeline!`);
+    } catch (err) {
+      showToast(`Lỗi tạo giọng đọc: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsGeneratingTts(false);
+    }
   };
 
     // Text-to-Speech (TTS) via Web Speech API + Audio Sfx Marker
@@ -5633,6 +5719,8 @@ export default function App() {
           isGeneratingCaptions={isGeneratingCaptions}
           captionProgressPct={captionProgressPct}
           captionProgressText={captionProgressText}
+          captionErrorText={captionErrorText}
+          isGeneratingTts={isGeneratingTts}
           captionLanguage={captionLanguage}
           onChangeCaptionLanguage={setCaptionLanguage}
           bilingualSubtitles={bilingualSubtitles}
@@ -7245,7 +7333,7 @@ export default function App() {
                             onClick={handleRunBatchTts}
                             className="col-span-2 py-1.5 bg-[#00CAE0] hover:bg-[#00D8EE] text-[#090D12] font-bold rounded transition-colors cursor-pointer"
                           >
-                            Đọc toàn bộ phụ đề
+                            {isGeneratingTts ? 'Đang tạo âm thanh...' : 'Tạo giọng nói lên Timeline'}
                           </button>
                           <button
                             type="button"
@@ -7983,6 +8071,11 @@ export default function App() {
                           />
                           <span>Lọc từ thừa</span>
                         </label>
+                        {captionErrorText && (
+                          <div className="p-2 bg-rose-500/10 border border-rose-500/30 rounded text-[11px] text-rose-400">
+                            {captionErrorText}
+                          </div>
+                        )}
                         {isGeneratingCaptions && (
                           <div className="p-2 bg-[#141418] border border-[#2C2C36] rounded space-y-1">
                             <div className="flex items-center justify-between text-[10px] text-[#00CAE0]">

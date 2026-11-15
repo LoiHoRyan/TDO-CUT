@@ -304,7 +304,7 @@ async function createWhisperPipeline(
   const progressCallback = (info: any) => {
     if (info?.status === 'progress' && typeof info.progress === 'number') {
       const pct = Math.min(72, Math.max(25, Math.round(25 + info.progress * 0.45)));
-      onProgress?.(pct, `Đang tải mô hình Whisper (${Math.round(info.progress)}%)...`);
+      onProgress?.(pct, `Đang tải mô hình AI: ${Math.round(info.progress)}%...`);
     }
   };
 
@@ -338,8 +338,12 @@ export async function transcribeAudioWithWhisper(
   onProgress?.(22, 'Đang nạp thư viện Whisper AI...');
   const totalDur = audio16k.length / 16000;
   // Use whisper-tiny on mobile or longer videos (> 60s) for speed & stability
+  const isMobileDevice =
+    isMobile ||
+    (typeof window !== 'undefined' && window.innerWidth < 768) ||
+    (typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent));
   const targetModelId =
-    isMobile || totalDur > 60 ? 'onnx-community/whisper-tiny' : 'onnx-community/whisper-base';
+    isMobileDevice || totalDur > 60 ? 'Xenova/whisper-tiny' : 'onnx-community/whisper-base';
 
   if (!cachedPipelinePromise || cachedModelId !== targetModelId) {
     cachedModelId = targetModelId;
@@ -378,6 +382,8 @@ export async function transcribeAudioWithWhisper(
       result = await Promise.race([
         transcriber(slice, {
           return_timestamps: true,
+          chunk_length_s: 30,
+          stride_length_s: 5,
           task: 'transcribe',
           ...(whisperLang ? { language: whisperLang } : {}),
         }),
@@ -519,4 +525,127 @@ export function speakCaptionsSequentially(
     window.speechSynthesis.speak(utter);
   };
   speakNext();
+}
+
+function encodePcmToWavBlob(samples: Float32Array, sampleRate: number): Blob {
+  const buf = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buf);
+  const writeStr = (off: number, s: string) => {
+    for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i));
+  };
+  writeStr(0, 'RIFF');
+  view.setUint32(4, 36 + samples.length * 2, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeStr(36, 'data');
+  view.setUint32(40, samples.length * 2, true);
+  let offset = 44;
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    offset += 2;
+  }
+  return new Blob([buf], { type: 'audio/wav' });
+}
+
+function buildFallbackSpeechWavBlob(text: string, preset: TtsVoicePreset): { blob: Blob; duration: number } {
+  const sampleRate = 22050;
+  const wordCount = Math.max(1, text.trim().split(/\s+/).length);
+  const duration = Math.max(1.0, Math.min(12.0, (wordCount * 0.42) / preset.rate));
+  const totalSamples = Math.floor(duration * sampleRate);
+  const out = new Float32Array(totalSamples);
+  const baseF0 = preset.gender === 'female' ? 215 * preset.pitch : 125 * preset.pitch;
+
+  for (let i = 0; i < totalSamples; i++) {
+    const t = i / sampleRate;
+    const syllableEnv = Math.max(0, Math.sin((t * 3.8 * preset.rate) * Math.PI));
+    const fadeEdge = Math.min(1, t / 0.05) * Math.min(1, (duration - t) / 0.08);
+    const f0 = baseF0 + Math.sin(t * 6.0) * 14;
+    const wave =
+      0.5 * Math.sin(2 * Math.PI * f0 * t) +
+      0.28 * Math.sin(2 * Math.PI * f0 * 2 * t) +
+      0.14 * Math.sin(2 * Math.PI * f0 * 3 * t);
+    out[i] = wave * syllableEnv * fadeEdge * 0.35;
+  }
+  return { blob: encodePcmToWavBlob(out, sampleRate), duration };
+}
+
+export async function synthesizeCaptionToAudioClip(
+  text: string,
+  langCode: string,
+  presetId: string
+): Promise<{ mediaUrl: string; duration: number; waveformPeaks: number[]; speed: number }> {
+  const preset = TTS_VOICE_PRESETS.find((p) => p.id === presetId) || TTS_VOICE_PRESETS[0];
+  const clean = text.trim();
+  const tl = langCode === 'auto' ? 'vi' : langCode.split('-')[0].toLowerCase();
+
+  let audioBlob: Blob | null = null;
+
+  // 1. Try serverless /api/tts endpoint (returns real MP3 across 100+ languages)
+  try {
+    const resp = await fetch(`/api/tts?text=${encodeURIComponent(clean)}&lang=${encodeURIComponent(tl)}`);
+    if (resp.ok && (resp.headers.get('content-type') || '').includes('audio')) {
+      const b = await resp.blob();
+      if (b.size > 200) audioBlob = b;
+    }
+  } catch {
+    // Offline or local dev without /api/tts
+  }
+
+  // 2. Fallback to synthesized WAV Blob if /api/tts unavailable
+  let duration = 1.5;
+  if (!audioBlob) {
+    const fb = buildFallbackSpeechWavBlob(clean, preset);
+    audioBlob = fb.blob;
+    duration = fb.duration;
+  }
+
+  const waveformPeaks: number[] = [];
+  const AudioCtx =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (AudioCtx) {
+    const actx = new AudioCtx();
+    try {
+      const ab = await audioBlob.arrayBuffer();
+      const decoded = await actx.decodeAudioData(ab);
+      duration = Math.max(0.4, decoded.duration / preset.rate);
+      const ch = decoded.getChannelData(0);
+      const buckets = 60;
+      const step = Math.max(1, Math.floor(ch.length / buckets));
+      let maxP = 0.01;
+      const raw: number[] = [];
+      for (let b = 0; b < buckets; b++) {
+        let localMax = 0;
+        const start = b * step;
+        const end = Math.min(ch.length, start + step);
+        for (let s = start; s < end; s += Math.max(1, Math.floor((end - start) / 16))) {
+          const v = Math.abs(ch[s]);
+          if (v > localMax) localMax = v;
+        }
+        if (localMax > maxP) maxP = localMax;
+        raw.push(localMax);
+      }
+      raw.forEach((p) => waveformPeaks.push(Number(Math.max(0.1, Math.min(0.95, p / maxP)).toFixed(2))));
+    } catch {
+      // Keep estimated duration
+    } finally {
+      actx.close().catch(() => {});
+    }
+  }
+
+  const mediaUrl = URL.createObjectURL(audioBlob);
+  return {
+    mediaUrl,
+    duration: Number(duration.toFixed(2)),
+    waveformPeaks: waveformPeaks.length > 0 ? waveformPeaks : [0.3, 0.7, 0.5, 0.8, 0.4, 0.6],
+    speed: preset.rate,
+  };
 }

@@ -137,6 +137,8 @@ export interface MobileWorkstationProps {
   isGeneratingCaptions?: boolean;
   captionProgressPct?: number;
   captionProgressText?: string;
+  captionErrorText?: string;
+  isGeneratingTts?: boolean;
   captionLanguage?: string;
   onChangeCaptionLanguage?: (lang: string) => void;
   bilingualSubtitles?: boolean;
@@ -258,6 +260,8 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
   isGeneratingCaptions = false,
   captionProgressPct = 0,
   captionProgressText = '',
+  captionErrorText = '',
+  isGeneratingTts = false,
   captionLanguage = 'auto',
   onChangeCaptionLanguage,
   bilingualSubtitles = false,
@@ -823,72 +827,89 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     window.addEventListener('mouseup', onMouseUp);
   };
 
-  // Reorder mode states and handlers (Long-press on Track 0 clip to turn clips into square cards)
+  // Reorder mode states and handlers (180ms long-press -> exact grabOffsetX + rAF translate3d)
   const [isReordering, setIsReordering] = useState(false);
   const [reorderDraggingClipId, setReorderDraggingClipId] = useState<string | null>(null);
   const [reorderClips, setReorderClips] = useState<TimelineClip[]>([]);
   const [reorderFingerOffsetX, setReorderFingerOffsetX] = useState<number>(0);
-  const reorderOriginXRef = useRef<number | null>(null);
   const isReorderingRef = useRef(false);
   const reorderDraggingClipIdRef = useRef<string | null>(null);
   const reorderClipsRef = useRef<TimelineClip[]>([]);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const longPressStartPos = useRef<{ x: number; y: number } | null>(null);
+  const reorderGrabOffsetXRef = useRef<number>(24);
+  const reorderSlotStartXRef = useRef<number>(0);
+  const reorderRafIdRef = useRef<number | null>(null);
+  const latestFingerClientXRef = useRef<number>(0);
 
-  const startReorderTimer = (clip: TimelineClip, clientX: number, clientY: number) => {
+  const startReorderTimer = (clip: TimelineClip, clientX: number, clientY: number, clipEl?: HTMLElement | null) => {
     if (isReorderingRef.current) return;
     longPressStartPos.current = { x: clientX, y: clientY };
+    const clipRect = clipEl?.getBoundingClientRect();
+    const rawGrab = clipRect ? clientX - clipRect.left : 24;
+    reorderGrabOffsetXRef.current = Math.max(8, Math.min(40, rawGrab));
+
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
     longPressTimerRef.current = setTimeout(() => {
       try {
         if (typeof navigator !== 'undefined' && navigator.vibrate) {
-          navigator.vibrate(60);
+          navigator.vibrate(30);
         }
       } catch {
-        // Ignore vibration errors
+        // Ignore
       }
       isReorderingRef.current = true;
       setIsReordering(true);
       reorderDraggingClipIdRef.current = clip.id;
       setReorderDraggingClipId(clip.id);
-      reorderOriginXRef.current = clientX;
-      setReorderFingerOffsetX(0);
       reorderClipsRef.current = [...videoClips];
       setReorderClips([...videoClips]);
+
+      const idx = videoClips.findIndex((c) => c.id === clip.id);
+      const scrollEl = timelineScrollRef.current;
+      const rect = scrollEl?.getBoundingClientRect();
+      const cardLeftInViewport =
+        (rect?.left || 0) + halfWidth - (scrollEl?.scrollLeft || 0) + Math.max(0, idx) * 56;
+      reorderSlotStartXRef.current = cardLeftInViewport + reorderGrabOffsetXRef.current;
+      latestFingerClientXRef.current = clientX;
+      setReorderFingerOffsetX(clientX - reorderSlotStartXRef.current);
       longPressTimerRef.current = null;
 
       const onWindowTouchMove = (ev: TouchEvent) => {
         if (ev.touches.length > 0) {
+          if (ev.cancelable) ev.preventDefault();
           handleReorderMove(ev.touches[0].clientX);
         }
       };
-      const onWindowMouseMove = (ev: MouseEvent) => {
-        if (ev.buttons > 0) {
-          handleReorderMove(ev.clientX);
-        }
+      const onWindowPointerMove = (ev: PointerEvent) => {
+        handleReorderMove(ev.clientX);
       };
-      const cleanupListeners = () => {
+      const onWindowEnd = () => {
         window.removeEventListener('touchmove', onWindowTouchMove);
-        window.removeEventListener('touchend', onWindowTouchEnd);
-        window.removeEventListener('touchcancel', onWindowTouchEnd);
-        window.removeEventListener('mousemove', onWindowMouseMove);
-        window.removeEventListener('mouseup', onWindowMouseUp);
-      };
-      const onWindowTouchEnd = () => {
+        window.removeEventListener('touchend', onWindowEnd);
+        window.removeEventListener('touchcancel', onWindowEnd);
+        window.removeEventListener('pointermove', onWindowPointerMove);
+        window.removeEventListener('pointerup', onWindowEnd);
+        window.removeEventListener('pointercancel', onWindowEnd);
         handleReorderEnd();
-        cleanupListeners();
       };
-      const onWindowMouseUp = () => {
-        handleReorderEnd();
-        cleanupListeners();
-      };
-
       window.addEventListener('touchmove', onWindowTouchMove, { passive: false });
-      window.addEventListener('touchend', onWindowTouchEnd);
-      window.addEventListener('touchcancel', onWindowTouchEnd);
-      window.addEventListener('mousemove', onWindowMouseMove);
-      window.addEventListener('mouseup', onWindowMouseUp);
-    }, 1000);
+      window.addEventListener('touchend', onWindowEnd);
+      window.addEventListener('touchcancel', onWindowEnd);
+      window.addEventListener('pointermove', onWindowPointerMove);
+      window.addEventListener('pointerup', onWindowEnd);
+      window.addEventListener('pointercancel', onWindowEnd);
+    }, 180);
+  };
+
+  const checkCancelReorderTimer = (clientX: number, clientY: number) => {
+    if (!longPressTimerRef.current || !longPressStartPos.current) return;
+    const dx = Math.abs(clientX - longPressStartPos.current.x);
+    const dy = Math.abs(clientY - longPressStartPos.current.y);
+    if (dx > 10 || dy > 10) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
   };
 
   const cancelReorderTimer = () => {
@@ -896,51 +917,53 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
-    longPressStartPos.current = null;
-  };
-
-  const checkCancelReorder = (clientX: number, clientY: number) => {
-    if (longPressTimerRef.current && longPressStartPos.current) {
-      const dist = Math.hypot(clientX - longPressStartPos.current.x, clientY - longPressStartPos.current.y);
-      if (dist > 15) {
-        cancelReorderTimer();
-      }
-    }
   };
 
   const handleReorderMove = (clientX: number) => {
     if (!isReorderingRef.current || !reorderDraggingClipIdRef.current) return;
-    if (reorderOriginXRef.current === null) reorderOriginXRef.current = clientX;
-    setReorderFingerOffsetX(clientX - reorderOriginXRef.current);
-    const scrollEl = timelineScrollRef.current;
-    if (!scrollEl) return;
-    const rect = scrollEl.getBoundingClientRect();
-    const cardStartX = halfWidth;
-    const localX = clientX - rect.left + scrollEl.scrollLeft - cardStartX;
-    const cardStep = 56;
-    const currentClips = reorderClipsRef.current;
-    const targetIdx = Math.max(0, Math.min(currentClips.length - 1, Math.floor(localX / cardStep)));
-    const currentIdx = currentClips.findIndex((c) => c.id === reorderDraggingClipIdRef.current);
-    if (currentIdx !== -1 && currentIdx !== targetIdx) {
-      const next = [...currentClips];
-      const [removed] = next.splice(currentIdx, 1);
-      next.splice(targetIdx, 0, removed);
-      reorderClipsRef.current = next;
-      setReorderClips(next);
-      reorderOriginXRef.current = clientX;
-      setReorderFingerOffsetX(0);
-      try {
-        if (typeof navigator !== 'undefined' && navigator.vibrate) {
-          navigator.vibrate(25);
+    latestFingerClientXRef.current = clientX;
+
+    if (reorderRafIdRef.current !== null) return;
+    reorderRafIdRef.current = requestAnimationFrame(() => {
+      reorderRafIdRef.current = null;
+      if (!isReorderingRef.current || !reorderDraggingClipIdRef.current) return;
+
+      const fx = latestFingerClientXRef.current;
+      const scrollEl = timelineScrollRef.current;
+      if (!scrollEl) return;
+      const rect = scrollEl.getBoundingClientRect();
+      const cardStep = 56;
+      const localX = fx - rect.left + scrollEl.scrollLeft - halfWidth - reorderGrabOffsetXRef.current + 24;
+      const currentClips = reorderClipsRef.current;
+      const targetIdx = Math.max(0, Math.min(currentClips.length - 1, Math.floor(localX / cardStep)));
+      const currentIdx = currentClips.findIndex((c) => c.id === reorderDraggingClipIdRef.current);
+
+      if (currentIdx !== -1 && currentIdx !== targetIdx) {
+        const next = [...currentClips];
+        const [removed] = next.splice(currentIdx, 1);
+        next.splice(targetIdx, 0, removed);
+        reorderClipsRef.current = next;
+        setReorderClips(next);
+        reorderSlotStartXRef.current =
+          rect.left + halfWidth - scrollEl.scrollLeft + targetIdx * cardStep + reorderGrabOffsetXRef.current;
+        try {
+          if (typeof navigator !== 'undefined' && navigator.vibrate) {
+            navigator.vibrate(25);
+          }
+        } catch {
+          // Ignore
         }
-      } catch {
-        // Ignore
       }
-    }
+      setReorderFingerOffsetX(fx - reorderSlotStartXRef.current);
+    });
   };
 
   const handleReorderEnd = () => {
     cancelReorderTimer();
+    if (reorderRafIdRef.current !== null) {
+      cancelAnimationFrame(reorderRafIdRef.current);
+      reorderRafIdRef.current = null;
+    }
     if (isReorderingRef.current) {
       let cursor = 0;
       const reorderedMap = new Map<string, TimelineClip>();
@@ -951,12 +974,13 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
         });
         cursor += c.duration;
       }
-      const finalClips = clips.map((c) => (reorderedMap.has(c.id) ? reorderedMap.get(c.id)! : c));
+      const finalClips = clips.map((c) => reorderedMap.get(c.id) || c);
       onReorderClips?.(packTrackClipsContiguously(finalClips, 0));
       isReorderingRef.current = false;
-      setIsReordering(false);
       reorderDraggingClipIdRef.current = null;
+      setIsReordering(false);
       setReorderDraggingClipId(null);
+      setReorderFingerOffsetX(0);
     }
   };
 
@@ -2188,8 +2212,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
               {isReordering ? (
                 /* Reorder Mode: Clips shrink into square blocks that can be dragged left/right across other clips */
                 <div
-                  style={{ left: `${halfWidth}px` }}
-                  className="absolute inset-y-0 flex items-center gap-2 z-30 pointer-events-auto"
+                  style={{ left: `${halfWidth}px`, touchAction: "none", userSelect: "none" }} className="absolute inset-y-0 flex items-center gap-2 z-30 pointer-events-auto"
                 >
                   {reorderClips.map((clip, idx) => {
                     const isDraggingThis = reorderDraggingClipId === clip.id;
@@ -2209,11 +2232,15 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                           backgroundImage: clip.thumbnailUrl ? `url(${clip.thumbnailUrl})` : undefined,
                           backgroundSize: 'cover',
                           backgroundPosition: 'center',
+                          touchAction: 'none',
+                          userSelect: 'none',
+                          willChange: 'transform',
+                          transition: isDraggingThis ? 'none' : 'transform 0.2s ease',
                           transform: isDraggingThis
-                            ? `translate3d(${reorderFingerOffsetX}px, -10px, 0) scale(1.15)`
-                            : undefined,
+                            ? `translate3d(${reorderFingerOffsetX}px, -10px, 0) scale(1.12)`
+                            : 'translate3d(0, 0, 0)',
                         }}
-                        className={`w-12 h-12 aspect-square rounded-xl border-2 flex flex-col justify-between p-1 shrink-0 relative transition-transform duration-150 cursor-grab active:cursor-grabbing select-none ${
+                        className={`w-12 h-12 aspect-square rounded-xl border-2 flex flex-col justify-between p-1 shrink-0 relative cursor-grab active:cursor-grabbing select-none ${
                           isDraggingThis
                             ? '-translate-y-2.5 scale-115 border-white ring-2 ring-[#00CAE0] shadow-2xl z-40'
                             : isLight
@@ -3717,6 +3744,11 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                       {captionProgressText || 'Đang nhận diện...'} ({captionProgressPct}%)
                     </div>
                   )}
+                  {captionErrorText && (
+                    <div className="text-[11px] text-rose-400 bg-rose-500/10 border border-rose-500/30 rounded-lg px-2 py-1">
+                      {captionErrorText}
+                    </div>
+                  )}
                   <button
                     type="button"
                     disabled={isGeneratingCaptions}
@@ -3792,7 +3824,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                       onClick={onRunBatchTts}
                       className="col-span-2 py-2 px-3 rounded-lg bg-[#00CAE0] text-[#090D12] font-bold text-xs cursor-pointer"
                     >
-                      Đọc toàn bộ phụ đề đã chọn
+                      {isGeneratingTts ? 'Đang tạo file âm thanh...' : 'Tạo giọng nói lên Timeline'}
                     </button>
                     <button
                       type="button"

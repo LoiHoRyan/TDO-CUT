@@ -44,83 +44,349 @@ import {
 import { webAudioEngine } from '../utils/webAudioSynthesizer';
 import { AspectRatioOption } from './VideoPreviewCanvas';
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
+import { createFile, DataStream } from 'mp4box';
 
 /**
- * Offline video frame seeking helper:
- * Sets currentTime and awaits 'seeked' event, combined with
- * requestVideoFrameCallback (if available) to guarantee the frame is decoded.
+ * Helper to extract pixel dimensions from any CanvasImageSource
+ * (HTMLVideoElement, VideoFrame, ImageBitmap, HTMLImageElement).
  */
-async function seekVideoToTime(vid: HTMLVideoElement, targetTime: number): Promise<void> {
-  if (!vid.seeking && Math.abs(vid.currentTime - targetTime) < 0.001) {
-    return;
+function getDrawableDimensions(drawable: CanvasImageSource): { w: number; h: number } {
+  if ('videoWidth' in drawable && typeof drawable.videoWidth === 'number' && drawable.videoWidth > 0) {
+    return { w: drawable.videoWidth, h: drawable.videoHeight };
   }
+  if ('displayWidth' in drawable && typeof (drawable as VideoFrame).displayWidth === 'number') {
+    return { w: (drawable as VideoFrame).displayWidth, h: (drawable as VideoFrame).displayHeight };
+  }
+  if ('width' in drawable && typeof (drawable as ImageBitmap).width === 'number') {
+    return { w: (drawable as ImageBitmap).width, h: (drawable as ImageBitmap).height };
+  }
+  if ('naturalWidth' in drawable && typeof (drawable as HTMLImageElement).naturalWidth === 'number') {
+    return { w: (drawable as HTMLImageElement).naturalWidth, h: (drawable as HTMLImageElement).naturalHeight };
+  }
+  return { w: 1920, h: 1080 };
+}
 
-  return new Promise<void>((resolve) => {
-    let finished = false;
-    const finish = () => {
-      if (finished) return;
-      finished = true;
-      vid.removeEventListener('seeked', onSeeked);
-      vid.removeEventListener('error', finish);
-      resolve();
-    };
+/**
+ * Seeks <video> element to targetTime and extracts a fresh decoded ImageBitmap.
+ * Avoids requestVideoFrameCallback which stalls on paused mobile videos.
+ * Awaits 'seeked' event then calls createImageBitmap(vid) to force the mobile
+ * GPU compositor to decode and commit the newly-seeked frame.
+ */
+async function seekVideoToTime(
+  vid: HTMLVideoElement,
+  targetTime: number
+): Promise<ImageBitmap | null> {
+  const needsSeek = vid.seeking || Math.abs(vid.currentTime - targetTime) > 0.001;
 
-    const onSeeked = () => {
-      if (
-        'requestVideoFrameCallback' in vid &&
-        typeof (vid as { requestVideoFrameCallback?: (cb: () => void) => number })
-          .requestVideoFrameCallback === 'function'
-      ) {
-        let callbackFired = false;
-        let rvfcId: number | null = null;
-        const rvfcFinish = () => {
-          if (callbackFired) return;
-          callbackFired = true;
-          finish();
-        };
-        try {
-          rvfcId = (
-            vid as { requestVideoFrameCallback: (cb: () => void) => number }
-          ).requestVideoFrameCallback(() => {
-            rvfcFinish();
-          });
-        } catch {
-          finish();
-          return;
-        }
-        setTimeout(() => {
-          if (!callbackFired) {
-            try {
-              if (
-                rvfcId !== null &&
-                (vid as { cancelVideoFrameCallback?: (id: number) => void }).cancelVideoFrameCallback
-              ) {
-                (vid as { cancelVideoFrameCallback: (id: number) => void }).cancelVideoFrameCallback(
-                  rvfcId
-                );
-              }
-            } catch {
-              // Ignore
-            }
-            rvfcFinish();
-          }
-        }, 30);
-      } else {
+  if (needsSeek) {
+    await new Promise<void>((resolve) => {
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        vid.removeEventListener('seeked', finish);
+        vid.removeEventListener('error', finish);
+        resolve();
+      };
+
+      vid.addEventListener('seeked', finish, { once: true });
+      vid.addEventListener('error', finish, { once: true });
+      // Safety guard: max 200ms in case seek stalls or browser drops the event
+      setTimeout(finish, 200);
+
+      try {
+        vid.currentTime = targetTime;
+      } catch {
         finish();
       }
-    };
+    });
+  }
 
-    vid.addEventListener('seeked', onSeeked, { once: true });
-    vid.addEventListener('error', finish, { once: true });
-    // Safety guard: max 250ms in case seek stalls or browser drops the event
-    setTimeout(finish, 250);
+  // Force mobile GPU pipeline to decode and produce the newly seeked frame
+  try {
+    if (typeof createImageBitmap === 'function' && vid.readyState >= 2 && vid.videoWidth > 0) {
+      return await createImageBitmap(vid);
+    }
+  } catch {
+    // Return null to allow fallback to vid directly
+  }
+  return null;
+}
+
+interface Mp4SampleInfo {
+  index: number;
+  dts: number;
+  cts: number;
+  duration: number;
+  timescale: number;
+  timeSec: number;
+  is_sync: boolean;
+  data: Uint8Array;
+}
+
+/**
+ * High-performance WebCodecs VideoDecoder wrapper backed by mp4box demuxer.
+ * Decodes frames directly on GPU without depending on DOM <video> element on mobile.
+ */
+class Mp4DemuxVideoDecoder {
+  private decoder: VideoDecoder | null = null;
+  private config: VideoDecoderConfig | null = null;
+  private samples: Mp4SampleInfo[] = [];
+  private currentFrame: VideoFrame | null = null;
+  private currentSampleIdx: number = -1;
+  private ready: boolean = false;
+  public readonly width: number;
+  public readonly height: number;
+  public readonly durationSec: number;
+
+  private constructor(width: number, height: number, durationSec: number) {
+    this.width = width;
+    this.height = height;
+    this.durationSec = durationSec;
+  }
+
+  static async create(mediaUrl: string): Promise<Mp4DemuxVideoDecoder | null> {
+    if (typeof VideoDecoder === 'undefined' || typeof VideoFrame === 'undefined') {
+      return null;
+    }
+    if (mediaUrl.startsWith('data:image') || mediaUrl.endsWith('.webm')) {
+      return null;
+    }
 
     try {
-      vid.currentTime = targetTime;
+      const response = await fetch(mediaUrl);
+      if (!response.ok) return null;
+      const arrayBuffer = await response.arrayBuffer();
+      // Guard against huge files on mobile RAM (> 150MB)
+      if (arrayBuffer.byteLength > 150 * 1024 * 1024) {
+        return null;
+      }
+
+      const mp4boxfile = createFile();
+
+      const demuxPromise = new Promise<{
+        videoTrack: any;
+        samples: any[];
+        description?: ArrayBuffer;
+      } | null>((resolve) => {
+        let resolved = false;
+        const done = (val: any) => {
+          if (resolved) return;
+          resolved = true;
+          resolve(val);
+        };
+        setTimeout(() => done(null), 4000);
+
+        mp4boxfile.onError = () => done(null);
+        mp4boxfile.onReady = (info: any) => {
+          const videoTrack = info.videoTracks && info.videoTracks[0];
+          if (!videoTrack) {
+            done(null);
+            return;
+          }
+
+          let description: ArrayBuffer | undefined;
+          try {
+            const trak = mp4boxfile.getTrackById(videoTrack.id);
+            if (trak?.mdia?.minf?.stbl?.stsd?.entries) {
+              for (const rawEntry of trak.mdia.minf.stbl.stsd.entries) {
+                const entry = rawEntry as any;
+                const box = entry.avcC || entry.hvcC || entry.vpcC || entry.av1C;
+                if (box) {
+                  const stream = new DataStream();
+                  box.write(stream);
+                  // stream.buffer starts with 4-byte size + 4-byte type; payload begins at offset 8
+                  description = stream.buffer.slice(8);
+                  break;
+                }
+              }
+            }
+          } catch {
+            // Ignore description error
+          }
+
+          const extractedSamples: any[] = [];
+          mp4boxfile.onSamples = (_id: number, _user: any, samples: any[]) => {
+            extractedSamples.push(...samples);
+          };
+
+          mp4boxfile.setExtractionOptions(videoTrack.id, null, { nbSamples: 100000 });
+          mp4boxfile.start();
+
+          setTimeout(() => {
+            done({ videoTrack, samples: extractedSamples, description });
+          }, 40);
+        };
+
+        const buf = arrayBuffer as any;
+        buf.fileStart = 0;
+        try {
+          mp4boxfile.appendBuffer(buf);
+          mp4boxfile.flush();
+        } catch {
+          done(null);
+        }
+      });
+
+      const demuxResult = await demuxPromise;
+      if (!demuxResult || !demuxResult.videoTrack || demuxResult.samples.length === 0) {
+        return null;
+      }
+
+      const { videoTrack, samples, description } = demuxResult;
+      const width = videoTrack.video?.width || videoTrack.track_width || 1280;
+      const height = videoTrack.video?.height || videoTrack.track_height || 720;
+      const timescale = videoTrack.timescale || 1000;
+      const durationSec = (videoTrack.duration || 0) / timescale;
+
+      const decoderConfig: VideoDecoderConfig = {
+        codec: videoTrack.codec,
+        codedWidth: width,
+        codedHeight: height,
+        description,
+        hardwareAcceleration: 'prefer-hardware',
+      };
+
+      const support = await VideoDecoder.isConfigSupported(decoderConfig);
+      if (!support || !support.supported) {
+        decoderConfig.hardwareAcceleration = 'no-preference';
+        const sup2 = await VideoDecoder.isConfigSupported(decoderConfig);
+        if (!sup2 || !sup2.supported) {
+          return null;
+        }
+      }
+
+      const player = new Mp4DemuxVideoDecoder(width, height, durationSec);
+      player.config = decoderConfig;
+      player.samples = samples.map((s, idx) => ({
+        index: idx,
+        dts: s.dts,
+        cts: s.cts,
+        duration: s.duration,
+        timescale: s.timescale || timescale,
+        timeSec: s.cts / (s.timescale || timescale),
+        is_sync: Boolean(s.is_sync),
+        data: s.data,
+      }));
+
+      // Sort samples by CTS presentation timestamp
+      player.samples.sort((a, b) => a.cts - b.cts);
+      player.samples.forEach((s, i) => { s.index = i; });
+
+      player.initDecoder();
+      player.ready = true;
+      return player;
     } catch {
-      finish();
+      return null;
     }
-  });
+  }
+
+  private initDecoder() {
+    if (this.decoder) {
+      try {
+        if (this.decoder.state !== 'closed') this.decoder.close();
+      } catch {
+        // Ignore
+      }
+    }
+    this.currentSampleIdx = -1;
+    this.decoder = new VideoDecoder({
+      output: (frame) => {
+        if (this.currentFrame) {
+          try {
+            this.currentFrame.close();
+          } catch {
+            // Ignore
+          }
+        }
+        this.currentFrame = frame;
+      },
+      error: (e) => {
+        console.warn('VideoDecoder runtime error:', e);
+      },
+    });
+    if (this.config) {
+      this.decoder.configure(this.config);
+    }
+  }
+
+  async getFrameAtTime(targetSec: number): Promise<VideoFrame | null> {
+    if (!this.ready || !this.decoder || this.samples.length === 0) return null;
+
+    let targetIdx = 0;
+    for (let i = 0; i < this.samples.length; i++) {
+      if (this.samples[i].timeSec <= targetSec) {
+        targetIdx = i;
+      } else {
+        break;
+      }
+    }
+
+    if (targetIdx === this.currentSampleIdx && this.currentFrame) {
+      return this.currentFrame;
+    }
+
+    // Find preceding keyframe
+    let keyIdx = targetIdx;
+    while (keyIdx > 0 && !this.samples[keyIdx].is_sync) {
+      keyIdx--;
+    }
+
+    try {
+      if (this.currentSampleIdx >= keyIdx && this.currentSampleIdx < targetIdx) {
+        // Incrementally decode forward
+        for (let i = this.currentSampleIdx + 1; i <= targetIdx; i++) {
+          const s = this.samples[i];
+          const chunk = new EncodedVideoChunk({
+            type: s.is_sync ? 'key' : 'delta',
+            timestamp: Math.round(s.timeSec * 1_000_000),
+            duration: Math.round((s.duration / s.timescale) * 1_000_000),
+            data: s.data,
+          });
+          this.decoder.decode(chunk);
+        }
+      } else {
+        // Reset and decode from keyframe up to targetIdx
+        this.initDecoder();
+        for (let i = keyIdx; i <= targetIdx; i++) {
+          const s = this.samples[i];
+          const chunk = new EncodedVideoChunk({
+            type: s.is_sync ? 'key' : 'delta',
+            timestamp: Math.round(s.timeSec * 1_000_000),
+            duration: Math.round((s.duration / s.timescale) * 1_000_000),
+            data: s.data,
+          });
+          this.decoder.decode(chunk);
+        }
+      }
+
+      await this.decoder.flush();
+      this.currentSampleIdx = targetIdx;
+      return this.currentFrame;
+    } catch {
+      return null;
+    }
+  }
+
+  close() {
+    this.ready = false;
+    if (this.currentFrame) {
+      try {
+        this.currentFrame.close();
+      } catch {
+        // Ignore
+      }
+      this.currentFrame = null;
+    }
+    if (this.decoder) {
+      try {
+        if (this.decoder.state !== 'closed') this.decoder.close();
+      } catch {
+        // Ignore
+      }
+      this.decoder = null;
+    }
+  }
 }
 
 /**
@@ -1775,7 +2041,14 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
     // Preload dedicated <video> elements for each active video clip and <audio> elements for external audio tracks
     const preloadedVideos = new Map<
       string,
-      { el: HTMLVideoElement; gainNode: GainNode | null; img?: HTMLImageElement }
+      {
+        el: HTMLVideoElement;
+        gainNode: GainNode | null;
+        img?: HTMLImageElement;
+        mp4Decoder?: Mp4DemuxVideoDecoder | null;
+        activeFrame?: VideoFrame | null;
+        activeBitmap?: ImageBitmap | null;
+      }
     >();
     const preloadedAudios = new Map<
       string,
@@ -1783,13 +2056,21 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
     >();
 
     const cleanupPreloadedMedia = () => {
-      preloadedVideos.forEach(({ el }) => {
+      preloadedVideos.forEach((entry) => {
         try {
-          el.pause();
-          el.removeAttribute('src');
-          el.load();
-          if (el.parentNode) {
-            el.parentNode.removeChild(el);
+          if (entry.activeBitmap) {
+            entry.activeBitmap.close();
+            entry.activeBitmap = null;
+          }
+          if (entry.mp4Decoder) {
+            entry.mp4Decoder.close();
+            entry.mp4Decoder = null;
+          }
+          entry.el.pause();
+          entry.el.removeAttribute('src');
+          entry.el.load();
+          if (entry.el.parentNode) {
+            entry.el.parentNode.removeChild(entry.el);
           }
         } catch {
           // Ignore
@@ -1848,18 +2129,28 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           continue;
         }
 
+        // Try initializing WebCodecs MP4Box VideoDecoder (Cách 1) for MP4 clips
+        let mp4Decoder: Mp4DemuxVideoDecoder | null = null;
+        try {
+          mp4Decoder = await Mp4DemuxVideoDecoder.create(vClip.mediaUrl);
+        } catch {
+          mp4Decoder = null;
+        }
+
+        // Dedicated <video> fallback (Cách 2): muted, in-viewport to prevent mobile GPU throttling
         const vid = document.createElement('video');
         vid.playsInline = true;
         vid.preload = 'auto';
-        vid.muted = false;
-        vid.volume = 1.0;
+        vid.muted = true;
+        vid.volume = 0;
         vid.style.position = 'fixed';
-        vid.style.top = '-9999px';
-        vid.style.left = '-9999px';
-        vid.style.width = '1px';
-        vid.style.height = '1px';
-        vid.style.opacity = '0';
+        vid.style.top = '0px';
+        vid.style.left = '0px';
+        vid.style.width = '2px';
+        vid.style.height = '2px';
+        vid.style.opacity = '0.01';
         vid.style.pointerEvents = 'none';
+        vid.style.zIndex = '-1';
         document.body.appendChild(vid);
 
         if (!vClip.mediaUrl.startsWith('blob:') && !vClip.mediaUrl.startsWith('data:')) {
@@ -1894,7 +2185,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             gainNode = null;
           }
         }
-        preloadedVideos.set(vClip.id, { el: vid, gainNode });
+        preloadedVideos.set(vClip.id, { el: vid, gainNode, mp4Decoder });
       }
 
       const v1IdSet = new Set(activeV1Clips.map((c) => c.id));
@@ -2031,9 +2322,16 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             ? Math.max(0.05, Math.min(1, clipElapsed / Math.max(0.15, transDur)))
             : 1;
 
+          const prevBmp = prevEntry?.activeBitmap;
+          const prevVf = prevEntry?.activeFrame;
+
           // If Dual-Clip Transition is active at concat seam, composite outgoing prevVid first
-          const prevDrawable =
-            prevVid && prevVid.readyState >= 2 && prevVid.videoWidth > 0 && prevVid.videoHeight > 0
+          const prevDrawable: CanvasImageSource | null =
+            prevVf
+              ? prevVf
+              : prevBmp
+              ? prevBmp
+              : prevVid && prevVid.readyState >= 2 && prevVid.videoWidth > 0 && prevVid.videoHeight > 0
               ? prevVid
               : prevImg && prevImg.naturalWidth > 0 && prevImg.naturalHeight > 0
               ? prevImg
@@ -2058,8 +2356,9 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             expCtx.globalAlpha = outAlpha;
             expCtx.translate(w / 2 + outOffsetX, h / 2 + outOffsetY);
             expCtx.scale(outScale, outScale);
-            const pW = 'videoWidth' in prevDrawable ? prevDrawable.videoWidth : prevDrawable.naturalWidth;
-            const pH = 'videoHeight' in prevDrawable ? prevDrawable.videoHeight : prevDrawable.naturalHeight;
+            const pDims = getDrawableDimensions(prevDrawable);
+            const pW = pDims.w;
+            const pH = pDims.h;
             const pRatio = pW / pH;
             const cRatio = w / h;
             const pDrawW = pRatio > cRatio ? w : h * pRatio;
@@ -2068,16 +2367,24 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             expCtx.restore();
           }
 
-          const drawable =
-            vid && vid.readyState >= 2 && vid.videoWidth > 0 && vid.videoHeight > 0
+          const bmp = entry?.activeBitmap;
+          const vf = entry?.activeFrame;
+
+          const drawable: CanvasImageSource | null =
+            vf
+              ? vf
+              : bmp
+              ? bmp
+              : vid && vid.readyState >= 2 && vid.videoWidth > 0 && vid.videoHeight > 0
               ? vid
               : img && img.naturalWidth > 0 && img.naturalHeight > 0
               ? img
               : null;
 
           if (drawable) {
-            const vw = 'videoWidth' in drawable ? drawable.videoWidth : drawable.naturalWidth;
-            const vh = 'videoHeight' in drawable ? drawable.videoHeight : drawable.naturalHeight;
+            const dims = getDrawableDimensions(drawable);
+            const vw = dims.w;
+            const vh = dims.h;
             const interp = interpolateClipAtPlayhead(activeClip, timelineSec);
 
             const bri = 100 + (activeClip.brightness || 0);
@@ -2379,7 +2686,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
 
             if (activeClip) {
               const entry = preloadedVideos.get(activeClip.id);
-              if (entry && entry.el) {
+              if (entry) {
                 const clipOffset = Math.max(0, t - activeClip.startTime);
                 const spd = Math.max(0.25, Math.min(4.0, activeClip.speed || 1.0));
                 const targetMediaTime = Math.max(0, (activeClip.sourceIn || 0) + clipOffset * spd);
@@ -2387,7 +2694,22 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                   entry.el.duration && !isNaN(entry.el.duration) && entry.el.duration > 0
                     ? Math.min(entry.el.duration, targetMediaTime)
                     : targetMediaTime;
-                await seekVideoToTime(entry.el, clampedMediaTime);
+
+                let gotFrame = false;
+                if (entry.mp4Decoder) {
+                  try {
+                    const vf = await entry.mp4Decoder.getFrameAtTime(clampedMediaTime);
+                    if (vf) {
+                      entry.activeFrame = vf;
+                      gotFrame = true;
+                    }
+                  } catch {
+                    // Fall back to <video> + createImageBitmap
+                  }
+                }
+                if (!gotFrame && entry.el) {
+                  entry.activeBitmap = await seekVideoToTime(entry.el, clampedMediaTime);
+                }
               }
             }
 
@@ -2399,20 +2721,57 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               const tType = activeClip.transitionType || 'none';
               if (tType !== 'none' && clipOffset < transDur) {
                 const prevEntry = preloadedVideos.get(prevClip.id);
-                if (prevEntry && prevEntry.el) {
+                if (prevEntry) {
                   const prevSpd = Math.max(0.25, Math.min(4.0, prevClip.speed || 1.0));
                   const prevEndTime = (prevClip.sourceIn || 0) + prevClip.duration * prevSpd;
                   const clampedPrevEndTime =
                     prevEntry.el.duration && !isNaN(prevEntry.el.duration) && prevEntry.el.duration > 0
                       ? Math.min(prevEntry.el.duration, prevEndTime)
                       : prevEndTime;
-                  await seekVideoToTime(prevEntry.el, clampedPrevEndTime);
+
+                  let gotPrevFrame = false;
+                  if (prevEntry.mp4Decoder) {
+                    try {
+                      const vf = await prevEntry.mp4Decoder.getFrameAtTime(clampedPrevEndTime);
+                      if (vf) {
+                        prevEntry.activeFrame = vf;
+                        gotPrevFrame = true;
+                      }
+                    } catch {
+                      // Fall back to <video> + createImageBitmap
+                    }
+                  }
+                  if (!gotPrevFrame && prevEntry.el) {
+                    prevEntry.activeBitmap = await seekVideoToTime(prevEntry.el, clampedPrevEndTime);
+                  }
                 }
               }
             }
 
             // Draw composite frame onto exportCanvas
             drawCompositeExportFrame(t, frameIdx);
+
+            // Clean up temporary ImageBitmaps immediately after drawing to free GPU memory
+            if (activeClip) {
+              const entry = preloadedVideos.get(activeClip.id);
+              if (entry) {
+                if (entry.activeBitmap) {
+                  try { entry.activeBitmap.close(); } catch {}
+                  entry.activeBitmap = null;
+                }
+                entry.activeFrame = null;
+              }
+            }
+            if (prevClip) {
+              const prevEntry = preloadedVideos.get(prevClip.id);
+              if (prevEntry) {
+                if (prevEntry.activeBitmap) {
+                  try { prevEntry.activeBitmap.close(); } catch {}
+                  prevEntry.activeBitmap = null;
+                }
+                prevEntry.activeFrame = null;
+              }
+            }
 
             // Construct new VideoFrame from exportCanvas
             const videoFrame = new VideoFrame(exportCanvas, {
@@ -2516,10 +2875,15 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           });
 
           // Rewind preloaded videos for next variant
-          preloadedVideos.forEach(({ el }) => {
+          preloadedVideos.forEach((entry) => {
             try {
-              el.pause();
-              el.currentTime = 0;
+              if (entry.activeBitmap) {
+                entry.activeBitmap.close();
+                entry.activeBitmap = null;
+              }
+              entry.activeFrame = null;
+              entry.el.pause();
+              entry.el.currentTime = 0;
             } catch {
               // Ignore
             }
@@ -2878,10 +3242,15 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             }
           }
 
-          preloadedVideos.forEach(({ el }) => {
+          preloadedVideos.forEach((entry) => {
             try {
-              el.pause();
-              el.currentTime = 0;
+              if (entry.activeBitmap) {
+                entry.activeBitmap.close();
+                entry.activeBitmap = null;
+              }
+              entry.activeFrame = null;
+              entry.el.pause();
+              entry.el.currentTime = 0;
             } catch {
               // Ignore
             }

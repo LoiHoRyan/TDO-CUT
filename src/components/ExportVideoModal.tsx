@@ -49,28 +49,60 @@ import { createFile, DataStream } from 'mp4box';
 /**
  * Helper to extract pixel dimensions from any CanvasImageSource
  * (HTMLVideoElement, VideoFrame, ImageBitmap, HTMLImageElement).
+ * Checks naturalWidth and videoWidth before width to avoid reading 1px/2px DOM container sizes.
  */
-function getDrawableDimensions(drawable: CanvasImageSource): { w: number; h: number } {
-  if ('videoWidth' in drawable && typeof drawable.videoWidth === 'number' && drawable.videoWidth > 0) {
-    return { w: drawable.videoWidth, h: drawable.videoHeight };
+function getDrawableDimensions(
+  drawable: CanvasImageSource,
+  extraRotation: number = 0
+): { w: number; h: number } {
+  let rawW = 1920;
+  let rawH = 1080;
+  if (
+    'naturalWidth' in drawable &&
+    typeof (drawable as HTMLImageElement).naturalWidth === 'number' &&
+    (drawable as HTMLImageElement).naturalWidth > 0 &&
+    (drawable as HTMLImageElement).naturalHeight > 0
+  ) {
+    rawW = (drawable as HTMLImageElement).naturalWidth;
+    rawH = (drawable as HTMLImageElement).naturalHeight;
+  } else if (
+    'videoWidth' in drawable &&
+    typeof (drawable as HTMLVideoElement).videoWidth === 'number' &&
+    (drawable as HTMLVideoElement).videoWidth > 0 &&
+    (drawable as HTMLVideoElement).videoHeight > 0
+  ) {
+    rawW = (drawable as HTMLVideoElement).videoWidth;
+    rawH = (drawable as HTMLVideoElement).videoHeight;
+  } else if (
+    'displayWidth' in drawable &&
+    typeof (drawable as VideoFrame).displayWidth === 'number' &&
+    (drawable as VideoFrame).displayWidth > 0 &&
+    (drawable as VideoFrame).displayHeight > 0
+  ) {
+    rawW = (drawable as VideoFrame).displayWidth;
+    rawH = (drawable as VideoFrame).displayHeight;
+  } else if (
+    'width' in drawable &&
+    typeof (drawable as ImageBitmap).width === 'number' &&
+    (drawable as ImageBitmap).width > 0 &&
+    (drawable as ImageBitmap).height > 0
+  ) {
+    rawW = (drawable as ImageBitmap).width;
+    rawH = (drawable as ImageBitmap).height;
   }
-  if ('displayWidth' in drawable && typeof (drawable as VideoFrame).displayWidth === 'number') {
-    return { w: (drawable as VideoFrame).displayWidth, h: (drawable as VideoFrame).displayHeight };
+
+  if (extraRotation === 90 || extraRotation === 270) {
+    return { w: rawH, h: rawW };
   }
-  if ('width' in drawable && typeof (drawable as ImageBitmap).width === 'number') {
-    return { w: (drawable as ImageBitmap).width, h: (drawable as ImageBitmap).height };
-  }
-  if ('naturalWidth' in drawable && typeof (drawable as HTMLImageElement).naturalWidth === 'number') {
-    return { w: (drawable as HTMLImageElement).naturalWidth, h: (drawable as HTMLImageElement).naturalHeight };
-  }
-  return { w: 1920, h: 1080 };
+  return { w: rawW, h: rawH };
 }
 
 /**
  * Seeks <video> element to targetTime and extracts a fresh decoded ImageBitmap.
  * Avoids requestVideoFrameCallback which stalls on paused mobile videos.
- * Awaits 'seeked' event then calls createImageBitmap(vid) to force the mobile
- * GPU compositor to decode and commit the newly-seeked frame.
+ * Awaits 'seeked' event with a 600ms safety timeout (cleared on early seeked),
+ * then calls createImageBitmap(vid) to force the mobile GPU compositor to decode
+ * and commit the newly-seeked frame.
  */
 async function seekVideoToTime(
   vid: HTMLVideoElement,
@@ -81,9 +113,14 @@ async function seekVideoToTime(
   if (needsSeek) {
     await new Promise<void>((resolve) => {
       let finished = false;
+      let timer: any = null;
       const finish = () => {
         if (finished) return;
         finished = true;
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
         vid.removeEventListener('seeked', finish);
         vid.removeEventListener('error', finish);
         resolve();
@@ -91,8 +128,8 @@ async function seekVideoToTime(
 
       vid.addEventListener('seeked', finish, { once: true });
       vid.addEventListener('error', finish, { once: true });
-      // Safety guard: max 200ms in case seek stalls or browser drops the event
-      setTimeout(finish, 200);
+      // Safety guard: max 600ms in case seek stalls or browser drops the event
+      timer = setTimeout(finish, 600);
 
       try {
         vid.currentTime = targetTime;
@@ -111,6 +148,31 @@ async function seekVideoToTime(
     // Return null to allow fallback to vid directly
   }
   return null;
+}
+
+/**
+ * Parses rotation angle (0, 90, 180, 270) from ISOBMFF tkhd transformation matrix.
+ */
+function parseTrackRotation(matrix?: any): number {
+  if (!matrix || !Array.isArray(matrix) || matrix.length < 5) return 0;
+  const a = matrix[0];
+  const b = matrix[1];
+  const c = matrix[3];
+  const d = matrix[4];
+
+  if (a === 0 && b > 0 && c < 0 && d === 0) return 90;
+  if (a < 0 && d < 0) return 180;
+  if (a === 0 && b < 0 && c > 0 && d === 0) return 270;
+
+  if (b !== 0 || a !== 0) {
+    const angleRad = Math.atan2(b, a);
+    let deg = Math.round((angleRad * 180) / Math.PI);
+    if (deg < 0) deg += 360;
+    if (deg >= 45 && deg < 135) return 90;
+    if (deg >= 135 && deg < 225) return 180;
+    if (deg >= 225 && deg < 315) return 270;
+  }
+  return 0;
 }
 
 interface Mp4SampleInfo {
@@ -133,16 +195,18 @@ class Mp4DemuxVideoDecoder {
   private config: VideoDecoderConfig | null = null;
   private samples: Mp4SampleInfo[] = [];
   private currentFrame: VideoFrame | null = null;
-  private currentSampleIdx: number = -1;
+  private nextFeedDtsIdx: number = 0;
   private ready: boolean = false;
   public readonly width: number;
   public readonly height: number;
   public readonly durationSec: number;
+  public readonly rotationDeg: number;
 
-  private constructor(width: number, height: number, durationSec: number) {
+  private constructor(width: number, height: number, durationSec: number, rotationDeg: number) {
     this.width = width;
     this.height = height;
     this.durationSec = durationSec;
+    this.rotationDeg = rotationDeg;
   }
 
   static async create(mediaUrl: string): Promise<Mp4DemuxVideoDecoder | null> {
@@ -168,14 +232,20 @@ class Mp4DemuxVideoDecoder {
         videoTrack: any;
         samples: any[];
         description?: ArrayBuffer;
+        rotationDeg: number;
       } | null>((resolve) => {
         let resolved = false;
+        let timeoutId: any = null;
         const done = (val: any) => {
           if (resolved) return;
           resolved = true;
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+          }
           resolve(val);
         };
-        setTimeout(() => done(null), 4000);
+        timeoutId = setTimeout(() => done(null), 4000);
 
         mp4boxfile.onError = () => done(null);
         mp4boxfile.onReady = (info: any) => {
@@ -193,10 +263,14 @@ class Mp4DemuxVideoDecoder {
                 const entry = rawEntry as any;
                 const box = entry.avcC || entry.hvcC || entry.vpcC || entry.av1C;
                 if (box) {
-                  const stream = new DataStream();
+                  const stream = new DataStream(undefined, 0, (DataStream as any).BIG_ENDIAN ?? 1);
                   box.write(stream);
-                  // stream.buffer starts with 4-byte size + 4-byte type; payload begins at offset 8
-                  description = stream.buffer.slice(8);
+                  // FullBox (e.g. vpcC, av1C, or flags defined) has 12-byte header; standard Box (avcC, hvcC) has 8-byte header
+                  const offset =
+                    box.flags !== undefined || box.type === 'vpcC' || (box as any).hdr_size === 12
+                      ? 12
+                      : 8;
+                  description = stream.buffer.slice(offset);
                   break;
                 }
               }
@@ -205,17 +279,19 @@ class Mp4DemuxVideoDecoder {
             // Ignore description error
           }
 
+          const rotationDeg = parseTrackRotation(videoTrack.matrix);
+          const totalExpectedSamples = videoTrack.nb_samples || 0;
           const extractedSamples: any[] = [];
+
           mp4boxfile.onSamples = (_id: number, _user: any, samples: any[]) => {
             extractedSamples.push(...samples);
+            if (totalExpectedSamples > 0 && extractedSamples.length >= totalExpectedSamples) {
+              done({ videoTrack, samples: extractedSamples, description, rotationDeg });
+            }
           };
 
           mp4boxfile.setExtractionOptions(videoTrack.id, null, { nbSamples: 100000 });
           mp4boxfile.start();
-
-          setTimeout(() => {
-            done({ videoTrack, samples: extractedSamples, description });
-          }, 40);
         };
 
         const buf = arrayBuffer as any;
@@ -223,6 +299,15 @@ class Mp4DemuxVideoDecoder {
         try {
           mp4boxfile.appendBuffer(buf);
           mp4boxfile.flush();
+          // After flush completes, if we have extracted samples, resolve immediately without setTimeout(40)
+          queueMicrotask(() => {
+            const info = (mp4boxfile as any).getInfo ? (mp4boxfile as any).getInfo() : null;
+            const videoTrack = info?.videoTracks?.[0];
+            const rotationDeg = parseTrackRotation(videoTrack?.matrix);
+            if ((mp4boxfile as any).samples?.length > 0) {
+              done({ videoTrack, samples: (mp4boxfile as any).samples, description: undefined, rotationDeg });
+            }
+          });
         } catch {
           done(null);
         }
@@ -233,7 +318,7 @@ class Mp4DemuxVideoDecoder {
         return null;
       }
 
-      const { videoTrack, samples, description } = demuxResult;
+      const { videoTrack, samples, description, rotationDeg } = demuxResult;
       const width = videoTrack.video?.width || videoTrack.track_width || 1280;
       const height = videoTrack.video?.height || videoTrack.track_height || 720;
       const timescale = videoTrack.timescale || 1000;
@@ -256,8 +341,9 @@ class Mp4DemuxVideoDecoder {
         }
       }
 
-      const player = new Mp4DemuxVideoDecoder(width, height, durationSec);
+      const player = new Mp4DemuxVideoDecoder(width, height, durationSec, rotationDeg);
       player.config = decoderConfig;
+      // Retain samples strictly in DTS decode order (DO NOT SORT BY CTS)
       player.samples = samples.map((s, idx) => ({
         index: idx,
         dts: s.dts,
@@ -268,10 +354,6 @@ class Mp4DemuxVideoDecoder {
         is_sync: Boolean(s.is_sync),
         data: s.data,
       }));
-
-      // Sort samples by CTS presentation timestamp
-      player.samples.sort((a, b) => a.cts - b.cts);
-      player.samples.forEach((s, i) => { s.index = i; });
 
       player.initDecoder();
       player.ready = true;
@@ -289,7 +371,7 @@ class Mp4DemuxVideoDecoder {
         // Ignore
       }
     }
-    this.currentSampleIdx = -1;
+    this.nextFeedDtsIdx = 0;
     this.decoder = new VideoDecoder({
       output: (frame) => {
         if (this.currentFrame) {
@@ -313,56 +395,79 @@ class Mp4DemuxVideoDecoder {
   async getFrameAtTime(targetSec: number): Promise<VideoFrame | null> {
     if (!this.ready || !this.decoder || this.samples.length === 0) return null;
 
-    let targetIdx = 0;
+    const targetUs = Math.round(targetSec * 1_000_000);
+
+    // Find the sample whose CTS presentation time is closest to targetSec
+    let targetSampleIdx = 0;
+    let minDiff = Infinity;
     for (let i = 0; i < this.samples.length; i++) {
-      if (this.samples[i].timeSec <= targetSec) {
-        targetIdx = i;
-      } else {
-        break;
+      const diff = Math.abs(this.samples[i].timeSec - targetSec);
+      if (diff < minDiff) {
+        minDiff = diff;
+        targetSampleIdx = i;
+      }
+      if (this.samples[i].timeSec > targetSec + 0.5) break;
+    }
+
+    // If currentFrame already matches target presentation time, clone and return
+    if (this.currentFrame && Math.abs(this.currentFrame.timestamp - targetUs) < 15_000) {
+      try {
+        return this.currentFrame.clone();
+      } catch {
+        return null;
       }
     }
 
-    if (targetIdx === this.currentSampleIdx && this.currentFrame) {
-      return this.currentFrame;
-    }
-
-    // Find preceding keyframe
-    let keyIdx = targetIdx;
+    // Find preceding keyframe in DTS order
+    let keyIdx = targetSampleIdx;
     while (keyIdx > 0 && !this.samples[keyIdx].is_sync) {
       keyIdx--;
     }
 
+    // Check if we need to reset decoder (seeking backward or jumping past a keyframe)
+    if (this.nextFeedDtsIdx <= keyIdx || this.nextFeedDtsIdx > targetSampleIdx + 1) {
+      try {
+        this.decoder.reset();
+        this.decoder.configure(this.config!);
+        this.nextFeedDtsIdx = keyIdx;
+      } catch {
+        return null;
+      }
+    }
+
     try {
-      if (this.currentSampleIdx >= keyIdx && this.currentSampleIdx < targetIdx) {
-        // Incrementally decode forward
-        for (let i = this.currentSampleIdx + 1; i <= targetIdx; i++) {
-          const s = this.samples[i];
-          const chunk = new EncodedVideoChunk({
-            type: s.is_sync ? 'key' : 'delta',
-            timestamp: Math.round(s.timeSec * 1_000_000),
-            duration: Math.round((s.duration / s.timescale) * 1_000_000),
-            data: s.data,
-          });
-          this.decoder.decode(chunk);
-        }
-      } else {
-        // Reset and decode from keyframe up to targetIdx
-        this.initDecoder();
-        for (let i = keyIdx; i <= targetIdx; i++) {
-          const s = this.samples[i];
-          const chunk = new EncodedVideoChunk({
-            type: s.is_sync ? 'key' : 'delta',
-            timestamp: Math.round(s.timeSec * 1_000_000),
-            duration: Math.round((s.duration / s.timescale) * 1_000_000),
-            data: s.data,
-          });
-          this.decoder.decode(chunk);
+      // Feed DTS chunks sequentially until targetSampleIdx is fed
+      while (this.nextFeedDtsIdx <= targetSampleIdx && this.nextFeedDtsIdx < this.samples.length) {
+        const s = this.samples[this.nextFeedDtsIdx++];
+        const chunk = new EncodedVideoChunk({
+          type: s.is_sync ? 'key' : 'delta',
+          timestamp: Math.round(s.timeSec * 1_000_000),
+          duration: Math.round((s.duration / s.timescale) * 1_000_000),
+          data: s.data,
+        });
+        this.decoder.decode(chunk);
+      }
+
+      // If decoder queue is processing, wait a micro-interval for output without calling flush()
+      if (!this.currentFrame || this.currentFrame.timestamp < targetUs - 35_000) {
+        let waitCount = 0;
+        while (
+          waitCount++ < 15 &&
+          (!this.currentFrame || this.currentFrame.timestamp < targetUs - 35_000) &&
+          this.decoder.decodeQueueSize > 0
+        ) {
+          await new Promise<void>((r) => setTimeout(r, 4));
         }
       }
 
-      await this.decoder.flush();
-      this.currentSampleIdx = targetIdx;
-      return this.currentFrame;
+      if (this.currentFrame) {
+        try {
+          return this.currentFrame.clone();
+        } catch {
+          return null;
+        }
+      }
+      return null;
     } catch {
       return null;
     }
@@ -386,11 +491,14 @@ class Mp4DemuxVideoDecoder {
       }
       this.decoder = null;
     }
+    this.samples = []; // Release samples to free mobile RAM
   }
 }
 
 /**
  * Select the best supported VideoEncoder configuration from standard H.264 profiles.
+ * Validates bitrate > 0, tests bitrateMode: 'constant' with fallback 'variable',
+ * and prioritizes H.264 level based on target resolution and FPS.
  */
 async function selectSupportedVideoEncoderConfig(
   width: number,
@@ -403,54 +511,85 @@ async function selectSupportedVideoEncoderConfig(
   // Video encoders strictly require even dimensions (multiples of 2)
   const safeW = Math.max(2, Math.round(width / 2) * 2);
   const safeH = Math.max(2, Math.round(height / 2) * 2);
+  const safeBitrate = Math.max(1_000_000, bitrate > 0 ? bitrate : 12_000_000);
 
-  const candidateCodecs = [
-    'avc1.640034', // High Level 5.2 (4K 60fps)
-    'avc1.640033', // High Level 5.1 (4K 30fps)
-    'avc1.64002a', // High Level 4.2 (1080p 60fps)
-    'avc1.640029', // High Level 4.1 (1080p 30fps / universal compatibility)
-    'avc1.640028', // High Level 4.0
-    'avc1.4d4029', // Main Level 4.1
-    'avc1.4d4028', // Main Level 4.0
-    'avc1.42e01f', // Baseline Level 3.1
-  ];
+  const maxDim = Math.max(safeW, safeH);
+  const pixelCount = safeW * safeH;
 
-  for (const codec of candidateCodecs) {
-    const config: VideoEncoderConfig = {
-      codec,
-      width: safeW,
-      height: safeH,
-      bitrate,
-      framerate: fps,
-      hardwareAcceleration: 'prefer-hardware',
-      avc: { format: 'avc' },
-    };
-    try {
-      const res = await VideoEncoder.isConfigSupported(config);
-      if (res && res.supported && res.config) {
-        return res.config;
+  // Select candidate H.264 codecs tailored to resolution and FPS
+  let candidateCodecs: string[];
+  if (maxDim >= 3840 || pixelCount >= 3840 * 2160 * 0.85) {
+    // 4K
+    candidateCodecs =
+      fps > 30
+        ? ['avc1.640034', 'avc1.640033', 'avc1.64002a', 'avc1.640029']
+        : ['avc1.640033', 'avc1.640032', 'avc1.64002a', 'avc1.640029'];
+  } else if (maxDim >= 2560 || pixelCount >= 2560 * 1440 * 0.85) {
+    // 2K / 1440p
+    candidateCodecs = ['avc1.640032', 'avc1.64002a', 'avc1.640029', 'avc1.640028'];
+  } else if (maxDim >= 1920 || pixelCount >= 1920 * 1080 * 0.85) {
+    // 1080p
+    candidateCodecs =
+      fps > 30
+        ? ['avc1.64002a', 'avc1.640029', 'avc1.640028', 'avc1.4d402a', 'avc1.4d4029']
+        : ['avc1.640029', 'avc1.640028', 'avc1.4d4029', 'avc1.4d4028', 'avc1.42e01f'];
+  } else {
+    // 720p or lower
+    candidateCodecs = [
+      'avc1.64001f',
+      'avc1.640020',
+      'avc1.4d401f',
+      'avc1.42e01f',
+      'avc1.640028',
+    ];
+  }
+
+  const bitrateModes: VideoEncoderBitrateMode[] = ['constant', 'variable'];
+
+  // 1. Try with prefer-hardware and constant/variable bitrate modes
+  for (const bMode of bitrateModes) {
+    for (const codec of candidateCodecs) {
+      const config: VideoEncoderConfig = {
+        codec,
+        width: safeW,
+        height: safeH,
+        bitrate: safeBitrate,
+        framerate: fps,
+        bitrateMode: bMode,
+        hardwareAcceleration: 'prefer-hardware',
+        avc: { format: 'avc' },
+      };
+      try {
+        const res = await VideoEncoder.isConfigSupported(config);
+        if (res && res.supported && res.config) {
+          return res.config;
+        }
+      } catch {
+        // continue
       }
-    } catch {
-      // continue
     }
   }
 
-  for (const codec of candidateCodecs) {
-    const config: VideoEncoderConfig = {
-      codec,
-      width: safeW,
-      height: safeH,
-      bitrate,
-      framerate: fps,
-      avc: { format: 'avc' },
-    };
-    try {
-      const res = await VideoEncoder.isConfigSupported(config);
-      if (res && res.supported && res.config) {
-        return res.config;
+  // 2. Fallback without hardware acceleration requirement
+  for (const bMode of bitrateModes) {
+    for (const codec of candidateCodecs) {
+      const config: VideoEncoderConfig = {
+        codec,
+        width: safeW,
+        height: safeH,
+        bitrate: safeBitrate,
+        framerate: fps,
+        bitrateMode: bMode,
+        avc: { format: 'avc' },
+      };
+      try {
+        const res = await VideoEncoder.isConfigSupported(config);
+        if (res && res.supported && res.config) {
+          return res.config;
+        }
+      } catch {
+        // continue
       }
-    } catch {
-      // continue
     }
   }
 
@@ -458,13 +597,14 @@ async function selectSupportedVideoEncoderConfig(
 }
 
 /**
- * Mix all active video audio and external audio tracks into a single 48kHz stereo AudioBuffer
+ * Mix all active video audio and external audio tracks into a single stereo AudioBuffer
  * using an OfflineAudioContext.
  */
 async function mixProjectAudioOffline(
   audioClips: TimelineClip[],
   totalDurationSec: number,
-  abortSignal: React.MutableRefObject<boolean>
+  abortSignal: React.MutableRefObject<boolean>,
+  sampleRate: number = 48000
 ): Promise<AudioBuffer | null> {
   const AudioCtxClass =
     typeof window !== 'undefined'
@@ -474,7 +614,6 @@ async function mixProjectAudioOffline(
       : null;
   if (!AudioCtxClass) return null;
 
-  const sampleRate = 48000;
   const numChannels = 2;
   const totalFrames = Math.max(1, Math.ceil(totalDurationSec * sampleRate));
 
@@ -537,12 +676,12 @@ async function mixProjectAudioOffline(
 
       const gainNode = offlineCtx.createGain();
 
-      // Proportional fade in / fade out guard
-      const clipDur = clip.duration;
+      // Proportional fade in / fade out based on actual timeline playback duration
+      const actualPlayDur = Math.min(clip.duration, sourcePlayDur / spd);
       let effectiveFadeIn = Math.max(0, clip.fadeIn || 0);
       let effectiveFadeOut = Math.max(0, clip.fadeOut || 0);
-      if (effectiveFadeIn + effectiveFadeOut > clipDur && clipDur > 0) {
-        const factor = clipDur / (effectiveFadeIn + effectiveFadeOut);
+      if (effectiveFadeIn + effectiveFadeOut > actualPlayDur && actualPlayDur > 0) {
+        const factor = actualPlayDur / (effectiveFadeIn + effectiveFadeOut);
         effectiveFadeIn *= factor;
         effectiveFadeOut *= factor;
       }
@@ -553,9 +692,9 @@ async function mixProjectAudioOffline(
         gainNode.gain.setValueAtTime(vol, clipStart);
       }
       if (effectiveFadeOut > 0) {
-        const fadeOutStart = Math.max(clipStart + effectiveFadeIn, clipStart + clipDur - effectiveFadeOut);
+        const fadeOutStart = Math.max(clipStart + effectiveFadeIn, clipStart + actualPlayDur - effectiveFadeOut);
         gainNode.gain.setValueAtTime(vol, fadeOutStart);
-        gainNode.gain.linearRampToValueAtTime(0, clipStart + clipDur);
+        gainNode.gain.linearRampToValueAtTime(0, clipStart + actualPlayDur);
       }
 
       sourceNode.connect(gainNode);
@@ -577,7 +716,33 @@ async function mixProjectAudioOffline(
 }
 
 /**
+ * Detects whether AAC audio encoding is supported at 48000Hz or 44100Hz.
+ */
+async function detectSupportedAudioEncoderSampleRate(): Promise<number | null> {
+  if (typeof AudioEncoder === 'undefined' || typeof AudioData === 'undefined') {
+    return null;
+  }
+  for (const sRate of [48000, 44100]) {
+    try {
+      const res = await AudioEncoder.isConfigSupported({
+        codec: 'mp4a.40.2',
+        numberOfChannels: 2,
+        sampleRate: sRate,
+        bitrate: 192_000,
+      });
+      if (res && res.supported) {
+        return sRate;
+      }
+    } catch {
+      // Ignore
+    }
+  }
+  return null;
+}
+
+/**
  * Encode an AudioBuffer into AAC AudioData chunks and add them to mp4-muxer.
+ * Guarantees audioEncoder.close() runs in try/finally to avoid orphaned encoders.
  */
 async function encodeAudioBufferToMuxer(
   audioBuffer: AudioBuffer,
@@ -589,10 +754,11 @@ async function encodeAudioBufferToMuxer(
     return false;
   }
 
+  const sampleRate = audioBuffer.sampleRate;
   const audioConfig: AudioEncoderConfig = {
     codec: 'mp4a.40.2',
     numberOfChannels: 2,
-    sampleRate: 48000,
+    sampleRate,
     bitrate: 192_000,
   };
 
@@ -626,73 +792,62 @@ async function encodeAudioBufferToMuxer(
 
   try {
     audioEncoder.configure(audioConfig);
+
+    const CHUNK_SIZE = 1024;
+    const totalSamples = audioBuffer.length;
+    const left = audioBuffer.getChannelData(0);
+    const right = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1) : left;
+
+    for (let offset = 0; offset < totalSamples; offset += CHUNK_SIZE) {
+      if (abortSignal.current || encoderError) break;
+
+      const availableFrames = Math.min(CHUNK_SIZE, totalSamples - offset);
+      // Pad to exact 1024-frame AAC packet boundary
+      const planar = new Float32Array(CHUNK_SIZE * 2);
+      planar.set(left.subarray(offset, offset + availableFrames), 0);
+      planar.set(right.subarray(offset, offset + availableFrames), CHUNK_SIZE);
+
+      const timestampUs = Math.round((offset / sampleRate) * 1_000_000);
+
+      const audioData = new AudioData({
+        format: 'f32-planar',
+        numberOfChannels: 2,
+        numberOfFrames: CHUNK_SIZE,
+        sampleRate,
+        timestamp: timestampUs,
+        data: planar,
+      });
+
+      try {
+        audioEncoder.encode(audioData);
+      } finally {
+        audioData.close();
+      }
+
+      if (audioEncoder.encodeQueueSize > 12) {
+        await new Promise<void>((r) => setTimeout(r, 6));
+      }
+    }
+
+    if (!abortSignal.current && !encoderError) {
+      await audioEncoder.flush();
+    }
+    return !encoderError && !abortSignal.current;
   } catch (err) {
-    console.warn('[AudioEncoder] configure failed:', err);
-    if (activeAudioEncoderRef) {
-      activeAudioEncoderRef.current = null;
-    }
+    console.warn('[AudioEncoder] encode failed:', err);
     return false;
-  }
-
-  const sampleRate = 48000;
-  const CHUNK_SIZE = 1024;
-  const totalSamples = audioBuffer.length;
-  const left = audioBuffer.getChannelData(0);
-  const right = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1) : left;
-
-  for (let offset = 0; offset < totalSamples; offset += CHUNK_SIZE) {
-    if (abortSignal.current || encoderError) break;
-
-    const availableFrames = Math.min(CHUNK_SIZE, totalSamples - offset);
-    // Pad to exact 1024-frame AAC packet boundary
-    const planar = new Float32Array(CHUNK_SIZE * 2);
-    planar.set(left.subarray(offset, offset + availableFrames), 0);
-    planar.set(right.subarray(offset, offset + availableFrames), CHUNK_SIZE);
-
-    const timestampUs = Math.round((offset / sampleRate) * 1_000_000);
-
-    const audioData = new AudioData({
-      format: 'f32-planar',
-      numberOfChannels: 2,
-      numberOfFrames: CHUNK_SIZE,
-      sampleRate,
-      timestamp: timestampUs,
-      data: planar,
-    });
-
+  } finally {
     try {
-      audioEncoder.encode(audioData);
-    } finally {
-      audioData.close();
-    }
-
-    if (audioEncoder.encodeQueueSize > 12) {
-      await new Promise<void>((r) => setTimeout(r, 6));
-    }
-  }
-
-  if (abortSignal.current || encoderError) {
-    try {
-      if (audioEncoder.state !== 'closed') audioEncoder.close();
+      if (audioEncoder.state !== 'closed') {
+        audioEncoder.close();
+      }
     } catch {
       // Ignore
     }
     if (activeAudioEncoderRef) {
       activeAudioEncoderRef.current = null;
     }
-    return false;
   }
-
-  await audioEncoder.flush();
-  try {
-    if (audioEncoder.state !== 'closed') audioEncoder.close();
-  } catch {
-    // Ignore
-  }
-  if (activeAudioEncoderRef) {
-    activeAudioEncoderRef.current = null;
-  }
-  return true;
 }
 
 interface RenderedOverlaySprite {
@@ -2337,7 +2492,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               ? prevImg
               : null;
 
-          if (isTransActive && prevDrawable) {
+          if (isTransActive && prevDrawable && prevClip) {
             expCtx.save();
             let outAlpha = 1;
             let outOffsetX = 0;
@@ -2353,17 +2508,83 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             } else if (tType === 'black_fade') {
               outAlpha = transProgress < 0.5 ? Math.max(0, 1 - transProgress * 2) : 0;
             }
-            expCtx.globalAlpha = outAlpha;
-            expCtx.translate(w / 2 + outOffsetX, h / 2 + outOffsetY);
-            expCtx.scale(outScale, outScale);
-            const pDims = getDrawableDimensions(prevDrawable);
-            const pW = pDims.w;
-            const pH = pDims.h;
-            const pRatio = pW / pH;
+
+            const pBri = 100 + (prevClip.brightness || 0);
+            const pCon = 100 + (prevClip.contrast || 0);
+            const pSat = 100 + (prevClip.saturation || 0);
+            const pFilterParts: string[] = [];
+            if (Math.abs(pBri - 100) >= 0.5) pFilterParts.push(`brightness(${Math.max(10, pBri).toFixed(1)}%)`);
+            if (Math.abs(pCon - 100) >= 0.5) pFilterParts.push(`contrast(${Math.max(10, pCon).toFixed(1)}%)`);
+            if (Math.abs(pSat - 100) >= 0.5) pFilterParts.push(`saturate(${Math.max(0, pSat).toFixed(1)}%)`);
+            if (prevClip.filterPreset === 'noir' || prevClip.filterPreset === 'noir_bw') {
+              pFilterParts.push('grayscale(100%) contrast(125%)');
+            } else if (prevClip.filterPreset === 'cyberpunk') {
+              pFilterParts.push('contrast(120%) saturate(155%) hue-rotate(18deg)');
+            } else if (prevClip.filterPreset === 'vintage') {
+              pFilterParts.push('sepia(42%) contrast(95%)');
+            } else if (prevClip.filterPreset === 'teal_orange') {
+              pFilterParts.push('contrast(116%) saturate(132%) hue-rotate(-8deg)');
+            } else if (prevClip.filterPreset === 'vivid') {
+              pFilterParts.push('contrast(114%) saturate(150%)');
+            }
+            expCtx.filter = pFilterParts.length > 0 ? pFilterParts.join(' ') : 'none';
+
+            expCtx.globalAlpha =
+              Math.max(0, Math.min(1, (prevClip.opacity ?? 100) / 100)) * outAlpha;
+
+            const pPosXOffset = ((prevClip.posX || 0) / 1920) * w + outOffsetX;
+            const pPosYOffset = ((prevClip.posY || 0) / 1080) * h + outOffsetY;
+            expCtx.translate(w / 2 + pPosXOffset, h / 2 + pPosYOffset);
+
+            const pExtraRot = prevEntry?.mp4Decoder?.rotationDeg || 0;
+            const pTotalRotDeg =
+              (prevClip.rotation || 0) + (prevClip.cropRotateDeg || 0) + pExtraRot;
+            if (pTotalRotDeg !== 0) {
+              expCtx.rotate((pTotalRotDeg * Math.PI) / 180);
+            }
+
+            const pRawScale = (prevClip.scale ?? 100) * outScale;
+            const pScaleXFactor =
+              ((prevClip.uniformScale === false ? prevClip.scaleX ?? pRawScale : pRawScale) / 100) *
+              (prevClip.flipH ? -1 : 1);
+            const pScaleYFactor =
+              ((prevClip.uniformScale === false ? prevClip.scaleY ?? pRawScale : pRawScale) / 100) *
+              (prevClip.flipV ? -1 : 1);
+            expCtx.scale(pScaleXFactor, pScaleYFactor);
+
+            const pDims = getDrawableDimensions(prevDrawable, 0);
+            const pDispRatio =
+              pExtraRot === 90 || pExtraRot === 270 ? pDims.h / pDims.w : pDims.w / pDims.h;
             const cRatio = w / h;
-            const pDrawW = pRatio > cRatio ? w : h * pRatio;
-            const pDrawH = pRatio > cRatio ? w / pRatio : h;
-            expCtx.drawImage(prevDrawable, -pDrawW / 2, -pDrawH / 2, pDrawW, pDrawH);
+            let pFitW = w;
+            let pFitH = h;
+            if (Math.abs(pDispRatio - cRatio) > 0.01) {
+              if (pDispRatio > cRatio) {
+                pFitW = w;
+                pFitH = w / pDispRatio;
+              } else {
+                pFitH = h;
+                pFitW = h * pDispRatio;
+              }
+            }
+            const pDrawRawW = pExtraRot === 90 || pExtraRot === 270 ? pFitH : pFitW;
+            const pDrawRawH = pExtraRot === 90 || pExtraRot === 270 ? pFitW : pFitH;
+
+            const pCropLeftPct = Math.max(0, Math.min(85, prevClip.cropLeft || 0));
+            const pCropTopPct = Math.max(0, Math.min(85, prevClip.cropTop || 0));
+            const pCropRightPct = Math.max(0, Math.min(85, prevClip.cropRight || 0));
+            const pCropBottomPct = Math.max(0, Math.min(85, prevClip.cropBottom || 0));
+            if (pCropLeftPct > 0 || pCropTopPct > 0 || pCropRightPct > 0 || pCropBottomPct > 0) {
+              const cropX = -pDrawRawW / 2 + (pCropLeftPct / 100) * pDrawRawW;
+              const cropY = -pDrawRawH / 2 + (pCropTopPct / 100) * pDrawRawH;
+              const cropW = Math.max(16, pDrawRawW * (1 - (pCropLeftPct + pCropRightPct) / 100));
+              const cropH = Math.max(16, pDrawRawH * (1 - (pCropTopPct + pCropBottomPct) / 100));
+              expCtx.beginPath();
+              expCtx.rect(cropX, cropY, cropW, cropH);
+              expCtx.clip();
+            }
+
+            expCtx.drawImage(prevDrawable, -pDrawRawW / 2, -pDrawRawH / 2, pDrawRawW, pDrawRawH);
             expCtx.restore();
           }
 
@@ -2382,9 +2603,25 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               : null;
 
           if (drawable) {
-            const dims = getDrawableDimensions(drawable);
-            const vw = dims.w;
-            const vh = dims.h;
+            const extraRot = entry?.mp4Decoder?.rotationDeg || 0;
+            const rawDims = getDrawableDimensions(drawable, 0);
+            const dispRatio =
+              extraRot === 90 || extraRot === 270 ? rawDims.h / rawDims.w : rawDims.w / rawDims.h;
+            const canvasRatio = w / h;
+            let fitW = w;
+            let fitH = h;
+            if (Math.abs(dispRatio - canvasRatio) > 0.01) {
+              if (dispRatio > canvasRatio) {
+                fitW = w;
+                fitH = w / dispRatio;
+              } else {
+                fitH = h;
+                fitW = h * dispRatio;
+              }
+            }
+            const drawRawW = extraRot === 90 || extraRot === 270 ? fitH : fitW;
+            const drawRawH = extraRot === 90 || extraRot === 270 ? fitW : fitH;
+
             const interp = interpolateClipAtPlayhead(activeClip, timelineSec);
 
             const bri = 100 + (activeClip.brightness || 0);
@@ -2440,7 +2677,9 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             expCtx.translate(w / 2 + posXOffset, h / 2 + posYOffset);
 
             const totalRotDeg =
-              ((interp.rotation ?? activeClip.rotation) || 0) + (activeClip.cropRotateDeg || 0);
+              ((interp.rotation ?? activeClip.rotation) || 0) +
+              (activeClip.cropRotateDeg || 0) +
+              extraRot;
             if (totalRotDeg !== 0) {
               expCtx.rotate((totalRotDeg * Math.PI) / 180);
             }
@@ -2454,36 +2693,21 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               (activeClip.flipV ? -1 : 1);
             expCtx.scale(scaleXFactor, scaleYFactor);
 
-            // Compute exact contain fit inside targetExportW x targetExportH
-            const clipRatio = vw / vh;
-            const canvasRatio = w / h;
-            let drawW = w;
-            let drawH = h;
-            if (Math.abs(clipRatio - canvasRatio) > 0.01) {
-              if (clipRatio > canvasRatio) {
-                drawW = w;
-                drawH = w / clipRatio;
-              } else {
-                drawH = h;
-                drawW = h * clipRatio;
-              }
-            }
-
             const cLeftPct = Math.max(0, Math.min(85, activeClip.cropLeft || 0));
             const cTopPct = Math.max(0, Math.min(85, activeClip.cropTop || 0));
             const cRightPct = Math.max(0, Math.min(85, activeClip.cropRight || 0));
             const cBottomPct = Math.max(0, Math.min(85, activeClip.cropBottom || 0));
             if (cLeftPct > 0 || cTopPct > 0 || cRightPct > 0 || cBottomPct > 0) {
-              const cropX = -drawW / 2 + (cLeftPct / 100) * drawW;
-              const cropY = -drawH / 2 + (cTopPct / 100) * drawH;
-              const cropW = Math.max(16, drawW * (1 - (cLeftPct + cRightPct) / 100));
-              const cropH = Math.max(16, drawH * (1 - (cTopPct + cBottomPct) / 100));
+              const cropX = -drawRawW / 2 + (cLeftPct / 100) * drawRawW;
+              const cropY = -drawRawH / 2 + (cTopPct / 100) * drawRawH;
+              const cropW = Math.max(16, drawRawW * (1 - (cLeftPct + cRightPct) / 100));
+              const cropH = Math.max(16, drawRawH * (1 - (cTopPct + cBottomPct) / 100));
               expCtx.beginPath();
               expCtx.rect(cropX, cropY, cropW, cropH);
               expCtx.clip();
             }
 
-            expCtx.drawImage(drawable, -drawW / 2, -drawH / 2, drawW, drawH);
+            expCtx.drawImage(drawable, -drawRawW / 2, -drawRawH / 2, drawRawW, drawRawH);
 
             if (isTransActive && (tType === 'white_flash' || tType === 'light_flash')) {
               const flashAlpha = Math.max(0, 1 - Math.abs(transProgress - 0.35) * 2.5);
@@ -2559,7 +2783,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
         ? mobileTargetBps
         : Math.max(8_000_000, Math.min(85_000_000, exportSpec.videoBitsPerSecond || 24_000_000));
 
-      const chosenVideoConfig = isWebCodecsSupported
+      let chosenVideoConfig = isWebCodecsSupported
         ? await selectSupportedVideoEncoderConfig(
             renderExportW,
             renderExportH,
@@ -2567,6 +2791,21 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             effectiveTargetBps
           )
         : null;
+
+      // Check whether project has audio clips or audible video
+      const hasTimelineAudio =
+        activeV1Clips.some((c) => !c.muted && ((c.volume ?? 100) > 0)) ||
+        activeAudioClips.length > 0;
+
+      // Detect supported AAC sample rate (48000Hz or 44100Hz)
+      const detectedAudioSampleRate = await detectSupportedAudioEncoderSampleRate();
+
+      // If project has audio but AAC AudioEncoder is not supported, do not produce a silent MP4.
+      // Fall through to MediaRecorder branch which captures audio via Web Audio stream.
+      if (hasTimelineAudio && detectedAudioSampleRate === null) {
+        console.warn('[WebCodecs] AAC AudioEncoder not supported on this device; falling back to MediaRecorder to preserve audio.');
+        chosenVideoConfig = null;
+      }
 
       const canUseWebCodecs = Boolean(isWebCodecsSupported && chosenVideoConfig);
 
@@ -2586,29 +2825,17 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           // =========================================================================
           setProgress(20);
 
-          // Check AudioEncoder support
-          let canUseAudioEncoder = false;
-          if (typeof AudioEncoder !== 'undefined' && typeof AudioData !== 'undefined') {
-            try {
-              const aRes = await AudioEncoder.isConfigSupported({
-                codec: 'mp4a.40.2',
-                numberOfChannels: 2,
-                sampleRate: 48000,
-                bitrate: 192_000,
-              });
-              canUseAudioEncoder = Boolean(aRes && aRes.supported);
-            } catch {
-              canUseAudioEncoder = false;
-            }
-          }
-
-          // Mix all project audio tracks and video clip audio via OfflineAudioContext (48kHz stereo)
+          // Mix all project audio tracks and video clip audio via OfflineAudioContext (48kHz or 44.1kHz stereo)
           const allAudioClips = [...activeV1Clips, ...activeAudioClips];
-          const renderedAudioBuffer = await mixProjectAudioOffline(
-            allAudioClips,
-            fullTimelineSec,
-            abortExportRef
-          );
+          const audioSampleRate = detectedAudioSampleRate || 48000;
+          const renderedAudioBuffer = hasTimelineAudio
+            ? await mixProjectAudioOffline(
+                allAudioClips,
+                fullTimelineSec,
+                abortExportRef,
+                audioSampleRate
+              )
+            : null;
 
           if (abortExportRef.current) break;
 
@@ -2622,11 +2849,11 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               frameRate: targetFps,
             },
             audio:
-              canUseAudioEncoder && renderedAudioBuffer
+              detectedAudioSampleRate !== null && renderedAudioBuffer
                 ? {
                     codec: 'aac',
                     numberOfChannels: 2,
-                    sampleRate: 48000,
+                    sampleRate: renderedAudioBuffer.sampleRate,
                   }
                 : undefined,
             fastStart: 'in-memory',
@@ -2634,7 +2861,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           });
 
           // Encode audio into muxer via AudioEncoder
-          if (canUseAudioEncoder && renderedAudioBuffer) {
+          if (detectedAudioSampleRate !== null && renderedAudioBuffer) {
             await encodeAudioBufferToMuxer(
               renderedAudioBuffer,
               muxer,
@@ -2790,9 +3017,14 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             if (videoEncoder.encodeQueueSize > 5) {
               await new Promise<void>((resolve) => {
                 let resolved = false;
+                let timer: any = null;
                 const onDone = () => {
                   if (resolved) return;
                   resolved = true;
+                  if (timer) {
+                    clearInterval(timer);
+                    timer = null;
+                  }
                   try {
                     videoEncoder.removeEventListener('dequeue', onDequeue);
                   } catch {
@@ -2810,9 +3042,8 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                 } catch {
                   // Fallback
                 }
-                const timer = setInterval(() => {
+                timer = setInterval(() => {
                   if (videoEncoder.encodeQueueSize <= 2 || abortExportRef.current || videoEncoderError) {
-                    clearInterval(timer);
                     onDone();
                   }
                 }, 8);
@@ -2844,13 +3075,23 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             break;
           }
 
-          await videoEncoder.flush();
           try {
-            if (videoEncoder.state !== 'closed') videoEncoder.close();
-          } catch {
-            // Ignore
+            await videoEncoder.flush();
+          } catch (flushErr) {
+            console.error('[WebCodecs VideoEncoder] flush error:', flushErr);
+            videoEncoderError = flushErr instanceof Error ? flushErr : new Error(String(flushErr));
+          } finally {
+            try {
+              if (videoEncoder.state !== 'closed') videoEncoder.close();
+            } catch {
+              // Ignore
+            }
+            activeVideoEncoderRef.current = null;
           }
-          activeVideoEncoderRef.current = null;
+
+          if (abortExportRef.current || videoEncoderError) {
+            break;
+          }
 
           muxer.finalize();
 
@@ -2902,7 +3143,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           const firstClip = activeV1Clips[0];
           if (firstClip) {
             const firstEntry = preloadedVideos.get(firstClip.id);
-            if (firstEntry) {
+            if (firstEntry && firstEntry.el) {
               const startSec = Math.max(0, firstClip.sourceIn || 0);
               const spd = Math.max(0.25, Math.min(4.0, firstClip.speed || 1.0));
               firstEntry.el.playbackRate = spd;
@@ -3026,16 +3267,19 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             }
           };
 
-          const renderCompletePromise = new Promise<Blob>((resolve) => {
+          const renderCompletePromise = new Promise<Blob>((resolve, reject) => {
             recorder.onstop = () => {
               resolve(new Blob(chunks, { type: actualMime }));
+            };
+            recorder.onerror = (e) => {
+              reject(new Error(`MediaRecorder error: ${(e as any)?.error?.message || 'unknown'}`));
             };
           });
 
           let recordStartMs = performance.now();
           if (firstClip) {
             const firstEntry = preloadedVideos.get(firstClip.id);
-            if (firstEntry) {
+            if (firstEntry && firstEntry.el) {
               const startSec = Math.max(0, firstClip.sourceIn || 0);
               const spd = Math.max(0.25, Math.min(4.0, firstClip.speed || 1.0));
               firstEntry.el.playbackRate = spd;

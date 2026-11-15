@@ -429,3 +429,26 @@ export async function transcribeAudioWithWhisper(
   onProgress?.(98, 'Đang đồng bộ phụ đề lên Timeline...');
   return segments;
 }
+
+export async function translateSubtitleLine(
+  text: string,
+  targetLangCode: string = 'vi'
+): Promise<string> {
+  if (!text.trim()) return text;
+  const tl = targetLangCode === 'auto' ? 'vi' : targetLangCode.split('-')[0];
+  try {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(
+      tl
+    )}&dt=t&q=${encodeURIComponent(text)}`;
+    const resp = await fetch(url);
+    if (!resp.ok) return text;
+    const data = await resp.json();
+    if (Array.isArray(data?.[0])) {
+      const joined = data[0].map((part: any) => (Array.isArray(part) ? part[0] || '' : '')).join('').trim();
+      if (joined) return joined;
+    }
+  } catch {
+    // Offline or blocked fallback
+  }
+  return text;
+}

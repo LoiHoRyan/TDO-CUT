@@ -132,6 +132,13 @@ export interface MobileWorkstationProps {
   renderPlayer: (helpers?: { openTextEditor?: (clipId: string) => void }) => React.ReactNode;
   onReorderClips?: (reorderedTrack0Clips: TimelineClip[]) => void;
   onDuplicateClip?: (clipId: string) => void;
+  onGenerateAutoCaptions?: () => void;
+  isGeneratingCaptions?: boolean;
+  captionProgressPct?: number;
+  captionProgressText?: string;
+  bilingualSubtitles?: boolean;
+  onToggleBilingualSubtitles?: (val: boolean) => void;
+  onSpeakSubtitleTts?: (text: string) => void;
 }
 
 export type MobileDrawerType =
@@ -229,6 +236,13 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
   renderPlayer,
   onReorderClips,
   onDuplicateClip,
+  onGenerateAutoCaptions,
+  isGeneratingCaptions = false,
+  captionProgressPct = 0,
+  captionProgressText = '',
+  bilingualSubtitles = false,
+  onToggleBilingualSubtitles,
+  onSpeakSubtitleTts,
 }) => {
   const isEn = language === 'en';
   const isLight = themeMode === 'light';
@@ -2135,14 +2149,6 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   style={{ left: `${halfWidth}px` }}
                   className="absolute inset-y-0 flex items-center gap-2 z-30 pointer-events-auto"
                 >
-                  <button
-                    type="button"
-                    onClick={handleReorderEnd}
-                    className="h-14 px-3 rounded-xl bg-[#00CAE0] text-black font-bold text-xs flex items-center gap-1.5 shadow-lg active:scale-95 cursor-pointer shrink-0"
-                  >
-                    <Check className="w-4 h-4 stroke-[3]" />
-                    <span>Xong</span>
-                  </button>
                   {reorderClips.map((clip, idx) => {
                     const isDraggingThis = reorderDraggingClipId === clip.id;
                     return (
@@ -2162,12 +2168,12 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                           backgroundSize: 'cover',
                           backgroundPosition: 'center',
                         }}
-                        className={`w-14 h-14 aspect-square rounded-xl border-2 flex flex-col justify-between p-1 shrink-0 relative transition-all shadow-md cursor-grab active:cursor-grabbing select-none ${
+                        className={`w-12 h-12 aspect-square rounded-xl border-2 flex flex-col justify-between p-1 shrink-0 relative transition-transform duration-150 cursor-grab active:cursor-grabbing select-none ${
                           isDraggingThis
-                            ? 'border-[#00CAE0] ring-2 ring-[#00CAE0]/60 scale-105 z-40 bg-[#00CAE0]/30'
+                            ? '-translate-y-2.5 scale-115 border-white ring-2 ring-[#00CAE0] shadow-2xl z-40'
                             : isLight
-                            ? 'border-gray-300 bg-white text-gray-800'
-                            : 'border-white/20 bg-[#1A1C24] text-white'
+                            ? 'border-gray-300 bg-white text-gray-800 opacity-85'
+                            : 'border-white/25 bg-[#1A1C24] text-white opacity-85'
                         }`}
                       >
                         <div className="flex items-center justify-between">

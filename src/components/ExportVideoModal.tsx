@@ -2936,14 +2936,39 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
         ? mobileTargetBps
         : Math.max(8_000_000, Math.min(85_000_000, exportSpec.videoBitsPerSecond || 24_000_000));
 
+      let activeEncodeW = renderExportW;
+      let activeEncodeH = renderExportH;
+      let activeEncodeFps = targetFps;
       let chosenVideoConfig = isWebCodecsSupported
         ? await selectSupportedVideoEncoderConfig(
-            renderExportW,
-            renderExportH,
-            targetFps,
+            activeEncodeW,
+            activeEncodeH,
+            activeEncodeFps,
             effectiveTargetBps
           )
         : null;
+      if (isWebCodecsSupported && !chosenVideoConfig && activeEncodeFps > 30) {
+        activeEncodeFps = 30;
+        chosenVideoConfig = await selectSupportedVideoEncoderConfig(
+          activeEncodeW,
+          activeEncodeH,
+          activeEncodeFps,
+          effectiveTargetBps
+        );
+      }
+      if (isWebCodecsSupported && !chosenVideoConfig && Math.max(activeEncodeW, activeEncodeH) > 1920) {
+        const scaleDown = 1920 / Math.max(activeEncodeW, activeEncodeH);
+        activeEncodeW = Math.max(2, Math.floor((activeEncodeW * scaleDown) / 2) * 2);
+        activeEncodeH = Math.max(2, Math.floor((activeEncodeH * scaleDown) / 2) * 2);
+        exportCanvas.width = activeEncodeW;
+        exportCanvas.height = activeEncodeH;
+        chosenVideoConfig = await selectSupportedVideoEncoderConfig(
+          activeEncodeW,
+          activeEncodeH,
+          activeEncodeFps,
+          Math.min(effectiveTargetBps, 16_000_000)
+        );
+      }
 
       // Check whether project has audio clips or audible video
       const hasTimelineAudio =
@@ -3260,8 +3285,11 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             activeVideoEncoderRef.current = null;
           }
 
-          if (abortExportRef.current || videoEncoderError) {
+          if (abortExportRef.current) {
             break;
+          }
+          if (videoEncoderError) {
+            throw videoEncoderError;
           }
 
           muxer.finalize();
@@ -3720,9 +3748,15 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
         setExportedFiles(generatedList);
         setProgress(100);
       }
-    } catch {
+    } catch (exportErr) {
       if (!abortExportRef.current) {
-        setProgress(100);
+        const msg = exportErr instanceof Error ? exportErr.message : String(exportErr);
+        setCancelNotice(
+          isEn
+            ? `Export failed on this device (${msg}). Try 1080p / 30fps.`
+            : `Thiết bị không hỗ trợ xuất cấu hình này (${msg}). Hãy thử 1080p / 30fps.`
+        );
+        setProgress(0);
       }
     } finally {
       cleanupPreloadedMedia();

@@ -136,6 +136,7 @@ import {
   extractTimelineAudio16kHzMono,
   transcribeAudioWithWhisper,
   WHISPER_243_LANGUAGES,
+  translateSubtitleLine,
 } from './utils/whisperAutoCaptions';
 import {
   VideoPreviewCanvas,
@@ -1177,13 +1178,11 @@ export default function App() {
         if (activeProj) {
           setActiveProjectId(activeProj.id);
           const resolvedName = resolveDefaultProjectTitle(activeProj.name, language);
-          if (!projectName || projectName === '1') {
-            setProjectName(resolvedName);
-            setAspectRatio((activeProj.aspectRatio as AspectRatioOption) || '16:9');
-            restoreProjectMediaBlobs(activeProj.clips.map((c) => ({ ...c }))).then((restored) => {
-              setClips(restored);
-            });
-          }
+          setProjectName(resolvedName);
+          setAspectRatio((activeProj.aspectRatio as AspectRatioOption) || '16:9');
+          restoreProjectMediaBlobs(activeProj.clips.map((c) => ({ ...c }))).then((restored) => {
+            setClips(restored);
+          });
         } else {
           setActiveProjectId('');
           if (!projectName || projectName === '1') {
@@ -2975,19 +2974,17 @@ export default function App() {
     }
 
     setMediaCards((prev) => [...newMediaItems, ...prev]);
-    commitClips((prev) => {
-      const updated = [...prev, ...newTimelineClips];
-      const vCount = updated.filter((c) => c.trackIndex === 0).length;
-      setRangeEndIndex(Math.max(1, vCount));
-      return snapEnabled ? packTrackClipsContiguously(updated, 0) : updated;
-    });
-    if (newTimelineClips[0]) {
-      if (!isMobile) {
-        setSelectedClipId(newTimelineClips[0].id);
-      } else {
+    if (isMobile) {
+      commitClips((prev) => {
+        const updated = [...prev, ...newTimelineClips];
+        const vCount = updated.filter((c) => c.trackIndex === 0).length;
+        setRangeEndIndex(Math.max(1, vCount));
+        return snapEnabled ? packTrackClipsContiguously(updated, 0) : updated;
+      });
+      if (newTimelineClips[0]) {
         setSelectedClipId(null);
+        setPlayheadSec(newTimelineClips[0].startTime);
       }
-      setPlayheadSec(newTimelineClips[0].startTime);
     }
     showToast(
       firstVideoItem?.nativeAspectRatio
@@ -3375,32 +3372,40 @@ export default function App() {
         return;
       }
 
-      const generated: TimelineClip[] = segments
-        .map((seg, idx) => {
-          const cleanedText = useFillerFilter
-            ? seg.text.replace(/\b(ờ|à|ừm|uh|um)\b/gi, '').replace(/\s{2,}/g, ' ').trim()
-            : seg.text;
-          if (!cleanedText) return null;
-          return {
-            id: `auto-sub-${Date.now()}-${idx}`,
-            name: cleanedText,
-            filePath: '',
-            trackIndex: 2,
-            startTime: seg.startTime,
-            duration: seg.duration,
-            sourceIn: 0,
-            speed: 1.0,
-            volume: 100,
-            flipH: false,
-            cropRatio: 1.0,
-            subtitleText: cleanedText,
-            fontSize: activeMode === 'lyrics' ? 30 : 26,
-            textColor: '#FFFFFF',
-            textStrokeColor: '#000000',
-            colorHex: '#7A483B',
-          } as TimelineClip;
-        })
-        .filter((x): x is TimelineClip => x !== null);
+      const generated: TimelineClip[] = [];
+      for (let idx = 0; idx < segments.length; idx++) {
+        const seg = segments[idx];
+        const cleanedText = useFillerFilter
+          ? seg.text.replace(/\b(ờ|à|ừm|uh|um)\b/gi, '').replace(/\s{2,}/g, ' ').trim()
+          : seg.text;
+        if (!cleanedText) continue;
+        let finalCaption = cleanedText;
+        if (bilingualSubtitles) {
+          const targetBilingualCode = captionLanguage === 'vi' ? 'en' : 'vi';
+          const translated = await translateSubtitleLine(cleanedText, targetBilingualCode);
+          if (translated && translated.toLowerCase() !== cleanedText.toLowerCase()) {
+            finalCaption = `${cleanedText}\n${translated}`;
+          }
+        }
+        generated.push({
+          id: `auto-sub-${Date.now()}-${idx}`,
+          name: finalCaption,
+          filePath: '',
+          trackIndex: 2,
+          startTime: seg.startTime,
+          duration: seg.duration,
+          sourceIn: 0,
+          speed: 1.0,
+          volume: 100,
+          flipH: false,
+          cropRatio: 1.0,
+          subtitleText: finalCaption,
+          fontSize: activeMode === 'lyrics' ? 30 : 26,
+          textColor: '#FFFFFF',
+          textStrokeColor: '#000000',
+          colorHex: '#7A483B',
+        } as TimelineClip);
+      }
 
       if (generated.length === 0) {
         showToast(
@@ -5526,6 +5531,13 @@ export default function App() {
             }));
           }}
           onCaptureCover={handleCaptureCover}
+          onGenerateAutoCaptions={() => handleGenerateAutoCaptions('all')}
+          isGeneratingCaptions={isGeneratingCaptions}
+          captionProgressPct={captionProgressPct}
+          captionProgressText={captionProgressText}
+          bilingualSubtitles={bilingualSubtitles}
+          onToggleBilingualSubtitles={setBilingualSubtitles}
+          onSpeakSubtitleTts={handleSpeakSubtitleTts}
           renderPlayer={(helpers) => (
             <VideoPreviewCanvas
               canvasRefExternal={previewCanvasRef}
@@ -7055,6 +7067,15 @@ export default function App() {
                             className="accent-[#00CAE0]"
                           />
                           <span>Phụ đề song ngữ (Bilingual Subtitles Việt - Anh)</span>
+                        </label>
+                        <label className="flex items-center gap-2 text-[11px] text-[#D4D4D8] cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={bilingualSubtitles}
+                            onChange={(e) => setBilingualSubtitles(e.target.checked)}
+                            className="accent-[#00CAE0]"
+                          />
+                          <span>Phụ đề song ngữ (Bilingual)</span>
                         </label>
                         <label className="flex items-center gap-2 text-[11px] text-[#D4D4D8] cursor-pointer">
                           <input
@@ -10726,8 +10747,17 @@ export default function App() {
                   const anchor = prev.find((c) => c.id === clipId);
                   if (!anchor) return prev;
                   const deltaTime = newStartSec - anchor.startTime;
-                  const deltaTrack =
-                    newTrackIndex !== undefined ? newTrackIndex - anchor.trackIndex : 0;
+                  const anchorKind = timelineTracks.find((t) => t.index === anchor.trackIndex)?.kind;
+                  const targetKind =
+                    newTrackIndex !== undefined
+                      ? timelineTracks.find((t) => t.index === newTrackIndex)?.kind
+                      : anchorKind;
+                  const canMoveTrack =
+                    newTrackIndex !== undefined &&
+                    anchorKind &&
+                    targetKind &&
+                    anchorKind === targetKind;
+                  const deltaTrack = canMoveTrack ? newTrackIndex! - anchor.trackIndex : 0;
 
                   const activeIds =
                     selectedClipIds.length > 1 && selectedClipIds.includes(clipId)

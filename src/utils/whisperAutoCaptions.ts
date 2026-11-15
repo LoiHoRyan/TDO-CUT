@@ -454,3 +454,69 @@ export async function translateSubtitleLine(
   }
   return text;
 }
+
+export interface TtsVoicePreset {
+  id: string;
+  label: string;
+  gender: 'male' | 'female';
+  pitch: number;
+  rate: number;
+}
+
+export const TTS_VOICE_PRESETS: TtsVoicePreset[] = [
+  { id: 'female_soft', label: 'Nữ - Dịu dàng (Soft)', gender: 'female', pitch: 1.12, rate: 1.0 },
+  { id: 'female_bright', label: 'Nữ - Năng động (Bright)', gender: 'female', pitch: 1.22, rate: 1.08 },
+  { id: 'female_news', label: 'Nữ - Phát thanh viên (News)', gender: 'female', pitch: 1.05, rate: 1.02 },
+  { id: 'female_warm', label: 'Nữ - Kể chuyện (Story)', gender: 'female', pitch: 1.08, rate: 0.94 },
+  { id: 'male_deep', label: 'Nam - Trầm ấm (Deep)', gender: 'male', pitch: 0.82, rate: 0.96 },
+  { id: 'male_young', label: 'Nam - Trẻ trung (Young)', gender: 'male', pitch: 0.96, rate: 1.06 },
+  { id: 'male_narrator', label: 'Nam - Thuyết minh (Narrator)', gender: 'male', pitch: 0.88, rate: 1.0 },
+  { id: 'male_energetic', label: 'Nam - Sôi nổi (Energetic)', gender: 'male', pitch: 1.0, rate: 1.12 },
+];
+
+export function speakCaptionsSequentially(
+  texts: string[],
+  langCode: string,
+  presetId: string,
+  onDone?: () => void
+): void {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    onDone?.();
+    return;
+  }
+  window.speechSynthesis.cancel();
+  const cleanTexts = texts.map((t) => t.trim()).filter(Boolean);
+  if (cleanTexts.length === 0) {
+    onDone?.();
+    return;
+  }
+
+  const preset = TTS_VOICE_PRESETS.find((p) => p.id === presetId) || TTS_VOICE_PRESETS[0];
+  const baseLang = langCode.split('-')[0].toLowerCase();
+  const voices = window.speechSynthesis.getVoices();
+  const langVoices = voices.filter((v) => v.lang.toLowerCase().startsWith(baseLang));
+  const genderMatch = langVoices.find((v) => {
+    const n = v.name.toLowerCase();
+    return preset.gender === 'female'
+      ? n.includes('female') || n.includes('nu') || n.includes('linh') || n.includes('mai') || n.includes('zira') || n.includes('samantha') || n.includes('aria')
+      : n.includes('male') || n.includes('nam') || n.includes('minh') || n.includes('david') || n.includes('alex') || n.includes('guy');
+  });
+  const chosenVoice = genderMatch || langVoices[0] || null;
+
+  let idx = 0;
+  const speakNext = () => {
+    if (idx >= cleanTexts.length) {
+      onDone?.();
+      return;
+    }
+    const utter = new SpeechSynthesisUtterance(cleanTexts[idx++]);
+    utter.lang = langCode.includes('-') ? langCode : baseLang === 'vi' ? 'vi-VN' : baseLang === 'en' ? 'en-US' : langCode;
+    if (chosenVoice) utter.voice = chosenVoice;
+    utter.pitch = preset.pitch;
+    utter.rate = preset.rate;
+    utter.onend = speakNext;
+    utter.onerror = speakNext;
+    window.speechSynthesis.speak(utter);
+  };
+  speakNext();
+}

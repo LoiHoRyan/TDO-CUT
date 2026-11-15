@@ -136,8 +136,24 @@ export interface MobileWorkstationProps {
   isGeneratingCaptions?: boolean;
   captionProgressPct?: number;
   captionProgressText?: string;
+  captionLanguage?: string;
+  onChangeCaptionLanguage?: (lang: string) => void;
   bilingualSubtitles?: boolean;
   onToggleBilingualSubtitles?: (val: boolean) => void;
+  bilingualTargetLang?: string;
+  onChangeBilingualTargetLang?: (lang: string) => void;
+  languageOptions?: Array<{ code: string; label: string }>;
+  ttsSourceTrack?: 'primary' | 'bilingual';
+  onChangeTtsSourceTrack?: (src: 'primary' | 'bilingual') => void;
+  ttsLang?: string;
+  onChangeTtsLang?: (lang: string) => void;
+  ttsGender?: 'all' | 'male' | 'female';
+  onChangeTtsGender?: (g: 'all' | 'male' | 'female') => void;
+  ttsPresetId?: string;
+  onChangeTtsPresetId?: (id: string) => void;
+  ttsPresets?: Array<{ id: string; label: string; gender: 'male' | 'female' }>;
+  onRunBatchTts?: () => void;
+  onStopTts?: () => void;
   onSpeakSubtitleTts?: (text: string) => void;
 }
 
@@ -240,8 +256,24 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
   isGeneratingCaptions = false,
   captionProgressPct = 0,
   captionProgressText = '',
+  captionLanguage = 'auto',
+  onChangeCaptionLanguage,
   bilingualSubtitles = false,
   onToggleBilingualSubtitles,
+  bilingualTargetLang = 'en',
+  onChangeBilingualTargetLang,
+  languageOptions = [],
+  ttsSourceTrack = 'primary',
+  onChangeTtsSourceTrack,
+  ttsLang = 'vi',
+  onChangeTtsLang,
+  ttsGender = 'all',
+  onChangeTtsGender,
+  ttsPresetId = 'female_soft',
+  onChangeTtsPresetId,
+  ttsPresets = [],
+  onRunBatchTts,
+  onStopTts,
   onSpeakSubtitleTts,
 }) => {
   const isEn = language === 'en';
@@ -875,9 +907,9 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
     const scrollEl = timelineScrollRef.current;
     if (!scrollEl) return;
     const rect = scrollEl.getBoundingClientRect();
-    const cardStartX = halfWidth + 84;
+    const cardStartX = halfWidth;
     const localX = clientX - rect.left + scrollEl.scrollLeft - cardStartX;
-    const cardStep = 64;
+    const cardStep = 56;
     const currentClips = reorderClipsRef.current;
     const targetIdx = Math.max(0, Math.min(currentClips.length - 1, Math.floor(localX / cardStep)));
     const currentIdx = currentClips.findIndex((c) => c.id === reorderDraggingClipIdRef.current);
@@ -1775,7 +1807,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                 type="button"
                 onClick={handlePlayToggle}
                 aria-label={isPlaying ? 'Tạm dừng' : 'Phát'}
-                className="w-9 h-9 rounded-full bg-[#00CAE0] text-[#071013] flex items-center justify-center active:scale-90 shadow-md transition-transform cursor-pointer"
+                className="w-9 h-9 rounded-full bg-white/10 text-[#E4E4E7] flex items-center justify-center active:scale-90 shadow-md transition-transform cursor-pointer"
               >
                 {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
               </button>
@@ -3079,13 +3111,13 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   onAddMedia('video');
                   setShowAddMediaModal(false);
                 }}
-                className="w-full p-3 rounded-2xl bg-[#00CAE0]/15 border border-[#00CAE0]/40 hover:bg-[#00CAE0]/25 flex items-center gap-3 active:scale-98 transition-all cursor-pointer text-left"
+                className="w-full p-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 flex items-center gap-3 active:scale-98 transition-all cursor-pointer text-left"
               >
-                <div className="w-10 h-10 rounded-xl bg-[#00CAE0] text-[#071013] flex items-center justify-center font-bold shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-white/10 text-[#E4E4E7] flex items-center justify-center font-bold shrink-0">
                   <Film className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
-                  <div className="font-bold text-xs text-[#00CAE0]">🎬 Thư viện Video</div>
+                  <div className="font-bold text-xs text-white">🎬 Thư viện Video</div>
                   <div className="text-[10px] text-[#94A3B8] truncate">Mở video từ Thư viện điện thoại / Google Photos</div>
                 </div>
               </button>
@@ -3113,13 +3145,13 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   onAddMedia('audio');
                   setShowAddMediaModal(false);
                 }}
-                className="w-full p-3 rounded-2xl bg-sky-500/15 border border-sky-500/30 hover:bg-sky-500/25 flex items-center gap-3 active:scale-98 transition-all cursor-pointer text-left"
+                className="w-full p-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 flex items-center gap-3 active:scale-98 transition-all cursor-pointer text-left"
               >
-                <div className="w-10 h-10 rounded-xl bg-sky-500 text-white flex items-center justify-center font-bold shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-white/10 text-[#E4E4E7] flex items-center justify-center font-bold shrink-0">
                   <Music className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
-                  <div className="font-bold text-xs text-sky-400">🎵 Tệp Âm thanh</div>
+                  <div className="font-bold text-xs text-white">🎵 Tệp Âm thanh</div>
                   <div className="text-[10px] text-[#94A3B8] truncate">Mở file nhạc, MP3, WAV từ thiết bị</div>
                 </div>
               </button>
@@ -3613,46 +3645,133 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
 
               {onGenerateAutoCaptions && (
                 <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-2.5">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-white">Phụ đề tự động (Whisper AI)</span>
-                    {onToggleBilingualSubtitles && (
-                      <label className="flex items-center gap-1.5 text-[11px] text-[#D4D4D8] cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={bilingualSubtitles}
-                          onChange={(e) => onToggleBilingualSubtitles(e.target.checked)}
-                          className="accent-[#00CAE0]"
-                        />
-                        <span>Song ngữ</span>
-                      </label>
-                    )}
+                  <div className="text-xs font-bold text-[#00CAE0]">Phụ đề tự động (Whisper AI)</div>
+                  <div className="flex items-center justify-between gap-2 text-[11px]">
+                    <span className="text-[#94A3B8]">Ngôn ngữ video:</span>
+                    <select
+                      value={captionLanguage}
+                      onChange={(e) => onChangeCaptionLanguage?.(e.target.value)}
+                      className="max-w-[180px] px-2 py-1 bg-[#141418] border border-white/15 rounded text-white text-[11px]"
+                    >
+                      {languageOptions.map((l) => (
+                        <option key={`m-cap-${l.code}`} value={l.code}>{l.label}</option>
+                      ))}
+                    </select>
                   </div>
+                  {onToggleBilingualSubtitles && (
+                    <label className="flex items-center gap-2 text-[11px] text-[#E4E4E7] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={bilingualSubtitles}
+                        onChange={(e) => onToggleBilingualSubtitles(e.target.checked)}
+                        className="accent-[#00CAE0]"
+                      />
+                      <span>Phụ đề song ngữ (tách 2 Timeline)</span>
+                    </label>
+                  )}
+                  {bilingualSubtitles && (
+                    <div className="flex items-center justify-between gap-2 text-[11px] pl-4">
+                      <span className="text-[#94A3B8]">Ngôn ngữ dịch:</span>
+                      <select
+                        value={bilingualTargetLang}
+                        onChange={(e) => onChangeBilingualTargetLang?.(e.target.value)}
+                        className="max-w-[170px] px-2 py-1 bg-[#141418] border border-white/15 rounded text-white text-[11px]"
+                      >
+                        {languageOptions.filter((l) => l.code !== 'auto').map((l) => (
+                          <option key={`m-bi-${l.code}`} value={l.code}>{l.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   {isGeneratingCaptions && (
                     <div className="text-[11px] text-[#00CAE0]">
                       {captionProgressText || 'Đang nhận diện...'} ({captionProgressPct}%)
                     </div>
                   )}
-                  <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={isGeneratingCaptions}
+                    onClick={onGenerateAutoCaptions}
+                    className="w-full py-2 px-3 rounded-lg bg-[#00CAE0] disabled:opacity-50 text-[#090D12] font-bold text-xs cursor-pointer"
+                  >
+                    {isGeneratingCaptions ? `Đang nhận diện (${captionProgressPct}%)` : 'Tạo phụ đề tự động'}
+                  </button>
+                </div>
+              )}
+
+              {onRunBatchTts && (
+                <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-2">
+                  <div className="text-xs font-bold text-white">Chuyển văn bản thành giọng nói (Dubbing)</div>
+                  <div className="grid grid-cols-2 gap-1.5 text-[11px]">
                     <button
                       type="button"
-                      disabled={isGeneratingCaptions}
-                      onClick={onGenerateAutoCaptions}
-                      className="py-2 px-3 rounded-lg bg-[#00CAE0] disabled:opacity-50 text-[#090D12] font-bold text-xs cursor-pointer"
+                      onClick={() => onChangeTtsSourceTrack?.('primary')}
+                      className={`py-1.5 px-2 rounded-lg border font-semibold cursor-pointer ${
+                        ttsSourceTrack === 'primary'
+                          ? 'bg-[#00CAE0]/20 border-[#00CAE0] text-[#00CAE0]'
+                          : 'bg-[#141418] border-white/10 text-[#A1A1AA]'
+                      }`}
                     >
-                      {isGeneratingCaptions ? `Đang tạo (${captionProgressPct}%)` : 'Tạo phụ đề tự động'}
+                      1. Phụ đề gốc
                     </button>
-                    {onSpeakSubtitleTts && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const txt = textClips[0]?.subtitleText || textClips[0]?.name || '';
-                          if (txt) onSpeakSubtitleTts(txt);
-                        }}
-                        className="py-2 px-3 rounded-lg bg-[#25262C] text-white border border-white/15 font-semibold text-xs cursor-pointer"
-                      >
-                        Chuyển chữ thành giọng
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => onChangeTtsSourceTrack?.('bilingual')}
+                      className={`py-1.5 px-2 rounded-lg border font-semibold cursor-pointer ${
+                        ttsSourceTrack === 'bilingual'
+                          ? 'bg-[#00CAE0]/20 border-[#00CAE0] text-[#00CAE0]'
+                          : 'bg-[#141418] border-white/10 text-[#A1A1AA]'
+                      }`}
+                    >
+                      2. Phụ đề song ngữ
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <select
+                      value={ttsLang}
+                      onChange={(e) => onChangeTtsLang?.(e.target.value)}
+                      className="px-2 py-1.5 bg-[#141418] border border-white/15 rounded text-white"
+                    >
+                      {languageOptions.filter((l) => l.code !== 'auto').map((l) => (
+                        <option key={`m-tts-l-${l.code}`} value={l.code}>{l.label}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={ttsGender}
+                      onChange={(e) => onChangeTtsGender?.(e.target.value as 'all' | 'male' | 'female')}
+                      className="px-2 py-1.5 bg-[#141418] border border-white/15 rounded text-white"
+                    >
+                      <option value="all">Tất cả giới tính</option>
+                      <option value="female">Giọng Nữ</option>
+                      <option value="male">Giọng Nam</option>
+                    </select>
+                  </div>
+                  <select
+                    value={ttsPresetId}
+                    onChange={(e) => onChangeTtsPresetId?.(e.target.value)}
+                    className="w-full px-2 py-1.5 bg-[#141418] border border-white/15 rounded text-white text-[11px]"
+                  >
+                    {ttsPresets
+                      .filter((p) => ttsGender === 'all' || p.gender === ttsGender)
+                      .map((p) => (
+                        <option key={`m-vp-${p.id}`} value={p.id}>{p.label}</option>
+                      ))}
+                  </select>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={onRunBatchTts}
+                      className="col-span-2 py-2 px-3 rounded-lg bg-[#00CAE0] text-[#090D12] font-bold text-xs cursor-pointer"
+                    >
+                      Đọc toàn bộ phụ đề đã chọn
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onStopTts?.()}
+                      className="py-2 px-2 rounded-lg bg-[#25262C] text-white border border-white/15 font-semibold text-xs cursor-pointer"
+                    >
+                      Dừng
+                    </button>
                   </div>
                 </div>
               )}

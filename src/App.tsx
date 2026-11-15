@@ -137,6 +137,8 @@ import {
   transcribeAudioWithWhisper,
   WHISPER_243_LANGUAGES,
   translateSubtitleLine,
+  TTS_VOICE_PRESETS,
+  speakCaptionsSequentially,
 } from './utils/whisperAutoCaptions';
 import {
   VideoPreviewCanvas,
@@ -1297,6 +1299,10 @@ export default function App() {
   // AI Captions & Prompt State
   const [bilingualSubtitles, setBilingualSubtitles] = useState<boolean>(false);
   const [bilingualTargetLang, setBilingualTargetLang] = useState<string>('en');
+  const [ttsSourceTrack, setTtsSourceTrack] = useState<'primary' | 'bilingual'>('primary');
+  const [ttsLang, setTtsLang] = useState<string>('vi');
+  const [ttsGender, setTtsGender] = useState<'all' | 'male' | 'female'>('all');
+  const [ttsPresetId, setTtsPresetId] = useState<string>('female_soft');
   const [removeFillerWords, setRemoveFillerWords] = useState<boolean>(false);
   const [captionLanguage, setCaptionLanguage] = useState<string>('auto');
   const [isGeneratingCaptions, setIsGeneratingCaptions] = useState<boolean>(false);
@@ -2580,7 +2586,7 @@ export default function App() {
         (c) =>
           !c.disabled &&
           (Boolean(c.subtitleText) ||
-            (c.trackIndex === 2 &&
+            ((c.trackIndex === 2 || c.trackIndex === 6) &&
               !c.stickerEmoji &&
               (!c.stickerType || c.stickerType === 'none'))) &&
           playheadSec >= c.startTime &&
@@ -3373,6 +3379,7 @@ export default function App() {
         return;
       }
 
+      const BILINGUAL_TRACK_IDX = 6;
       const generated: TimelineClip[] = [];
       for (let idx = 0; idx < segments.length; idx++) {
         const seg = segments[idx];
@@ -3380,17 +3387,11 @@ export default function App() {
           ? seg.text.replace(/\b(ờ|à|ừm|uh|um)\b/gi, '').replace(/\s{2,}/g, ' ').trim()
           : seg.text;
         if (!cleanedText) continue;
-        let finalCaption = cleanedText;
-        if (bilingualSubtitles) {
-          const targetBilingualCode = bilingualTargetLang || (captionLanguage === 'vi' ? 'en' : 'vi');
-          const translated = await translateSubtitleLine(cleanedText, targetBilingualCode);
-          if (translated && translated.toLowerCase() !== cleanedText.toLowerCase()) {
-            finalCaption = `${cleanedText}\n${translated}`;
-          }
-        }
+
+        // Track 2: Original text (positioned upper on screen when bilingual is active)
         generated.push({
           id: `auto-sub-${Date.now()}-${idx}`,
-          name: finalCaption,
+          name: cleanedText,
           filePath: '',
           trackIndex: 2,
           startTime: seg.startTime,
@@ -3400,12 +3401,40 @@ export default function App() {
           volume: 100,
           flipH: false,
           cropRatio: 1.0,
-          subtitleText: finalCaption,
+          posY: bilingualSubtitles ? -68 : 0,
+          subtitleText: cleanedText,
           fontSize: activeMode === 'lyrics' ? 30 : 26,
           textColor: '#FFFFFF',
           textStrokeColor: '#000000',
           colorHex: '#7A483B',
         } as TimelineClip);
+
+        // Track 6: Separate second Text timeline for bilingual translated subtitle (positioned lower)
+        if (bilingualSubtitles) {
+          const targetBilingualCode = bilingualTargetLang || (captionLanguage === 'vi' ? 'en' : 'vi');
+          const translated = await translateSubtitleLine(cleanedText, targetBilingualCode);
+          if (translated) {
+            generated.push({
+              id: `auto-sub-bi-${Date.now()}-${idx}`,
+              name: translated,
+              filePath: '',
+              trackIndex: BILINGUAL_TRACK_IDX,
+              startTime: seg.startTime,
+              duration: seg.duration,
+              sourceIn: 0,
+              speed: 1.0,
+              volume: 100,
+              flipH: false,
+              cropRatio: 1.0,
+              posY: 16,
+              subtitleText: translated,
+              fontSize: activeMode === 'lyrics' ? 28 : 24,
+              textColor: '#FDE047',
+              textStrokeColor: '#000000',
+              colorHex: '#6E4135',
+            } as TimelineClip);
+          }
+        }
       }
 
       if (generated.length === 0) {
@@ -3415,6 +3444,28 @@ export default function App() {
             : 'Không tạo được câu phụ đề hợp lệ từ giọng nói.'
         );
         return;
+      }
+
+      if (bilingualSubtitles) {
+        setTimelineTracks((prev) => {
+          if (prev.some((t) => t.index === BILINGUAL_TRACK_IDX)) return prev;
+          const idx2 = prev.findIndex((t) => t.index === 2);
+          const newTrack = {
+            id: BILINGUAL_TRACK_IDX,
+            index: BILINGUAL_TRACK_IDX,
+            name: 'Phụ đề Song ngữ',
+            label: 'Phụ đề Song ngữ',
+            type: 'text' as const,
+            kind: 'text' as const,
+            heightPx: 26,
+          };
+          if (idx2 >= 0) {
+            const copy = [...prev];
+            copy.splice(idx2 + 1, 0, newTrack);
+            return copy;
+          }
+          return [newTrack, ...prev];
+        });
       }
 
       commitClips((prev) => [
@@ -3450,7 +3501,26 @@ export default function App() {
     }
   };
 
-  // Text-to-Speech (TTS) via Web Speech API + Audio Sfx Marker
+  // Batch Text-to-Audio (Dubbing): mutually exclusive between Original captions (Track 2) and Bilingual captions (Track 6)
+  const handleRunBatchTts = () => {
+    const targetTrack = ttsSourceTrack === 'bilingual' ? 6 : 2;
+    const selectedSubs = clips
+      .filter((c) => c.trackIndex === targetTrack && Boolean(c.subtitleText?.trim()))
+      .sort((a, b) => a.startTime - b.startTime)
+      .map((c) => c.subtitleText!.trim());
+
+    if (selectedSubs.length === 0) {
+      showToast(
+        ttsSourceTrack === 'bilingual'
+          ? 'Chưa có phụ đề song ngữ (Track 2) để đọc giọng!'
+          : 'Chưa có phụ đề gốc trên Timeline để đọc giọng!'
+      );
+      return;
+    }
+    speakCaptionsSequentially(selectedSubs, ttsLang, ttsPresetId);
+  };
+
+    // Text-to-Speech (TTS) via Web Speech API + Audio Sfx Marker
   const handleSpeakSubtitleTts = (textToSpeak: string) => {
     if (!textToSpeak.trim()) return;
     try {
@@ -5536,8 +5606,28 @@ export default function App() {
           isGeneratingCaptions={isGeneratingCaptions}
           captionProgressPct={captionProgressPct}
           captionProgressText={captionProgressText}
+          captionLanguage={captionLanguage}
+          onChangeCaptionLanguage={setCaptionLanguage}
           bilingualSubtitles={bilingualSubtitles}
           onToggleBilingualSubtitles={setBilingualSubtitles}
+          bilingualTargetLang={bilingualTargetLang}
+          onChangeBilingualTargetLang={setBilingualTargetLang}
+          languageOptions={WHISPER_243_LANGUAGES}
+          ttsSourceTrack={ttsSourceTrack}
+          onChangeTtsSourceTrack={setTtsSourceTrack}
+          ttsLang={ttsLang}
+          onChangeTtsLang={setTtsLang}
+          ttsGender={ttsGender}
+          onChangeTtsGender={(g) => {
+            setTtsGender(g);
+            const firstMatch = TTS_VOICE_PRESETS.find((p) => g === 'all' || p.gender === g);
+            if (firstMatch) setTtsPresetId(firstMatch.id);
+          }}
+          ttsPresetId={ttsPresetId}
+          onChangeTtsPresetId={setTtsPresetId}
+          ttsPresets={TTS_VOICE_PRESETS}
+          onRunBatchTts={handleRunBatchTts}
+          onStopTts={() => window.speechSynthesis?.cancel()}
           onSpeakSubtitleTts={handleSpeakSubtitleTts}
           renderPlayer={(helpers) => (
             <VideoPreviewCanvas
@@ -7057,30 +7147,87 @@ export default function App() {
                       >
                         <div className="flex items-center justify-between">
                           <span className="font-semibold text-[#00CAE0]">
-                            Chuyển văn bản thành giọng nói (Text-to-Audio)
+                            Chuyển văn bản thành giọng nói (Dubbing)
                           </span>
                         </div>
-                        <p className="text-[10px] text-[#9CA3AF]">
-                          Đọc nội dung phụ đề / văn bản đang chọn bằng giọng AI trình duyệt.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const targetTxt =
-                              activeSubtitleClip?.subtitleText ||
-                              activeSubtitleClip?.name ||
-                              clips.find((c) => c.trackIndex === 2 && c.subtitleText)?.subtitleText ||
-                              '';
-                            if (targetTxt) {
-                              handleSpeakSubtitleTts(targetTxt);
-                            } else {
-                              showToast('Hãy thêm hoặc chọn một câu văn bản trên Timeline trước!');
-                            }
-                          }}
-                          className="w-full py-1.5 bg-[#00CAE0] hover:bg-[#00D8EE] text-[#090D12] font-bold rounded transition-colors cursor-pointer"
+                        <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                          <button
+                            type="button"
+                            onClick={() => setTtsSourceTrack('primary')}
+                            className={`py-1 px-2 rounded border font-semibold cursor-pointer ${
+                              ttsSourceTrack === 'primary'
+                                ? 'bg-[#00CAE0]/20 border-[#00CAE0] text-[#00CAE0]'
+                                : 'bg-[#141418] border-[#32323C] text-[#A1A1AA]'
+                            }`}
+                          >
+                            1. Phụ đề gốc
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setTtsSourceTrack('bilingual')}
+                            className={`py-1 px-2 rounded border font-semibold cursor-pointer ${
+                              ttsSourceTrack === 'bilingual'
+                                ? 'bg-[#00CAE0]/20 border-[#00CAE0] text-[#00CAE0]'
+                                : 'bg-[#141418] border-[#32323C] text-[#A1A1AA]'
+                            }`}
+                          >
+                            2. Phụ đề song ngữ
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                          <select
+                            value={ttsLang}
+                            onChange={(e) => setTtsLang(e.target.value)}
+                            className="px-2 py-1 bg-[#141418] border border-[#32323C] rounded text-white outline-none"
+                          >
+                            {WHISPER_243_LANGUAGES.filter((l) => l.code !== 'auto').map((l) => (
+                              <option key={`pc-tts-l-${l.code}`} value={l.code}>
+                                {l.label}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={ttsGender}
+                            onChange={(e) => {
+                              const g = e.target.value as 'all' | 'male' | 'female';
+                              setTtsGender(g);
+                              const firstMatch = TTS_VOICE_PRESETS.find((p) => g === 'all' || p.gender === g);
+                              if (firstMatch) setTtsPresetId(firstMatch.id);
+                            }}
+                            className="px-2 py-1 bg-[#141418] border border-[#32323C] rounded text-white outline-none"
+                          >
+                            <option value="all">Tất cả giới tính</option>
+                            <option value="female">Giọng Nữ</option>
+                            <option value="male">Giọng Nam</option>
+                          </select>
+                        </div>
+                        <select
+                          value={ttsPresetId}
+                          onChange={(e) => setTtsPresetId(e.target.value)}
+                          className="w-full px-2 py-1 bg-[#141418] border border-[#32323C] rounded text-white text-[11px] outline-none"
                         >
-                          Đọc giọng nói (Text-to-Audio)
-                        </button>
+                          {TTS_VOICE_PRESETS.filter((p) => ttsGender === 'all' || p.gender === ttsGender).map((p) => (
+                            <option key={`pc-vp-${p.id}`} value={p.id}>
+                              {p.label}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={handleRunBatchTts}
+                            className="col-span-2 py-1.5 bg-[#00CAE0] hover:bg-[#00D8EE] text-[#090D12] font-bold rounded transition-colors cursor-pointer"
+                          >
+                            Đọc toàn bộ phụ đề
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => window.speechSynthesis?.cancel()}
+                            className="py-1.5 bg-[#141418] hover:bg-[#2A2B34] text-white border border-[#32323C] font-semibold rounded cursor-pointer"
+                          >
+                            Dừng
+                          </button>
+                        </div>
                       </div>
 
                       {activeSubtitleClip ? (

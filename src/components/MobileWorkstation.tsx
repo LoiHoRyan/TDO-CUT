@@ -132,6 +132,7 @@ export interface MobileWorkstationProps {
   renderPlayer: (helpers?: { openTextEditor?: (clipId: string) => void }) => React.ReactNode;
   onReorderClips?: (reorderedTrack0Clips: TimelineClip[]) => void;
   onDuplicateClip?: (clipId: string) => void;
+  onToggleClipOverlay?: (clipId: string) => void;
   onGenerateAutoCaptions?: () => void;
   isGeneratingCaptions?: boolean;
   captionProgressPct?: number;
@@ -252,6 +253,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
   renderPlayer,
   onReorderClips,
   onDuplicateClip,
+  onToggleClipOverlay,
   onGenerateAutoCaptions,
   isGeneratingCaptions = false,
   captionProgressPct = 0,
@@ -825,6 +827,8 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
   const [isReordering, setIsReordering] = useState(false);
   const [reorderDraggingClipId, setReorderDraggingClipId] = useState<string | null>(null);
   const [reorderClips, setReorderClips] = useState<TimelineClip[]>([]);
+  const [reorderFingerOffsetX, setReorderFingerOffsetX] = useState<number>(0);
+  const reorderOriginXRef = useRef<number | null>(null);
   const isReorderingRef = useRef(false);
   const reorderDraggingClipIdRef = useRef<string | null>(null);
   const reorderClipsRef = useRef<TimelineClip[]>([]);
@@ -847,6 +851,8 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       setIsReordering(true);
       reorderDraggingClipIdRef.current = clip.id;
       setReorderDraggingClipId(clip.id);
+      reorderOriginXRef.current = clientX;
+      setReorderFingerOffsetX(0);
       reorderClipsRef.current = [...videoClips];
       setReorderClips([...videoClips]);
       longPressTimerRef.current = null;
@@ -904,6 +910,8 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
 
   const handleReorderMove = (clientX: number) => {
     if (!isReorderingRef.current || !reorderDraggingClipIdRef.current) return;
+    if (reorderOriginXRef.current === null) reorderOriginXRef.current = clientX;
+    setReorderFingerOffsetX(clientX - reorderOriginXRef.current);
     const scrollEl = timelineScrollRef.current;
     if (!scrollEl) return;
     const rect = scrollEl.getBoundingClientRect();
@@ -919,6 +927,8 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       next.splice(targetIdx, 0, removed);
       reorderClipsRef.current = next;
       setReorderClips(next);
+      reorderOriginXRef.current = clientX;
+      setReorderFingerOffsetX(0);
       try {
         if (typeof navigator !== 'undefined' && navigator.vibrate) {
           navigator.vibrate(25);
@@ -2199,6 +2209,9 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                           backgroundImage: clip.thumbnailUrl ? `url(${clip.thumbnailUrl})` : undefined,
                           backgroundSize: 'cover',
                           backgroundPosition: 'center',
+                          transform: isDraggingThis
+                            ? `translate3d(${reorderFingerOffsetX}px, -10px, 0) scale(1.15)`
+                            : undefined,
                         }}
                         className={`w-12 h-12 aspect-square rounded-xl border-2 flex flex-col justify-between p-1 shrink-0 relative transition-transform duration-150 cursor-grab active:cursor-grabbing select-none ${
                           isDraggingThis
@@ -2980,6 +2993,22 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   </div>
                   <span className="text-[9.5px] font-medium whitespace-nowrap">Xóa nền</span>
                 </button>
+
+                {/* Switch between Main Track <-> Overlay (Lớp phủ) */}
+                {onToggleClipOverlay && (
+                  <button
+                    type="button"
+                    onClick={() => onToggleClipOverlay(currentClip.id)}
+                    className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[54px] cursor-pointer active:scale-95 transition-transform"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#E4E4E7]">
+                      <Layers className="w-4 h-4" />
+                    </div>
+                    <span className="text-[10px] font-medium whitespace-nowrap">
+                      {currentClip.trackIndex === 0 ? 'Lớp phủ' : 'Rãnh chính'}
+                    </span>
+                  </button>
+                )}
 
                 {/* Crop (Cắt cúp) */}
                 <button

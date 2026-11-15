@@ -2181,6 +2181,8 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
       }
 
       let stickerCounter = 0;
+      const occupiedSubtitleBoxes: Array<{ top: number; bottom: number }> = [];
+      textAndStickerClipsToDraw.sort((a, b) => (a.posY ?? 0) - (b.posY ?? 0));
       textAndStickerClipsToDraw.forEach((itemClip) => {
         ctx.save();
         const interpolatedItem = interpolateClipAtPlayhead(itemClip, playheadSec);
@@ -2207,10 +2209,25 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
             : 0;
 
         const tx = w / 2 + (itemPosX / 1920) * w + autoOffsetX;
-        const ty =
+        let ty =
           (isStickerOnly ? h * 0.42 : h - Math.max(26, h * 0.1)) +
           (itemPosY / 1080) * h +
           autoOffsetY;
+        if (!isStickerOnly) {
+          const estFont = Math.max(14, Math.round(((itemClip.fontSize ?? 24) / 540) * h));
+          const estLines = Math.max(1, Math.ceil((itemClip.subtitleText || itemClip.name || '').length / 24));
+          const estHalfH = (estLines * estFont * 1.25) / 2 + 8;
+          for (const box of occupiedSubtitleBoxes) {
+            if (ty - estHalfH < box.bottom + 8 && ty + estHalfH > box.top - 8) {
+              if (box.bottom + 8 + estHalfH * 2 <= h - 10) {
+                ty = box.bottom + 8 + estHalfH;
+              } else {
+                ty = Math.max(estHalfH + 12, box.top - 8 - estHalfH);
+              }
+            }
+          }
+          occupiedSubtitleBoxes.push({ top: ty - estHalfH, bottom: ty + estHalfH });
+        }
         const rawScalePct =
           (itemDrag ? itemDrag.scale : interpolatedItem.scale ?? itemClip.scale) ?? 100;
         const textScale = Math.max(0.1, rawScalePct / 100);

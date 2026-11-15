@@ -2983,10 +2983,33 @@ export default function App() {
     setMediaCards((prev) => [...newMediaItems, ...prev]);
     if (isMobile) {
       commitClips((prev) => {
-        const updated = [...prev, ...newTimelineClips];
-        const vCount = updated.filter((c) => c.trackIndex === 0).length;
+        const newVideos = newTimelineClips.filter((c) => c.trackIndex === 0);
+        const newOthers = newTimelineClips.filter((c) => c.trackIndex !== 0);
+        let merged = [...prev, ...newOthers];
+        if (newVideos.length > 0) {
+          const t0 = prev.filter((c) => c.trackIndex === 0).sort((a, b) => a.startTime - b.startTime);
+          const cutPoints = [0, ...t0.flatMap((c) => [c.startTime, c.startTime + c.duration])];
+          const nearestCut = cutPoints.reduce(
+            (best, pt) => (Math.abs(pt - playheadSec) < Math.abs(best - playheadSec) ? pt : best),
+            t0.reduce((m, c) => Math.max(m, c.startTime + c.duration), 0)
+          );
+          const totalAddDur = newVideos.reduce((acc, c) => acc + c.duration, 0);
+          let cursor = nearestCut;
+          const placedNew = newVideos.map((nv) => {
+            const out = { ...nv, startTime: Number(cursor.toFixed(2)) };
+            cursor += nv.duration;
+            return out;
+          });
+          merged = merged.map((c) =>
+            c.trackIndex === 0 && c.startTime >= nearestCut - 0.02
+              ? { ...c, startTime: Number((c.startTime + totalAddDur).toFixed(2)) }
+              : c
+          );
+          merged = [...merged, ...placedNew];
+        }
+        const vCount = merged.filter((c) => c.trackIndex === 0).length;
         setRangeEndIndex(Math.max(1, vCount));
-        return snapEnabled ? packTrackClipsContiguously(updated, 0) : updated;
+        return snapEnabled ? packTrackClipsContiguously(merged, 0) : merged;
       });
       if (newTimelineClips[0]) {
         setSelectedClipId(null);
@@ -3401,9 +3424,9 @@ export default function App() {
           volume: 100,
           flipH: false,
           cropRatio: 1.0,
-          posY: bilingualSubtitles ? -68 : 0,
+          posY: bilingualSubtitles ? -125 : 0,
           subtitleText: cleanedText,
-          fontSize: activeMode === 'lyrics' ? 30 : 26,
+          fontSize: bilingualSubtitles ? 22 : activeMode === 'lyrics' ? 30 : 26,
           textColor: '#FFFFFF',
           textStrokeColor: '#000000',
           colorHex: '#7A483B',
@@ -3428,8 +3451,8 @@ export default function App() {
               cropRatio: 1.0,
               posY: 16,
               subtitleText: translated,
-              fontSize: activeMode === 'lyrics' ? 28 : 24,
-              textColor: '#FDE047',
+              fontSize: activeMode === 'lyrics' ? 24 : 20,
+              textColor: '#FFFFFF',
               textStrokeColor: '#000000',
               colorHex: '#6E4135',
             } as TimelineClip);
@@ -4113,9 +4136,13 @@ export default function App() {
         ? targetTrackIdx
         : 0;
 
+    const insertAtPlayhead =
+      targetTrackIdx === undefined && dropStartTimeSec === undefined && normalizedVideoTrack === 0;
     let videoCursor =
       dropStartTimeSec !== undefined
         ? dropStartTimeSec
+        : insertAtPlayhead
+        ? Number(Math.max(0, playheadSec).toFixed(2))
         : clips
             .filter((c) => c.trackIndex === normalizedVideoTrack)
             .reduce((acc, c) => Math.max(acc, c.startTime + c.duration), 0);
@@ -5833,7 +5860,7 @@ export default function App() {
                       key={tab.id}
                       type="button"
                       onClick={() => setTopLeftCategory(tab.id)}
-                      className={`flex flex-col items-center gap-1 px-2.5 py-1.5 rounded-md text-[10px] font-medium transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+                      className={`flex flex-col items-center gap-1 px-2.5 py-1.5 rounded-md text-[10px] font-medium transition-colors duration-75 whitespace-nowrap shrink-0 cursor-pointer ${
                         active
                           ? themeMode === 'light'
                             ? 'text-[#00A89A] font-semibold bg-[#E6FFFA] shadow-xs border border-[#99F6E4]'

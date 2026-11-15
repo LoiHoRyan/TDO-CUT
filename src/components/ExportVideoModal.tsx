@@ -2877,24 +2877,40 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
         expCtx.restore();
 
         // Draw active text, subtitle, world flag, and sticker overlays at full targetExportW x targetExportH
-        for (const ov of renderedOverlays) {
-          if (timelineSec >= ov.clip.startTime && timelineSec <= ov.clip.startTime + ov.clip.duration) {
-            const fIdx =
-              ov.frameCount > 1
-                ? Math.floor((timelineSec - ov.clip.startTime) * 16) % ov.frameCount
-                : 0;
-            expCtx.drawImage(
-              ov.img,
-              fIdx * ov.frameWidth,
-              0,
-              ov.frameWidth,
-              ov.frameHeight,
-              ov.x,
-              ov.y,
-              ov.frameWidth,
-              ov.frameHeight
-            );
+        const activeOvs = renderedOverlays
+          .filter((ov) => timelineSec >= ov.clip.startTime && timelineSec <= ov.clip.startTime + ov.clip.duration)
+          .sort((a, b) => a.y - b.y);
+        const usedYBoxes: Array<{ top: number; bottom: number }> = [];
+        for (const ov of activeOvs) {
+          const isSub = Boolean(ov.clip.subtitleText);
+          let drawY = ov.y;
+          if (isSub) {
+            for (const b of usedYBoxes) {
+              if (drawY < b.bottom + 8 && drawY + ov.frameHeight > b.top - 8) {
+                if (b.bottom + 8 + ov.frameHeight <= h - 8) {
+                  drawY = b.bottom + 8;
+                } else {
+                  drawY = Math.max(8, b.top - 8 - ov.frameHeight);
+                }
+              }
+            }
+            usedYBoxes.push({ top: drawY, bottom: drawY + ov.frameHeight });
           }
+          const fIdx =
+            ov.frameCount > 1
+              ? Math.floor((timelineSec - ov.clip.startTime) * 16) % ov.frameCount
+              : 0;
+          expCtx.drawImage(
+            ov.img,
+            fIdx * ov.frameWidth,
+            0,
+            ov.frameWidth,
+            ov.frameHeight,
+            ov.x,
+            drawY,
+            ov.frameWidth,
+            ov.frameHeight
+          );
         }
 
         // Active dynamic micro-pattern at bottom edge so hardware encoders maintain studio bitrate and never drop frames

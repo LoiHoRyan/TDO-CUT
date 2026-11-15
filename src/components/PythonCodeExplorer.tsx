@@ -125,16 +125,16 @@ export const PythonCodeExplorer: React.FC<PythonCodeExplorerProps> = ({
           onClick={() => setActiveTab('cpp_core_engine')}
           className={`p-2.5 rounded border cursor-pointer transition-colors ${
             activeTab === 'cpp_core_engine'
-              ? 'bg-[#00E5CC]/10 border-[#00E5CC] text-white'
-              : 'bg-[#1D1D24] border-[#2E2E38] text-[#D4D4D8] hover:border-[#00E5CC]/50'
+              ? 'bg-[#00CAE0]/10 border-[#00CAE0] text-white'
+              : 'bg-[#1D1D24] border-[#2E2E38] text-[#D4D4D8] hover:border-[#00CAE0]/50'
           }`}
         >
           <div className="flex items-center justify-between mb-1">
-            <span className="font-bold text-[#00E5CC] flex items-center gap-1.5">
+            <span className="font-bold text-[#00CAE0] flex items-center gap-1.5">
               <Cpu className="w-3.5 h-3.5" />
               <span>1. C++ (Core Engine Hiệu năng)</span>
             </span>
-            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#00E5CC]/20 text-[#00E5CC]">
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#00CAE0]/20 text-[#00CAE0]">
               GPU / CPU Native
             </span>
           </div>
@@ -147,8 +147,8 @@ export const PythonCodeExplorer: React.FC<PythonCodeExplorerProps> = ({
           onClick={() => setActiveTab('cs_hybrid_bridge')}
           className={`p-2.5 rounded border cursor-pointer transition-colors ${
             activeTab === 'cs_hybrid_bridge'
-              ? 'bg-[#00E5CC]/10 border-[#00E5CC] text-white'
-              : 'bg-[#1D1D24] border-[#2E2E38] text-[#D4D4D8] hover:border-[#00E5CC]/50'
+              ? 'bg-[#00CAE0]/10 border-[#00CAE0] text-white'
+              : 'bg-[#1D1D24] border-[#2E2E38] text-[#D4D4D8] hover:border-[#00CAE0]/50'
           }`}
         >
           <div className="flex items-center justify-between mb-1">
@@ -169,8 +169,8 @@ export const PythonCodeExplorer: React.FC<PythonCodeExplorerProps> = ({
           onClick={() => setActiveTab('ffmpeg_engine')}
           className={`p-2.5 rounded border cursor-pointer transition-colors ${
             activeTab === 'ffmpeg_engine' || activeTab === 'ui_main_window'
-              ? 'bg-[#00E5CC]/10 border-[#00E5CC] text-white'
-              : 'bg-[#1D1D24] border-[#2E2E38] text-[#D4D4D8] hover:border-[#00E5CC]/50'
+              ? 'bg-[#00CAE0]/10 border-[#00CAE0] text-white'
+              : 'bg-[#1D1D24] border-[#2E2E38] text-[#D4D4D8] hover:border-[#00CAE0]/50'
           }`}
         >
           <div className="flex items-center justify-between mb-1">
@@ -196,7 +196,7 @@ export const PythonCodeExplorer: React.FC<PythonCodeExplorerProps> = ({
             onClick={() => setActiveTab('cpp_core_engine')}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
               activeTab === 'cpp_core_engine'
-                ? 'bg-[#00E5CC] text-[#0B0E11]'
+                ? 'bg-[#00CAE0] text-[#0B0E11]'
                 : 'bg-[#28282E] text-[#D4D4D8] hover:text-white'
             }`}
           >
@@ -209,7 +209,7 @@ export const PythonCodeExplorer: React.FC<PythonCodeExplorerProps> = ({
             onClick={() => setActiveTab('cs_hybrid_bridge')}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
               activeTab === 'cs_hybrid_bridge'
-                ? 'bg-[#00E5CC] text-[#0B0E11]'
+                ? 'bg-[#00CAE0] text-[#0B0E11]'
                 : 'bg-[#28282E] text-[#D4D4D8] hover:text-white'
             }`}
           >
@@ -222,7 +222,7 @@ export const PythonCodeExplorer: React.FC<PythonCodeExplorerProps> = ({
             onClick={() => setActiveTab('ffmpeg_engine')}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
               activeTab === 'ffmpeg_engine'
-                ? 'bg-[#00E5CC] text-[#0B0E11]'
+                ? 'bg-[#00CAE0] text-[#0B0E11]'
                 : 'bg-[#28282E] text-[#D4D4D8] hover:text-white'
             }`}
           >
@@ -235,7 +235,7 @@ export const PythonCodeExplorer: React.FC<PythonCodeExplorerProps> = ({
             onClick={() => setActiveTab('ui_main_window')}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
               activeTab === 'ui_main_window'
-                ? 'bg-[#00E5CC] text-[#0B0E11]'
+                ? 'bg-[#00CAE0] text-[#0B0E11]'
                 : 'bg-[#28282E] text-[#D4D4D8] hover:text-white'
             }`}
           >
@@ -248,7 +248,7 @@ export const PythonCodeExplorer: React.FC<PythonCodeExplorerProps> = ({
             onClick={() => setActiveTab('timeline_widget')}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
               activeTab === 'timeline_widget'
-                ? 'bg-[#00E5CC] text-[#0B0E11]'
+                ? 'bg-[#00CAE0] text-[#0B0E11]'
                 : 'bg-[#28282E] text-[#D4D4D8] hover:text-white'
             }`}
           >
@@ -261,7 +261,7 @@ export const PythonCodeExplorer: React.FC<PythonCodeExplorerProps> = ({
             onClick={() => setActiveTab('architecture')}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
               activeTab === 'architecture'
-                ? 'bg-[#00E5CC] text-[#0B0E11]'
+                ? 'bg-[#00CAE0] text-[#0B0E11]'
                 : 'bg-[#28282E] text-[#D4D4D8] hover:text-white'
             }`}
           >
@@ -274,7 +274,7 @@ export const PythonCodeExplorer: React.FC<PythonCodeExplorerProps> = ({
             onClick={() => setActiveTab('capcut_json')}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
               activeTab === 'capcut_json'
-                ? 'bg-[#00E5CC] text-[#0B0E11]'
+                ? 'bg-[#00CAE0] text-[#0B0E11]'
                 : 'bg-[#28282E] text-[#D4D4D8] hover:text-white'
             }`}
           >
@@ -287,7 +287,7 @@ export const PythonCodeExplorer: React.FC<PythonCodeExplorerProps> = ({
             onClick={() => setActiveTab('requirements')}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
               activeTab === 'requirements'
-                ? 'bg-[#00E5CC] text-[#0B0E11]'
+                ? 'bg-[#00CAE0] text-[#0B0E11]'
                 : 'bg-[#28282E] text-[#D4D4D8] hover:text-white'
             }`}
           >
@@ -327,7 +327,7 @@ export const PythonCodeExplorer: React.FC<PythonCodeExplorerProps> = ({
           <button
             type="button"
             onClick={handleDownloadAllBundle}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[#00E5CC] hover:bg-[#00F5D4] text-[#090D14] rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[#00CAE0] hover:bg-[#00F5D4] text-[#090D14] rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
             <span>{downloadedAll ? 'Đã tải trọn bộ mã nguồn!' : 'Tải trọn bộ Source Code'}</span>

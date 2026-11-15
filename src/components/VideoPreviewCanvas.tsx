@@ -1396,7 +1396,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
           ctx.font = `700 ${titleFontPx}px "Plus Jakarta Sans", sans-serif`;
           ctx.fillText(activeVideoClip.name, 0, -sceneH * 0.03);
 
-          ctx.fillStyle = '#00E5CC';
+          ctx.fillStyle = '#00CAE0';
           ctx.font = `600 ${metaFontPx}px "JetBrains Mono", monospace`;
           ctx.fillText(
             `${w}×${h} · ${formatTimecode(playheadSec, fps)}`,
@@ -1406,7 +1406,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
         }
 
         if (activeVideoClip.autoCutout) {
-          ctx.strokeStyle = activeVideoClip.cutoutStrokeColor || '#00E5CC';
+          ctx.strokeStyle = activeVideoClip.cutoutStrokeColor || '#00CAE0';
           ctx.lineWidth = Math.max(2, 3 * dpiScale);
           ctx.setLineDash([6 * dpiScale, 4 * dpiScale]);
           ctx.strokeRect(-sceneW * 0.35, -sceneH * 0.35, sceneW * 0.7, sceneH * 0.7);
@@ -1476,7 +1476,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
           ctx.fillStyle = 'rgba(7, 16, 22, 0.88)';
           ctx.fillRect(0, 0, wipeW, h);
           ctx.fillRect(w - wipeW, 0, wipeW, h);
-          ctx.strokeStyle = '#00E5CC';
+          ctx.strokeStyle = '#00CAE0';
           ctx.lineWidth = Math.max(2, 3 * dpiScale);
           ctx.beginPath();
           ctx.moveTo(wipeW, 0);
@@ -1702,7 +1702,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
             ? '#A855F7'
             : effectiveVisualEffect === 'neon_aura'
             ? '#EC4899'
-            : '#00E5CC';
+            : '#00CAE0';
         ctx.strokeStyle = primaryCol;
         ctx.shadowColor = primaryCol;
         ctx.shadowBlur = 16 * dpiScale;
@@ -2127,7 +2127,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
 
       ctx.strokeStyle =
         showCanvasBoundingBox && selectedClipId === activeOverlayClip.id && !isHighResExport
-          ? '#00E5CC'
+          ? '#00CAE0'
           : 'rgba(255,255,255,0.85)';
       ctx.lineWidth = (showCanvasBoundingBox && selectedClipId === activeOverlayClip.id && !isHighResExport ? 3 : 1.8) * dpiScale;
       ctx.strokeRect(-ovW / 2, -ovH / 2, ovW, ovH);
@@ -2391,7 +2391,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
               ctx.beginPath();
               ctx.roundRect(-capW / 2, capY - capH / 2, capW, capH, 7 * dpiScale);
               ctx.fill();
-              ctx.strokeStyle = itemClip.textStrokeColor || '#00E5CC';
+              ctx.strokeStyle = itemClip.textStrokeColor || '#00CAE0';
               ctx.lineWidth = Math.max(1.5, 2 * dpiScale);
               ctx.stroke();
               ctx.fillStyle = itemClip.textColor || '#FFFFFF';
@@ -2403,7 +2403,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
 
           if (showCanvasBoundingBox && selectedClipId === itemClip.id && !isHighResExport) {
             ctx.shadowBlur = 0;
-            ctx.strokeStyle = '#00E5CC';
+            ctx.strokeStyle = '#00CAE0';
             ctx.lineWidth = Math.max(2, 2.5 * dpiScale);
             ctx.strokeRect(-hitBoxW / 2, -hitBoxH / 2, hitBoxW, hitBoxH);
             const corners = [
@@ -2424,7 +2424,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
             ctx.moveTo(0, -hitBoxH / 2);
             ctx.lineTo(0, -hitBoxH / 2 - 14 * dpiScale);
             ctx.stroke();
-            ctx.fillStyle = '#00E5CC';
+            ctx.fillStyle = '#00CAE0';
             ctx.beginPath();
             ctx.arc(0, -hitBoxH / 2 - 14 * dpiScale, 5.5 * dpiScale, 0, Math.PI * 2);
             ctx.fill();
@@ -2566,7 +2566,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
 
           if (showCanvasBoundingBox && selectedClipId === itemClip.id && !isHighResExport) {
             ctx.shadowBlur = 0;
-            ctx.strokeStyle = '#00E5CC';
+            ctx.strokeStyle = '#00CAE0';
             ctx.lineWidth = 2 * dpiScale;
             ctx.strokeRect(
               -boxW / 2,
@@ -2610,7 +2610,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
 
     // Center Cyan Alignment Crosshair Guides when dragging near center (Page 21)
     if (showCenterCrosshair.x && !isHighResExport) {
-      ctx.strokeStyle = '#00E5CC';
+      ctx.strokeStyle = '#00CAE0';
       ctx.lineWidth = 1.5 * dpiScale;
       ctx.beginPath();
       ctx.moveTo(w / 2, 0);
@@ -2618,7 +2618,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
       ctx.stroke();
     }
     if (showCenterCrosshair.y && !isHighResExport) {
-      ctx.strokeStyle = '#00E5CC';
+      ctx.strokeStyle = '#00CAE0';
       ctx.lineWidth = 1.5 * dpiScale;
       ctx.beginPath();
       ctx.moveTo(0, h / 2);
@@ -3407,7 +3407,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
             Trình phát-Dòng thời gian 01
           </span>
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-[#00E5CC]" />
+            <span className="w-2 h-2 rounded-full bg-[#00CAE0]" />
             <button
               type="button"
               onClick={() => setShowPlayerMenu((v) => !v)}
@@ -3429,7 +3429,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 }}
                 className="w-full px-3 py-1.5 text-left hover:bg-[#2B2E3B] flex items-center gap-2 cursor-pointer"
               >
-                <Camera className="w-3.5 h-3.5 text-[#00E5CC]" />
+                <Camera className="w-3.5 h-3.5 text-[#00CAE0]" />
                 <span>Export still frame (Chụp ảnh tĩnh .PNG)</span>
               </button>
               <button
@@ -3441,10 +3441,10 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 className="w-full px-3 py-1.5 text-left hover:bg-[#2B2E3B] flex items-center justify-between cursor-pointer"
               >
                 <span className="flex items-center gap-2">
-                  <Activity className="w-3.5 h-3.5 text-[#00E5CC]" />
+                  <Activity className="w-3.5 h-3.5 text-[#00CAE0]" />
                   <span>Show scopes (Biểu đồ sóng màu)</span>
                 </span>
-                {showScopes && <span className="text-[#00E5CC] font-bold">✓</span>}
+                {showScopes && <span className="text-[#00CAE0] font-bold">✓</span>}
               </button>
               <button
                 type="button"
@@ -3455,10 +3455,10 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 className="w-full px-3 py-1.5 text-left hover:bg-[#2B2E3B] flex items-center justify-between cursor-pointer"
               >
                 <span className="flex items-center gap-2">
-                  <Grid className="w-3.5 h-3.5 text-[#00E5CC]" />
+                  <Grid className="w-3.5 h-3.5 text-[#00CAE0]" />
                   <span>Show safe area (Khung TikTok &amp; Lưới)</span>
                 </span>
-                {showSafeArea && <span className="text-[#00E5CC] font-bold">✓</span>}
+                {showSafeArea && <span className="text-[#00CAE0] font-bold">✓</span>}
               </button>
             </div>
           )}
@@ -3500,7 +3500,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 onTogglePlay();
                 setCanvasContextMenu(null);
               }}
-              className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center justify-between cursor-pointer"
+              className="w-full px-3 py-1.5 text-left hover:bg-[#00CAE0]/15 hover:text-[#00CAE0] flex items-center justify-between cursor-pointer"
             >
               <span>{isPlaying ? (language === 'en' ? '⏸ Pause Video' : '⏸ Tạm dừng phát') : (language === 'en' ? '▶ Play Video' : '▶ Phát Video')}</span>
               <span className="text-[9px] text-[#71717A] font-mono">Space</span>
@@ -3511,7 +3511,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 onSplitAtPlayhead?.();
                 setCanvasContextMenu(null);
               }}
-              className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center justify-between cursor-pointer"
+              className="w-full px-3 py-1.5 text-left hover:bg-[#00CAE0]/15 hover:text-[#00CAE0] flex items-center justify-between cursor-pointer"
             >
               <span>{language === 'en' ? '✂ Split Clip at Playhead' : '✂ Tách đôi Clip tại Playhead'}</span>
               <span className="text-[9px] text-[#71717A] font-mono">Ctrl+B</span>
@@ -3523,7 +3523,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 onQuickFlipH?.();
                 setCanvasContextMenu(null);
               }}
-              className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center justify-between cursor-pointer"
+              className="w-full px-3 py-1.5 text-left hover:bg-[#00CAE0]/15 hover:text-[#00CAE0] flex items-center justify-between cursor-pointer"
             >
               <span>{language === 'en' ? '⇋ Flip Horizontal (Mirror)' : '⇋ Lật ngang (Mirror)'}</span>
             </button>
@@ -3533,7 +3533,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 onQuickFlipV?.();
                 setCanvasContextMenu(null);
               }}
-              className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center justify-between cursor-pointer"
+              className="w-full px-3 py-1.5 text-left hover:bg-[#00CAE0]/15 hover:text-[#00CAE0] flex items-center justify-between cursor-pointer"
             >
               <span>{language === 'en' ? '⇅ Flip Vertical' : '⇅ Lật dọc khung hình'}</span>
             </button>
@@ -3543,7 +3543,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 onQuickRotate90?.();
                 setCanvasContextMenu(null);
               }}
-              className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center justify-between cursor-pointer"
+              className="w-full px-3 py-1.5 text-left hover:bg-[#00CAE0]/15 hover:text-[#00CAE0] flex items-center justify-between cursor-pointer"
             >
               <span>{language === 'en' ? '↻ Rotate +90°' : '↻ Xoay góc +90°'}</span>
             </button>
@@ -3554,7 +3554,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 if (target) applyClipTransform(target.id, 0, 0, 100);
                 setCanvasContextMenu(null);
               }}
-              className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center justify-between cursor-pointer"
+              className="w-full px-3 py-1.5 text-left hover:bg-[#00CAE0]/15 hover:text-[#00CAE0] flex items-center justify-between cursor-pointer"
             >
               <span>{language === 'en' ? '⊡ Fit to Frame (Reset 100%)' : '⊡ Vừa khít khung hình (100%)'}</span>
             </button>
@@ -3565,7 +3565,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 onQuickAddText?.();
                 setCanvasContextMenu(null);
               }}
-              className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center justify-between cursor-pointer"
+              className="w-full px-3 py-1.5 text-left hover:bg-[#00CAE0]/15 hover:text-[#00CAE0] flex items-center justify-between cursor-pointer"
             >
               <span>{language === 'en' ? '＋ Add Text Overlay Here' : '＋ Thêm chữ tại Playhead'}</span>
             </button>
@@ -3575,7 +3575,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 onQuickAddSticker?.('▶️ SUBSCRIBE', 'SUBSCRIBE');
                 setCanvasContextMenu(null);
               }}
-              className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center justify-between cursor-pointer"
+              className="w-full px-3 py-1.5 text-left hover:bg-[#00CAE0]/15 hover:text-[#00CAE0] flex items-center justify-between cursor-pointer"
             >
               <span>{language === 'en' ? '🔔 Add SUBSCRIBE Sticker' : '🔔 Dán nhãn SUBSCRIBE Đỏ'}</span>
             </button>
@@ -3585,7 +3585,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 onExportStillFrame?.();
                 setCanvasContextMenu(null);
               }}
-              className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center justify-between cursor-pointer"
+              className="w-full px-3 py-1.5 text-left hover:bg-[#00CAE0]/15 hover:text-[#00CAE0] flex items-center justify-between cursor-pointer"
             >
               <span>{language === 'en' ? '📷 Capture Still Frame (.PNG)' : '📷 Chụp ảnh khung hình (.PNG)'}</span>
             </button>
@@ -3595,7 +3595,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 setShowSafeArea((s) => !s);
                 setCanvasContextMenu(null);
               }}
-              className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center justify-between cursor-pointer"
+              className="w-full px-3 py-1.5 text-left hover:bg-[#00CAE0]/15 hover:text-[#00CAE0] flex items-center justify-between cursor-pointer"
             >
               <span>{language === 'en' ? '⊞ Toggle Safe Zone & Grid' : '⊞ Bật/Tắt Khung an toàn & Lưới'}</span>
             </button>
@@ -3616,7 +3616,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
         {/* Video Scopes Overlay */}
         {showScopes && (
           <div className="absolute top-3 left-3 z-20 w-44 p-2 bg-black/85 border border-[#323646] rounded text-[10px] space-y-1 pointer-events-none">
-            <div className="flex items-center justify-between text-[#00E5CC] font-semibold">
+            <div className="flex items-center justify-between text-[#00CAE0] font-semibold">
               <span>RGB Parade &amp; Luma</span>
               <span>IRE 0-100</span>
             </div>
@@ -3853,32 +3853,32 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                     transform: bBoxRot ? `rotate(${bBoxRot}deg)` : undefined,
                     transformOrigin: 'center center',
                   }}
-                  className="border-2 border-[#00E5CC] rounded-md shadow-[0_0_12px_rgba(0,229,204,0.4)] z-20"
+                  className="border-2 border-[#00CAE0] rounded-md shadow-sm z-20"
                 >
                   {/* 4 Corner Round Handles for Text (Requirement 1: 8px-10px slim circles like CapCut) */}
                   <div
                     onMouseDown={(e) => handleStartResizeHandle(e, 'nw')}
                     onTouchStart={(e) => handleStartResizeHandle(e, 'nw')}
                     title="Kéo góc để thu phóng văn bản"
-                    className="pointer-events-auto absolute -top-1.25 -left-1.25 w-2.5 h-2.5 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-nwse-resize hover:scale-125 active:scale-125 transition-transform touch-none after:absolute after:-inset-2.5 after:content-['']"
+                    className="pointer-events-auto absolute -top-1.25 -left-1.25 w-2.5 h-2.5 rounded-full bg-white border border-[#00CAE0] shadow-sm cursor-nwse-resize hover:scale-125 active:scale-125 transition-transform touch-none after:absolute after:-inset-2.5 after:content-['']"
                   />
                   <div
                     onMouseDown={(e) => handleStartResizeHandle(e, 'ne')}
                     onTouchStart={(e) => handleStartResizeHandle(e, 'ne')}
                     title="Kéo góc để thu phóng văn bản"
-                    className="pointer-events-auto absolute -top-1.25 -right-1.25 w-2.5 h-2.5 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-nesw-resize hover:scale-125 active:scale-125 transition-transform touch-none after:absolute after:-inset-2.5 after:content-['']"
+                    className="pointer-events-auto absolute -top-1.25 -right-1.25 w-2.5 h-2.5 rounded-full bg-white border border-[#00CAE0] shadow-sm cursor-nesw-resize hover:scale-125 active:scale-125 transition-transform touch-none after:absolute after:-inset-2.5 after:content-['']"
                   />
                   <div
                     onMouseDown={(e) => handleStartResizeHandle(e, 'sw')}
                     onTouchStart={(e) => handleStartResizeHandle(e, 'sw')}
                     title="Kéo góc để thu phóng văn bản"
-                    className="pointer-events-auto absolute -bottom-1.25 -left-1.25 w-2.5 h-2.5 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-nesw-resize hover:scale-125 active:scale-125 transition-transform touch-none after:absolute after:-inset-2.5 after:content-['']"
+                    className="pointer-events-auto absolute -bottom-1.25 -left-1.25 w-2.5 h-2.5 rounded-full bg-white border border-[#00CAE0] shadow-sm cursor-nesw-resize hover:scale-125 active:scale-125 transition-transform touch-none after:absolute after:-inset-2.5 after:content-['']"
                   />
                   <div
                     onMouseDown={(e) => handleStartResizeHandle(e, 'se')}
                     onTouchStart={(e) => handleStartResizeHandle(e, 'se')}
                     title="Kéo góc để thu phóng văn bản"
-                    className="pointer-events-auto absolute -bottom-1.25 -right-1.25 w-2.5 h-2.5 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-nwse-resize hover:scale-125 active:scale-125 transition-transform touch-none after:absolute after:-inset-2.5 after:content-['']"
+                    className="pointer-events-auto absolute -bottom-1.25 -right-1.25 w-2.5 h-2.5 rounded-full bg-white border border-[#00CAE0] shadow-sm cursor-nwse-resize hover:scale-125 active:scale-125 transition-transform touch-none after:absolute after:-inset-2.5 after:content-['']"
                   />
                 </div>
               );
@@ -3896,8 +3896,8 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 }}
                 className={`absolute inset-0 pointer-events-none transition-all ${
                   isSnappedToFrame
-                    ? 'border-2 border-[#00E5CC] shadow-[inset_0_0_18px_rgba(0,229,204,0.45),0_0_16px_rgba(0,229,204,0.65)]'
-                    : 'border-2 border-[#00E5CC] shadow-[0_0_12px_rgba(0,229,204,0.35)]'
+                    ? 'border-2 border-[#00CAE0] shadow-[inset_0_0_18px_rgba(0,229,204,0.45),0_0_16px_rgba(0,229,204,0.65)]'
+                    : 'border-2 border-[#00CAE0] shadow-sm'
                 }`}
               >
                 {/* 4 Corner Round Handles */}
@@ -3905,25 +3905,25 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                   onMouseDown={(e) => handleStartResizeHandle(e, 'nw')}
                   onTouchStart={(e) => handleStartResizeHandle(e, 'nw')}
                   title="Kéo góc để thu phóng video"
-                  className="pointer-events-auto absolute -top-2 -left-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nwse-resize hover:scale-125 transition-transform touch-none"
+                  className="pointer-events-auto absolute -top-2 -left-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00CAE0] shadow-md cursor-nwse-resize hover:scale-125 transition-transform touch-none"
                 />
                 <div
                   onMouseDown={(e) => handleStartResizeHandle(e, 'ne')}
                   onTouchStart={(e) => handleStartResizeHandle(e, 'ne')}
                   title="Kéo góc để thu phóng video"
-                  className="pointer-events-auto absolute -top-2 -right-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nesw-resize hover:scale-125 transition-transform touch-none"
+                  className="pointer-events-auto absolute -top-2 -right-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00CAE0] shadow-md cursor-nesw-resize hover:scale-125 transition-transform touch-none"
                 />
                 <div
                   onMouseDown={(e) => handleStartResizeHandle(e, 'sw')}
                   onTouchStart={(e) => handleStartResizeHandle(e, 'sw')}
                   title="Kéo góc để thu phóng video"
-                  className="pointer-events-auto absolute -bottom-2 -left-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nesw-resize hover:scale-125 transition-transform touch-none"
+                  className="pointer-events-auto absolute -bottom-2 -left-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00CAE0] shadow-md cursor-nesw-resize hover:scale-125 transition-transform touch-none"
                 />
                 <div
                   onMouseDown={(e) => handleStartResizeHandle(e, 'se')}
                   onTouchStart={(e) => handleStartResizeHandle(e, 'se')}
                   title="Kéo góc để thu phóng video"
-                  className="pointer-events-auto absolute -bottom-2 -right-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00E5CC] shadow-md cursor-nwse-resize hover:scale-125 transition-transform touch-none"
+                  className="pointer-events-auto absolute -bottom-2 -right-2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#00CAE0] shadow-md cursor-nwse-resize hover:scale-125 transition-transform touch-none"
                 />
 
                 {/* 4 Edge Anchor Handles */}
@@ -3931,25 +3931,25 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                   onMouseDown={(e) => handleStartResizeHandle(e, 'n')}
                   onTouchStart={(e) => handleStartResizeHandle(e, 'n')}
                   title="Kéo cạnh trên để thu phóng video"
-                  className="pointer-events-auto absolute -top-1.5 left-1/2 -translate-x-1/2 w-6 h-2 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-ns-resize hover:scale-125 transition-transform touch-none"
+                  className="pointer-events-auto absolute -top-1.5 left-1/2 -translate-x-1/2 w-6 h-2 rounded-full bg-white border border-[#00CAE0] shadow-sm cursor-ns-resize hover:scale-125 transition-transform touch-none"
                 />
                 <div
                   onMouseDown={(e) => handleStartResizeHandle(e, 's')}
                   onTouchStart={(e) => handleStartResizeHandle(e, 's')}
                   title="Kéo cạnh dưới để thu phóng video"
-                  className="pointer-events-auto absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-6 h-2 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-ns-resize hover:scale-125 transition-transform touch-none"
+                  className="pointer-events-auto absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-6 h-2 rounded-full bg-white border border-[#00CAE0] shadow-sm cursor-ns-resize hover:scale-125 transition-transform touch-none"
                 />
                 <div
                   onMouseDown={(e) => handleStartResizeHandle(e, 'w')}
                   onTouchStart={(e) => handleStartResizeHandle(e, 'w')}
                   title="Kéo cạnh trái để thu phóng video"
-                  className="pointer-events-auto absolute top-1/2 -left-1.5 -translate-y-1/2 w-2 h-6 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-ew-resize hover:scale-125 transition-transform touch-none"
+                  className="pointer-events-auto absolute top-1/2 -left-1.5 -translate-y-1/2 w-2 h-6 rounded-full bg-white border border-[#00CAE0] shadow-sm cursor-ew-resize hover:scale-125 transition-transform touch-none"
                 />
                 <div
                   onMouseDown={(e) => handleStartResizeHandle(e, 'e')}
                   onTouchStart={(e) => handleStartResizeHandle(e, 'e')}
                   title="Kéo cạnh phải để thu phóng video"
-                  className="pointer-events-auto absolute top-1/2 -right-1.5 -translate-y-1/2 w-2 h-6 rounded-full bg-white border border-[#00E5CC] shadow-sm cursor-ew-resize hover:scale-125 transition-transform touch-none"
+                  className="pointer-events-auto absolute top-1/2 -right-1.5 -translate-y-1/2 w-2 h-6 rounded-full bg-white border border-[#00CAE0] shadow-sm cursor-ew-resize hover:scale-125 transition-transform touch-none"
                 />
               </div>
             );
@@ -3963,7 +3963,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                   <div key={idx} className="border border-white/15" />
                 ))}
               </div>
-              <div className="absolute inset-x-6 bottom-8 h-12 border border-dashed border-[#00E5CC]/60 rounded flex items-center justify-center text-[9px] text-[#00E5CC] bg-black/30">
+              <div className="absolute inset-x-6 bottom-8 h-12 border border-dashed border-[#00CAE0]/60 rounded flex items-center justify-center text-[9px] text-[#00CAE0] bg-black/30">
                 Vùng an toàn Phụ đề TikTok / Reels / Shorts
               </div>
             </div>
@@ -3996,7 +3996,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                   setIsEditingTimecode(false);
                 }
               }}
-              className="w-24 px-1.5 py-0.5 text-xs font-mono bg-[#121317] border border-[#00E5CC] rounded text-[#00E5CC]"
+              className="w-24 px-1.5 py-0.5 text-xs font-mono bg-[#121317] border border-[#00CAE0] rounded text-[#00CAE0]"
             />
           ) : (
             <span
@@ -4005,7 +4005,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                 setIsEditingTimecode(true);
               }}
               title="Nhấp đúp để gõ số giây / Timecode nhảy đến vị trí bất kỳ"
-              className="text-[#00E5CC] font-semibold cursor-pointer hover:underline"
+              className="text-[#00CAE0] font-semibold cursor-pointer hover:underline"
             >
               {formatTimecode(playheadSec, fps)}
             </span>
@@ -4032,8 +4032,8 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
             title={isPlaying ? 'Tạm dừng (Space / K)' : 'Phát (Space / K)'}
             className={`p-2 rounded-full transition-all cursor-pointer shadow-xs ${
               isPlaying
-                ? 'bg-[#00E5CC] text-black hover:bg-[#00F5DC]'
-                : 'bg-[#22242B] text-white hover:bg-[#2A2D36] hover:text-[#00E5CC] border border-[#323642]'
+                ? 'bg-[#00CAE0] text-black hover:bg-[#00D8EE]'
+                : 'bg-[#22242B] text-white hover:bg-[#2A2D36] hover:text-[#00CAE0] border border-[#323642]'
             }`}
           >
             {isPlaying ? (
@@ -4066,7 +4066,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
               title="Phóng to màn hình xem trước (Fit / 50% - 500%)"
               className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-[#D1D5DB] hover:text-white bg-[#1C1D22] border border-[#2A2C34] hover:border-[#383C48] rounded cursor-pointer transition-all"
             >
-              <ZoomIn className="w-3 h-3 text-[#00E5CC]" />
+              <ZoomIn className="w-3 h-3 text-[#00CAE0]" />
               <span>{playerZoom === 'fit' ? 'Fit' : `${playerZoom}%`}</span>
             </button>
             {showZoomMenu && (
@@ -4080,7 +4080,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                       setShowZoomMenu(false);
                     }}
                     className={`w-full text-left px-3 py-1.5 text-xs hover:bg-[#222530] cursor-pointer ${
-                      playerZoom === z ? 'text-[#00E5CC] font-semibold' : 'text-[#D1D5DB]'
+                      playerZoom === z ? 'text-[#00CAE0] font-semibold' : 'text-[#D1D5DB]'
                     }`}
                   >
                     {z === 'fit' ? 'Fit (Vừa khung)' : `${z}%`}
@@ -4122,7 +4122,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                     }}
                     className={`w-full text-left px-2.5 py-1 text-[11px] hover:bg-[#2C2C35] cursor-pointer ${
                       previewQuality === opt.id
-                        ? 'text-[#00E5CC] font-semibold'
+                        ? 'text-[#00CAE0] font-semibold'
                         : 'text-[#D4D4D8]'
                     }`}
                   >
@@ -4146,7 +4146,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
               title="Tỉ lệ khung hình (Mặc định: Tỉ lệ gốc độc lập từng video)"
               className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-[#D4D4D8] hover:text-white bg-[#242429] border border-[#383840] rounded cursor-pointer whitespace-nowrap"
             >
-              <RectangleHorizontal className="w-3 h-3 text-[#00E5CC]" />
+              <RectangleHorizontal className="w-3 h-3 text-[#00CAE0]" />
               <span>
                 {aspectRatio === 'original'
                   ? language === 'en'
@@ -4174,7 +4174,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
                     }}
                     className={`w-full flex items-center justify-between px-2.5 py-1.5 text-[11px] hover:bg-[#2C2C35] cursor-pointer ${
                       aspectRatio === preset.id
-                        ? 'text-[#00E5CC] font-semibold bg-[#00E5CC]/10'
+                        ? 'text-[#00CAE0] font-semibold bg-[#00CAE0]/10'
                         : 'text-[#D4D4D8]'
                     }`}
                   >

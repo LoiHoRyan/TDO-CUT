@@ -389,7 +389,7 @@ html.light .bg-\[\#3B3B48\]:not([data-keep-dark="true"]):not([data-keep-dark="tr
 }
 
 /* Text Hierarchy in Light Mode (excluding dark overlay badges and timeline clips) */
-[data-theme="light"] .text-white:not([data-clip-item="true"]):not([data-clip-item="true"] *):not([class*="bg-black/"]):not([class*="bg-black/"] *):not([class*="bg-[#00E5CC"]):not([class*="bg-[#EF4444"]):not([class*="bg-[#F43F5E"]):not([class*="bg-[#DC2626"]),
+[data-theme="light"] .text-white:not([data-clip-item="true"]):not([data-clip-item="true"] *):not([class*="bg-black/"]):not([class*="bg-black/"] *):not([class*="bg-[#00CAE0"]):not([class*="bg-[#EF4444"]):not([class*="bg-[#F43F5E"]):not([class*="bg-[#DC2626"]),
 [data-theme="light"] .text-\[\#E4E4E7\]:not([data-clip-item="true"]):not([data-clip-item="true"] *):not([class*="bg-black/"]):not([class*="bg-black/"] *),
 [data-theme="light"] .text-\[\#F4F4F5\]:not([data-clip-item="true"]):not([data-clip-item="true"] *),
 [data-theme="light"] .text-\[\#FAFAFA\]:not([data-clip-item="true"]):not([data-clip-item="true"] *),
@@ -413,7 +413,7 @@ html.light .bg-\[\#3B3B48\]:not([data-keep-dark="true"]):not([data-keep-dark="tr
 }
 
 /* Electric turquoise text in Light Mode so brand cyan remains vivid yet readable against white panels */
-[data-theme="light"] .text-\[\#00E5CC\]:not([class*="bg-black/"]):not([class*="bg-black/"] *):not([data-clip-item="true"] *) {
+[data-theme="light"] .text-\[\#00CAE0\]:not([class*="bg-black/"]):not([class*="bg-black/"] *):not([data-clip-item="true"] *) {
   color: #00A89A !important;
 }
 
@@ -426,7 +426,7 @@ html.light .bg-\[\#3B3B48\]:not([data-keep-dark="true"]):not([data-keep-dark="tr
 /* Floating TdoEdit Pill in Light Mode: crisp white surface, cyan border, dark slate text */
 [data-theme="light"] [data-tdoedit-pill="true"] {
   background-color: #FFFFFF !important;
-  border-color: #00D2C4 !important;
+  border-color: #00B8CE !important;
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14) !important;
 }
 [data-theme="light"] [data-tdoedit-pill="true"] button {
@@ -443,14 +443,14 @@ html.light .bg-\[\#3B3B48\]:not([data-keep-dark="true"]):not([data-keep-dark="tr
   box-shadow: 0 0 6px rgba(0, 210, 196, 0.55) !important;
 }
 [data-theme="light"] [data-playhead-cap="true"] {
-  background-color: #00D2C4 !important;
+  background-color: #00B8CE !important;
   border-color: #0F172A !important;
 }
 
 /* Selected Timeline Clips in Light Mode: bold dark/cyan border instead of white-on-white border */
 [data-theme="light"] [data-clip-item="true"].border-white {
   border-color: #0F172A !important;
-  box-shadow: 0 0 0 2px #00D2C4, 0 2px 8px rgba(15, 23, 42, 0.25) !important;
+  box-shadow: 0 0 0 2px #00B8CE, 0 2px 8px rgba(15, 23, 42, 0.25) !important;
 }
 
 /* Range Sliders in Light Mode: visible Slate-300 track bar */
@@ -519,7 +519,7 @@ html.light .group.bg-\[\#161820\]:hover,
 [data-theme="light"] .group.bg-\[\#161820\]:hover,
 html.light .group.bg-\[\#181A22\]:hover,
 [data-theme="light"] .group.bg-\[\#181A22\]:hover {
-  border-color: #00D2C4 !important;
+  border-color: #00B8CE !important;
   box-shadow: 0 4px 12px rgba(0, 210, 196, 0.16) !important;
 }
 

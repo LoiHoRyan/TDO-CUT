@@ -2655,7 +2655,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     }}
                     className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-purple-400">
+                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#E4E4E7]">
                       <span className="font-serif font-black text-xs">F</span>
                     </div>
                     <span className="text-[9.5px] font-medium whitespace-nowrap">Phông chữ</span>
@@ -2669,7 +2669,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     }}
                     className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-amber-400">
+                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#E4E4E7]">
                       <Sliders className="w-4 h-4" />
                     </div>
                     <span className="text-[9.5px] font-medium whitespace-nowrap">Cỡ & Màu</span>
@@ -2683,7 +2683,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     }}
                     className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-rose-400">
+                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#E4E4E7]">
                       <Sparkles className="w-4 h-4" />
                     </div>
                     <span className="text-[9.5px] font-medium whitespace-nowrap">Viền chữ</span>
@@ -2772,7 +2772,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     onClick={onTrimStartToPlayhead}
                     className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mb-0.5 text-amber-400 font-mono font-bold text-[10px]">
+                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#E4E4E7] font-mono font-bold text-[10px]">
                       ][←
                     </div>
                     <span className="text-[9.5px] font-medium whitespace-nowrap">Xóa trái</span>
@@ -2783,7 +2783,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     onClick={onTrimEndToPlayhead}
                     className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mb-0.5 text-amber-400 font-mono font-bold text-[10px]">
+                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#E4E4E7] font-mono font-bold text-[10px]">
                       →][
                     </div>
                     <span className="text-[9.5px] font-medium whitespace-nowrap">Xóa phải</span>
@@ -2871,7 +2871,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   onClick={onTrimStartToPlayhead}
                   className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
                 >
-                  <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mb-0.5 text-amber-400 font-mono font-bold text-[10px]">
+                  <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#E4E4E7] font-mono font-bold text-[10px]">
                     ][←
                   </div>
                   <span className="text-[9.5px] font-medium text-current whitespace-nowrap">Xóa trái</span>
@@ -2883,7 +2883,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   onClick={onTrimEndToPlayhead}
                   className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
                 >
-                  <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mb-0.5 text-amber-400 font-mono font-bold text-[10px]">
+                  <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#E4E4E7] font-mono font-bold text-[10px]">
                     →][
                   </div>
                   <span className="text-[9.5px] font-medium text-current whitespace-nowrap">Xóa phải</span>
@@ -3096,7 +3096,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   <ImageIcon className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
-                  <div className="font-bold text-xs text-purple-400">🖼️ Thư viện Ảnh</div>
+                  <div className="font-bold text-xs text-[#E4E4E7]">🖼️ Thư viện Ảnh</div>
                   <div className="text-[10px] text-[#94A3B8] truncate">Mở hình ảnh từ Thư viện điện thoại</div>
                 </div>
               </button>

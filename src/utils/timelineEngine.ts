@@ -236,7 +236,7 @@ export interface TimelineMarker {
   id: string;
   timeSec: number;
   label: string;
-  color: '#00E5CC' | '#EF4444' | '#F59E0B' | '#10B981' | '#A855F7';
+  color: '#00CAE0' | '#EF4444' | '#F59E0B' | '#10B981' | '#A855F7';
 }
 
 export interface TimelineClip {
@@ -515,7 +515,7 @@ export function createDefaultClip(
     animationCombo: 'none',
     removeBg: false,
     autoCutout: false,
-    cutoutStrokeColor: '#00E5CC',
+    cutoutStrokeColor: '#00CAE0',
     chromaColor: 'green',
     chromaTolerance: 30,
     blurBg: false,
@@ -5047,7 +5047,7 @@ const RAW_GRAPHIC_BADGE_STICKERS: Array<{
     badgeText: 'THANK YOU FOR WATCHING!!!',
     badgeSubText: '✨ SEE YOU NEXT TIME ✨',
     badgeBg: '#7C3AED',
-    badgeAccent: '#00E5CC',
+    badgeAccent: '#00CAE0',
   },
   {
     id: 'social_badge',
@@ -5210,7 +5210,7 @@ const RAW_GRAPHIC_BADGE_STICKERS: Array<{
     badgeText: 'LEVEL UP! ⚡',
     badgeSubText: '+999 XP',
     badgeBg: '#0F766E',
-    badgeAccent: '#00E5CC',
+    badgeAccent: '#00CAE0',
   },
   {
     id: 'social_badge',
@@ -5272,7 +5272,7 @@ const RAW_GRAPHIC_BADGE_STICKERS: Array<{
     badgeText: '4K ULTRA HD',
     badgeSubText: '60 FPS HDR',
     badgeBg: '#090D16',
-    badgeAccent: '#00E5CC',
+    badgeAccent: '#00CAE0',
   },
   {
     id: 'social_badge',

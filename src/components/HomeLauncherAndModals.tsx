@@ -99,7 +99,7 @@ const STUDIO_TEMPLATES: HomeTemplatePreset[] = [
     aspectRatio: '16:9',
     durationSec: 24,
     clipsCount: 10,
-    gradient: 'linear-gradient(135deg, #00E5CC 0%, #0284C7 100%)',
+    gradient: 'linear-gradient(135deg, #00CAE0 0%, #0284C7 100%)',
     badgeText: '4K LUT',
   },
   {
@@ -135,7 +135,7 @@ const STUDIO_TEMPLATES: HomeTemplatePreset[] = [
     aspectRatio: '16:9',
     durationSec: 18,
     clipsCount: 12,
-    gradient: 'linear-gradient(135deg, #00E5CC 0%, #0D9488 100%)',
+    gradient: 'linear-gradient(135deg, #00CAE0 0%, #0D9488 100%)',
     badgeText: 'AUTO BEAT',
   },
 ];
@@ -200,7 +200,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
   );
   const [posterRatio, setPosterRatio] = useState<'16:9' | '9:16' | '1:1'>('16:9');
   const [posterGradient, setPosterGradient] = useState(
-    'linear-gradient(135deg, #00E5CC 0%, #1E1B4B 60%, #7000FF 100%)'
+    'linear-gradient(135deg, #00CAE0 0%, #1E1B4B 60%, #7000FF 100%)'
   );
 
   const visibleProjects = projects.filter((p) => {
@@ -274,7 +274,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                 ? 'bg-[#F1F5F9] border-[#CBD5E1] text-[#334155]'
                 : 'bg-[#101218] border-white/5 text-[#9CA3AF]'
             }`}>
-              <CheckCircle2 className="w-3.5 h-3.5 text-[#00E5CC] shrink-0" />
+              <CheckCircle2 className="w-3.5 h-3.5 text-[#00CAE0] shrink-0" />
               <span className="truncate">
                 {isEn ? 'Studio Edition Activated' : 'Phiên bản Studio Pro'}
               </span>
@@ -301,7 +301,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                   onClick={() => setNavTab(item.id)}
                   className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors cursor-pointer ${
                     active
-                      ? 'bg-[#00E5CC]/15 text-[#00E5CC] font-medium border border-[#00E5CC]/30'
+                      ? 'bg-[#00CAE0]/15 text-[#00CAE0] font-medium border border-[#00CAE0]/30'
                       : themeMode === 'light'
                       ? 'text-[#475569] hover:text-[#0F172A] hover:bg-[#F1F5F9]'
                       : 'text-[#A1A1AA] hover:text-white hover:bg-[#1E2028]'
@@ -323,12 +323,12 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
         }`}>
           <div className="flex items-center justify-between text-[#9CA3AF]">
             <span className="font-normal">{isEn ? 'Cloud Storage' : 'Bộ nhớ đám mây'}</span>
-            <span className="font-mono text-[#00E5CC] text-[10.5px]">{cloudUsedMb} MB / 1 GB</span>
+            <span className="font-mono text-[#00CAE0] text-[10.5px]">{cloudUsedMb} MB / 1 GB</span>
           </div>
           <div className={`w-full h-1 rounded-full overflow-hidden ${
             themeMode === 'light' ? 'bg-[#E2E8F0]' : 'bg-[#101218]'
           }`}>
-            <div style={{ width: `${cloudUsedPct}%` }} className="h-full bg-[#00E5CC]" />
+            <div style={{ width: `${cloudUsedPct}%` }} className="h-full bg-[#00CAE0]" />
           </div>
           {activeProjectName && activeProjectsList.length > 0 && (
             <button
@@ -390,7 +390,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                   </>
                 ) : (
                   <>
-                    <Moon className="w-3.5 h-3.5 text-[#00E5CC]" />
+                    <Moon className="w-3.5 h-3.5 text-[#00CAE0]" />
                     <span>{isEn ? 'Dark' : 'Tối'}</span>
                   </>
                 )}
@@ -411,7 +411,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
             <button
               type="button"
               onClick={activeProjectsList.length > 0 ? onBackToEditor : onCreateNewProject}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-[#00E5CC] hover:bg-[#00F5DC] text-[#090D12] rounded-lg cursor-pointer transition-colors shadow-xs"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-[#00CAE0] hover:bg-[#00D8EE] text-[#090D12] rounded-lg cursor-pointer transition-colors shadow-xs"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
               <span>{isEn ? 'Open Editor' : 'Mở trình dựng'}</span>
@@ -438,7 +438,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
               <button
                 type="button"
                 onClick={onCreateNewProject}
-                className="px-3 py-1.5 bg-[#00E5CC] text-[#090D12] font-bold text-xs rounded-md cursor-pointer"
+                className="px-3 py-1.5 bg-[#00CAE0] text-[#090D12] font-bold text-xs rounded-md cursor-pointer"
               >
                 {isEn ? '+ Blank Project' : '+ Dự án trống'}
               </button>
@@ -448,14 +448,14 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                 <div
                   key={tpl.id}
                   onClick={() => handleApplyTemplate(tpl)}
-                  className="group bg-[#161820] border border-[#272A36] hover:border-[#00E5CC] rounded-xl overflow-hidden cursor-pointer transition-all flex flex-col justify-between"
+                  className="group bg-[#161820] border border-[#272A36] hover:border-[#00CAE0] rounded-xl overflow-hidden cursor-pointer transition-all flex flex-col justify-between"
                 >
                   <div
                     style={{ background: tpl.gradient }}
                     className="h-32 p-3.5 flex flex-col justify-between relative"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="px-2 py-0.5 text-[10px] font-extrabold bg-black/70 text-[#00E5CC] rounded">
+                      <span className="px-2 py-0.5 text-[10px] font-extrabold bg-black/70 text-[#00CAE0] rounded">
                         {tpl.badgeText}
                       </span>
                       <span className="px-1.5 py-0.5 text-[10px] font-mono bg-black/60 text-white rounded">
@@ -476,7 +476,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                         e.stopPropagation();
                         handleApplyTemplate(tpl);
                       }}
-                      className="px-2.5 py-1 bg-[#00E5CC] hover:bg-[#00F5DC] text-[#090D12] font-bold text-[11px] rounded cursor-pointer"
+                      className="px-2.5 py-1 bg-[#00CAE0] hover:bg-[#00D8EE] text-[#090D12] font-bold text-[11px] rounded cursor-pointer"
                     >
                       {isEn ? 'Use Template' : 'Dùng mẫu'}
                     </button>
@@ -493,7 +493,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
             <div className="p-4 bg-[#161820] border border-[#272A36] rounded-xl flex items-center justify-between">
               <div className="space-y-1">
                 <div className="text-sm font-bold text-white flex items-center gap-2">
-                  <Cloud className="w-4 h-4 text-[#00E5CC]" />
+                  <Cloud className="w-4 h-4 text-[#00CAE0]" />
                   <span>
                     {isEn
                       ? `TDO CUT Cloud Workspace (${cloudUsedMb} MB / 1024 MB Used)`
@@ -512,14 +512,14 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                     type="checkbox"
                     checked={autoCloudBackup}
                     onChange={(e) => setAutoCloudBackup(e.target.checked)}
-                    className="accent-[#00E5CC]"
+                    className="accent-[#00CAE0]"
                   />
                   <span>{isEn ? 'Auto Cloud Backup' : 'Tự động sao lưu đám mây'}</span>
                 </label>
                 <button
                   type="button"
                   onClick={() => setCloudSyncedIds(projects.map((p) => p.id))}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#00E5CC] text-[#090D12] font-bold text-xs rounded-md cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#00CAE0] text-[#090D12] font-bold text-xs rounded-md cursor-pointer"
                 >
                   <UploadCloud className="w-3.5 h-3.5" />
                   <span>{isEn ? 'Sync All Projects Now' : 'Đồng bộ tất cả dự án'}</span>
@@ -534,7 +534,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
           <div className="grid grid-cols-12 gap-5 bg-[#161820] border border-[#272A36] rounded-xl p-5">
             <div className="col-span-5 space-y-3">
               <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                <ImageIcon className="w-4 h-4 text-[#00E5CC]" />
+                <ImageIcon className="w-4 h-4 text-[#00CAE0]" />
                 <span>
                   {isEn
                     ? 'Thumbnail & Viral Poster Generator'
@@ -564,7 +564,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                       onClick={() => setPosterRatio(r)}
                       className={`py-1.5 rounded text-xs font-mono font-bold border cursor-pointer ${
                         posterRatio === r
-                          ? 'bg-[#00E5CC]/20 border-[#00E5CC] text-[#00E5CC]'
+                          ? 'bg-[#00CAE0]/20 border-[#00CAE0] text-[#00CAE0]'
                           : 'bg-[#101218] border-[#2E3240] text-[#A1A1AA]'
                       }`}
                     >
@@ -581,7 +581,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                   {[
                     {
                       label: 'Cyber Teal',
-                      bg: 'linear-gradient(135deg, #00E5CC 0%, #1E1B4B 60%, #7000FF 100%)',
+                      bg: 'linear-gradient(135deg, #00CAE0 0%, #1E1B4B 60%, #7000FF 100%)',
                     },
                     {
                       label: 'Viral Crimson',
@@ -607,7 +607,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
               <button
                 type="button"
                 onClick={onBackToEditor}
-                className="w-full py-2 bg-[#00E5CC] hover:bg-[#00F5DC] text-[#090D12] font-bold text-xs rounded-md flex items-center justify-center gap-1.5 cursor-pointer"
+                className="w-full py-2 bg-[#00CAE0] hover:bg-[#00D8EE] text-[#090D12] font-bold text-xs rounded-md flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <ImageIcon className="w-4 h-4" />
                 <span>
@@ -627,7 +627,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                     : 'w-full max-w-md aspect-video'
                 }`}
               >
-                <span className="px-2 py-0.5 text-[10px] font-mono bg-black/60 text-[#00E5CC] rounded mb-3">
+                <span className="px-2 py-0.5 text-[10px] font-mono bg-black/60 text-[#00CAE0] rounded mb-3">
                   TDO CUT COVER DESIGN · {posterRatio}
                 </span>
                 <div className="text-lg font-extrabold text-white uppercase tracking-wide drop-shadow-md px-3 py-1.5 bg-black/55 rounded-lg border border-white/15">
@@ -648,15 +648,15 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                 onClick={onCreateNewProject}
                 className={`col-span-1 md:col-span-7 h-28 md:h-36 rounded-2xl border p-3 md:p-6 flex flex-col items-center justify-center gap-1.5 md:gap-2 shadow-xs transition-all cursor-pointer group ${
                   themeMode === 'light'
-                    ? 'bg-white hover:bg-[#F8FAFC] border-[#CBD5E1] hover:border-[#00E5CC]'
-                    : 'bg-[#181A22] hover:bg-[#1E212B] border-[#2B2E3C] hover:border-[#00E5CC]/70'
+                    ? 'bg-white hover:bg-[#F8FAFC] border-[#CBD5E1] hover:border-[#00CAE0]'
+                    : 'bg-[#181A22] hover:bg-[#1E212B] border-[#2B2E3C] hover:border-[#00CAE0]/70'
                 }`}
               >
-                <div className="w-9 h-9 md:w-11 md:h-11 rounded-full bg-[#00E5CC]/15 text-[#00E5CC] group-hover:bg-[#00E5CC] group-hover:text-black flex items-center justify-center transition-all">
+                <div className="w-9 h-9 md:w-11 md:h-11 rounded-full bg-[#00CAE0]/15 text-[#00CAE0] group-hover:bg-[#00CAE0] group-hover:text-black flex items-center justify-center transition-all">
                   <Plus className="w-5 h-5 stroke-[2.5]" />
                 </div>
                 <span className={`text-xs md:text-sm font-bold tracking-tight transition-colors ${
-                  themeMode === 'light' ? 'text-[#0F172A] group-hover:text-[#00A89A]' : 'text-white group-hover:text-[#00E5CC]'
+                  themeMode === 'light' ? 'text-[#0F172A] group-hover:text-[#00A89A]' : 'text-white group-hover:text-[#00CAE0]'
                 }`}>
                   {isEn ? 'New Project' : 'Video mới'}
                 </span>
@@ -672,11 +672,11 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                 onClick={() => setNavTab('ai_design')}
                 className={`col-span-1 md:hidden h-28 rounded-2xl border p-3 flex flex-col items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer group ${
                   themeMode === 'light'
-                    ? 'bg-white hover:bg-[#F8FAFC] border-[#CBD5E1] hover:border-[#00E5CC]'
-                    : 'bg-[#181A22] hover:bg-[#1E212B] border-[#2B2E3C] hover:border-[#00E5CC]/70'
+                    ? 'bg-white hover:bg-[#F8FAFC] border-[#CBD5E1] hover:border-[#00CAE0]'
+                    : 'bg-[#181A22] hover:bg-[#1E212B] border-[#2B2E3C] hover:border-[#00CAE0]/70'
                 }`}
               >
-                <div className="w-9 h-9 rounded-full bg-[#00E5CC]/15 text-[#00E5CC] group-hover:bg-[#00E5CC] group-hover:text-black flex items-center justify-center transition-all">
+                <div className="w-9 h-9 rounded-full bg-[#00CAE0]/15 text-[#00CAE0] group-hover:bg-[#00CAE0] group-hover:text-black flex items-center justify-center transition-all">
                   <ImageIcon className="w-4 h-4 stroke-[2.2]" />
                 </div>
                 <span className={`text-xs font-bold tracking-tight transition-colors ${
@@ -693,14 +693,14 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                   onClick={onOpenMatrixBatch}
                   className={`p-3 md:p-4 rounded-xl border flex flex-col justify-between text-left cursor-pointer transition-all group ${
                     themeMode === 'light'
-                      ? 'bg-white hover:bg-[#F8FAFC] border-[#CBD5E1] hover:border-[#00E5CC]'
-                      : 'bg-[#181A22] hover:bg-[#1E212B] border-[#2B2E3C] hover:border-[#00E5CC]/50'
+                      ? 'bg-white hover:bg-[#F8FAFC] border-[#CBD5E1] hover:border-[#00CAE0]'
+                      : 'bg-[#181A22] hover:bg-[#1E212B] border-[#2B2E3C] hover:border-[#00CAE0]/50'
                   }`}
                 >
-                  <Layers className="w-5 h-5 text-[#00E5CC]" />
+                  <Layers className="w-5 h-5 text-[#00CAE0]" />
                   <div className="space-y-1">
                     <div className={`text-xs font-semibold transition-colors ${
-                      themeMode === 'light' ? 'text-[#0F172A] group-hover:text-[#00A89A]' : 'text-white group-hover:text-[#00E5CC]'
+                      themeMode === 'light' ? 'text-[#0F172A] group-hover:text-[#00A89A]' : 'text-white group-hover:text-[#00CAE0]'
                     }`}>
                       {isEn ? 'Matrix Variations' : 'Ma trận biến thể'}
                     </div>
@@ -799,13 +799,13 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                       onClick={() => handleQuickToolClick(tool.id)}
                       className={`p-3 md:p-3.5 rounded-xl border text-left space-y-1.5 transition-all cursor-pointer group ${
                         themeMode === 'light'
-                          ? 'bg-white hover:bg-[#F8FAFC] border-[#CBD5E1] hover:border-[#00E5CC]'
-                          : 'bg-[#181A22] hover:bg-[#1E212B] hover:border-[#00E5CC]/60 border-[#2B2E3C]'
+                          ? 'bg-white hover:bg-[#F8FAFC] border-[#CBD5E1] hover:border-[#00CAE0]'
+                          : 'bg-[#181A22] hover:bg-[#1E212B] hover:border-[#00CAE0]/60 border-[#2B2E3C]'
                       }`}
                     >
-                      <Icon className="w-4 h-4 text-[#00E5CC]" />
+                      <Icon className="w-4 h-4 text-[#00CAE0]" />
                       <div className={`text-xs font-semibold transition-colors ${
-                        themeMode === 'light' ? 'text-[#0F172A] group-hover:text-[#00A89A]' : 'text-white group-hover:text-[#00E5CC]'
+                        themeMode === 'light' ? 'text-[#0F172A] group-hover:text-[#00A89A]' : 'text-white group-hover:text-[#00CAE0]'
                       }`}>{tool.title}</div>
                       <div className="text-[11px] text-[#9CA3AF] line-clamp-1">{tool.desc}</div>
                     </button>
@@ -853,7 +853,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
                   placeholder={isEn ? 'Search projects...' : 'Tìm kiếm dự án...'}
-                  className={`w-full sm:w-48 pl-8 pr-3 py-1.5 text-xs rounded-lg transition-colors border focus:outline-hidden focus:border-[#00E5CC] ${
+                  className={`w-full sm:w-48 pl-8 pr-3 py-1.5 text-xs rounded-lg transition-colors border focus:outline-hidden focus:border-[#00CAE0] ${
                     themeMode === 'light'
                       ? 'bg-white border-[#CBD5E1] text-[#0F172A] placeholder-[#94A3B8]'
                       : 'bg-[#181A22] border-[#2E3140] text-white placeholder-[#71717A]'
@@ -865,7 +865,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                 onClick={() => setViewMode('grid')}
                 className={`p-1.5 rounded-lg border cursor-pointer transition-colors ${
                   viewMode === 'grid'
-                    ? 'bg-[#00E5CC]/15 text-[#00E5CC] border-[#00E5CC]/40'
+                    ? 'bg-[#00CAE0]/15 text-[#00CAE0] border-[#00CAE0]/40'
                     : themeMode === 'light'
                     ? 'bg-white text-[#64748B] border-[#CBD5E1]'
                     : 'bg-[#181A22] text-[#71717A] border-[#2B2E3C]'
@@ -878,7 +878,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                 onClick={() => setViewMode('list')}
                 className={`p-1.5 rounded-lg border cursor-pointer transition-colors ${
                   viewMode === 'list'
-                    ? 'bg-[#00E5CC]/15 text-[#00E5CC] border-[#00E5CC]/40'
+                    ? 'bg-[#00CAE0]/15 text-[#00CAE0] border-[#00CAE0]/40'
                     : themeMode === 'light'
                     ? 'bg-white text-[#64748B] border-[#CBD5E1]'
                     : 'bg-[#181A22] text-[#71717A] border-[#2B2E3C]'
@@ -935,8 +935,8 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                     key={proj.id}
                     className={`group relative rounded-lg overflow-hidden transition-all border ${
                       themeMode === 'light'
-                        ? 'bg-[#FFFFFF] border-[#CBD5E1] hover:border-[#00E5CC] shadow-xs'
-                        : 'bg-[#161820] border-[#272A36] hover:border-[#00E5CC]'
+                        ? 'bg-[#FFFFFF] border-[#CBD5E1] hover:border-[#00CAE0] shadow-xs'
+                        : 'bg-[#161820] border-[#272A36] hover:border-[#00CAE0]'
                     }`}
                   >
                     {/* Project Cover Thumbnail */}
@@ -952,15 +952,15 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                         <span className={`px-1.5 py-0.5 text-[10px] font-mono rounded ${
                           themeMode === 'light'
                             ? 'bg-white/95 text-[#0F766E] border border-slate-200 shadow-xs font-semibold'
-                            : 'bg-black/60 text-[#00E5CC]'
+                            : 'bg-black/60 text-[#00CAE0]'
                         }`}>
                           {proj.aspectRatio}
                         </span>
                         {isCloud && (
                           <span className={`px-1.5 py-0.5 text-[9px] rounded flex items-center gap-1 ${
                             themeMode === 'light'
-                              ? 'bg-[#00E5CC]/25 text-[#0F766E] font-medium'
-                              : 'bg-[#00E5CC]/20 text-[#00E5CC]'
+                              ? 'bg-[#00CAE0]/25 text-[#0F766E] font-medium'
+                              : 'bg-[#00CAE0]/20 text-[#00CAE0]'
                           }`}>
                             <Cloud className="w-2.5 h-2.5" /> {isEn ? 'Synced' : 'Đã đồng bộ'}
                           </span>
@@ -997,14 +997,14 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                             }}
                             className={`w-full px-1.5 py-0.5 text-xs border rounded ${
                               themeMode === 'light'
-                                ? 'bg-white border-[#00D2C4] text-[#0F172A]'
-                                : 'bg-[#101116] border-[#00E5CC] text-white'
+                                ? 'bg-white border-[#00B8CE] text-[#0F172A]'
+                                : 'bg-[#101116] border-[#00CAE0] text-white'
                             }`}
                           />
                         ) : (
                           <div
                             onClick={() => !proj.isDeletedInTrash && onOpenProject(proj)}
-                            className={`text-xs font-semibold truncate cursor-pointer hover:text-[#00E5CC] ${
+                            className={`text-xs font-semibold truncate cursor-pointer hover:text-[#00CAE0] ${
                               themeMode === 'light' ? 'text-[#0F172A]' : 'text-white'
                             }`}
                           >
@@ -1019,7 +1019,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                           <button
                             type="button"
                             onClick={() => onRestoreProject(proj.id)}
-                            className="px-2 py-1 text-[10px] font-semibold bg-[#00E5CC] text-black rounded cursor-pointer hover:bg-[#00F5DC] transition-colors"
+                            className="px-2 py-1 text-[10px] font-semibold bg-[#00CAE0] text-black rounded cursor-pointer hover:bg-[#00D8EE] transition-colors"
                           >
                             {isEn ? 'Restore' : 'Khôi phục'}
                           </button>
@@ -1063,7 +1063,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                                   themeMode === 'light' ? 'hover:bg-[#F1F5F9] text-[#0F172A]' : 'hover:bg-[#2B2F3E] text-white'
                                 }`}
                               >
-                                <Edit3 className="w-3.5 h-3.5 text-[#00E5CC]" />
+                                <Edit3 className="w-3.5 h-3.5 text-[#00CAE0]" />
                                 <span>{isEn ? 'Rename' : 'Đổi tên (Rename)'}</span>
                               </button>
                               <button
@@ -1076,7 +1076,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                                   themeMode === 'light' ? 'hover:bg-[#F1F5F9] text-[#0F172A]' : 'hover:bg-[#2B2F3E] text-white'
                                 }`}
                               >
-                                <Copy className="w-3.5 h-3.5 text-[#00E5CC]" />
+                                <Copy className="w-3.5 h-3.5 text-[#00CAE0]" />
                                 <span>{isEn ? 'Duplicate' : 'Nhân bản (Duplicate)'}</span>
                               </button>
                               <button
@@ -1147,7 +1147,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                 onClick={() => setNavTab(item.id)}
                 className={`flex flex-col items-center justify-center px-2 py-1 rounded-lg cursor-pointer transition-colors active:scale-95 ${
                   active
-                    ? 'text-[#00E5CC] font-bold'
+                    ? 'text-[#00CAE0] font-bold'
                     : 'text-[#94A3B8] hover:text-current'
                 }`}
               >
@@ -1319,7 +1319,7 @@ export const ShortcutsWindowModal: React.FC<ShortcutsWindowModalProps> = ({
       <div className="w-full max-w-[620px] bg-[#1E1E24] border border-[#32323C] rounded-lg shadow-2xl overflow-hidden text-xs text-[#E4E4E7]">
         <div className="flex items-center justify-between px-4 py-3 bg-[#25252C] border-b border-[#32323C]">
           <div className="flex items-center gap-2 font-semibold text-sm text-white">
-            <Keyboard className="w-4 h-4 text-[#00E5CC]" />
+            <Keyboard className="w-4 h-4 text-[#00CAE0]" />
             <span>
               {isEn ? 'Keyboard Shortcuts (TDO CUT Studio)' : 'Bảng Hệ Thống Phím Tắt (Shortcuts Window)'}
             </span>
@@ -1348,7 +1348,7 @@ export const ShortcutsWindowModal: React.FC<ShortcutsWindowModalProps> = ({
               onClick={() => setTab(t.id)}
               className={`px-3 py-1.5 font-semibold border-b-2 transition-colors cursor-pointer ${
                 tab === t.id
-                  ? 'border-[#00E5CC] text-[#00E5CC]'
+                  ? 'border-[#00CAE0] text-[#00CAE0]'
                   : 'border-transparent text-[#9CA3AF] hover:text-white'
               }`}
             >
@@ -1367,7 +1367,7 @@ export const ShortcutsWindowModal: React.FC<ShortcutsWindowModalProps> = ({
                 <div className="font-semibold text-white">{row.name}</div>
                 <div className="text-[11px] text-[#9CA3AF]">{row.desc}</div>
               </div>
-              <kbd className="px-2.5 py-1 bg-[#25252E] border border-[#3A3A48] rounded font-mono text-[11px] text-[#00E5CC] shrink-0">
+              <kbd className="px-2.5 py-1 bg-[#25252E] border border-[#3A3A48] rounded font-mono text-[11px] text-[#00CAE0] shrink-0">
                 {row.keys}
               </kbd>
             </div>
@@ -1378,7 +1378,7 @@ export const ShortcutsWindowModal: React.FC<ShortcutsWindowModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-1.5 font-semibold bg-[#00E5CC] text-[#090D12] rounded cursor-pointer"
+            className="px-4 py-1.5 font-semibold bg-[#00CAE0] text-[#090D12] rounded cursor-pointer"
           >
             {isEn ? 'Close' : 'Đóng'}
           </button>
@@ -1440,7 +1440,7 @@ export const SystemSettingsModal: React.FC<SystemSettingsModalProps> = ({
               alt="TDO CUT"
               className="w-5 h-5 rounded object-contain bg-white p-0.5"
             />
-            <Settings className="w-4 h-4 text-[#00E5CC]" />
+            <Settings className="w-4 h-4 text-[#00CAE0]" />
             <span>
               {language === 'en'
                 ? 'System Settings (TDO CUT Studio)'
@@ -1489,7 +1489,7 @@ export const SystemSettingsModal: React.FC<SystemSettingsModalProps> = ({
                 onClick={() => setTab(t.id)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 font-semibold border-b-2 transition-colors cursor-pointer shrink-0 whitespace-nowrap ${
                   tab === t.id
-                    ? 'border-[#00E5CC] text-[#00E5CC]'
+                    ? 'border-[#00CAE0] text-[#00CAE0]'
                     : 'border-transparent text-[#9CA3AF] hover:text-white'
                 }`}
               >
@@ -1520,7 +1520,7 @@ export const SystemSettingsModal: React.FC<SystemSettingsModalProps> = ({
                   type="checkbox"
                   checked={hwEncode}
                   onChange={(e) => setHwEncode(e.target.checked)}
-                  className="accent-[#00E5CC]"
+                  className="accent-[#00CAE0]"
                 />
               </label>
 
@@ -1541,13 +1541,13 @@ export const SystemSettingsModal: React.FC<SystemSettingsModalProps> = ({
                   type="checkbox"
                   checked={hwDecode}
                   onChange={(e) => setHwDecode(e.target.checked)}
-                  className="accent-[#00E5CC]"
+                  className="accent-[#00CAE0]"
                 />
               </label>
 
               <label className="flex items-center justify-between p-2.5 bg-[#141418] rounded border border-[#2B2B34] cursor-pointer">
                 <div>
-                  <div className="font-semibold text-[#00E5CC]">
+                  <div className="font-semibold text-[#00CAE0]">
                     {language === 'en'
                       ? 'Proxy Mode (540P / 720P Lag-Free Long-Form Editing)'
                       : 'Chế độ Proxy (540P / 720P chống giật lag khi dựng phim dài)'}
@@ -1562,7 +1562,7 @@ export const SystemSettingsModal: React.FC<SystemSettingsModalProps> = ({
                   type="checkbox"
                   checked={proxyEnabled}
                   onChange={(e) => onToggleProxy(e.target.checked)}
-                  className="accent-[#00E5CC]"
+                  className="accent-[#00CAE0]"
                 />
               </label>
             </>
@@ -1574,7 +1574,7 @@ export const SystemSettingsModal: React.FC<SystemSettingsModalProps> = ({
               <div className="p-3 bg-[#141418] border border-[#2B2B34] rounded-md space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 font-semibold text-white">
-                    <Globe className="w-3.5 h-3.5 text-[#00E5CC]" />
+                    <Globe className="w-3.5 h-3.5 text-[#00CAE0]" />
                     <span>
                       {language === 'en'
                         ? 'Interface Language:'
@@ -1585,7 +1585,7 @@ export const SystemSettingsModal: React.FC<SystemSettingsModalProps> = ({
                     aria-label="Ngôn ngữ giao diện (Language)"
                     value={language}
                     onChange={(e) => onChangeLanguage?.(e.target.value as AppLanguage)}
-                    className="px-2.5 py-1 bg-[#1E1E26] border border-[#32323E] rounded text-[#00E5CC] font-semibold cursor-pointer"
+                    className="px-2.5 py-1 bg-[#1E1E26] border border-[#32323E] rounded text-[#00CAE0] font-semibold cursor-pointer"
                   >
                     <option value="vi">1. Tiếng Việt (Vietnamese)</option>
                     <option value="en">2. English</option>
@@ -1597,7 +1597,7 @@ export const SystemSettingsModal: React.FC<SystemSettingsModalProps> = ({
                     onClick={() => onChangeLanguage?.('vi')}
                     className={`py-1.5 px-3 rounded border font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors ${
                       language === 'vi'
-                        ? 'bg-[#00E5CC]/15 border-[#00E5CC] text-[#00E5CC]'
+                        ? 'bg-[#00CAE0]/15 border-[#00CAE0] text-[#00CAE0]'
                         : 'bg-[#1C1C24] border-[#2E2E3A] text-[#A1A1AA] hover:text-white'
                     }`}
                   >
@@ -1613,7 +1613,7 @@ export const SystemSettingsModal: React.FC<SystemSettingsModalProps> = ({
                     onClick={() => onChangeLanguage?.('en')}
                     className={`py-1.5 px-3 rounded border font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors ${
                       language === 'en'
-                        ? 'bg-[#00E5CC]/15 border-[#00E5CC] text-[#00E5CC]'
+                        ? 'bg-[#00CAE0]/15 border-[#00CAE0] text-[#00CAE0]'
                         : 'bg-[#1C1C24] border-[#2E2E3A] text-[#A1A1AA] hover:text-white'
                     }`}
                   >
@@ -1634,7 +1634,7 @@ export const SystemSettingsModal: React.FC<SystemSettingsModalProps> = ({
                     {themeMode === 'light' ? (
                       <Sun className="w-4 h-4 text-[#F59E0B]" />
                     ) : (
-                      <Moon className="w-4 h-4 text-[#00E5CC]" />
+                      <Moon className="w-4 h-4 text-[#00CAE0]" />
                     )}
                     <div>
                       <div className="font-semibold text-white">
@@ -1656,7 +1656,7 @@ export const SystemSettingsModal: React.FC<SystemSettingsModalProps> = ({
                   <button
                     type="button"
                     onClick={onToggleTheme}
-                    className="px-3 py-1.5 rounded bg-[#252530] hover:bg-[#30303E] border border-[#383846] text-[#00E5CC] font-semibold cursor-pointer flex items-center gap-1.5"
+                    className="px-3 py-1.5 rounded bg-[#252530] hover:bg-[#30303E] border border-[#383846] text-[#00CAE0] font-semibold cursor-pointer flex items-center gap-1.5"
                   >
                     {themeMode === 'light' ? (
                       <>
@@ -1685,7 +1685,7 @@ export const SystemSettingsModal: React.FC<SystemSettingsModalProps> = ({
                       setDraftSavePath(e.target.value);
                       setProjectInstallDir(e.target.value);
                     }}
-                    className="flex-1 px-2.5 py-1.5 bg-[#141418] border border-[#2B2B34] rounded font-mono text-[11px] text-[#D4D4D8] focus:border-[#00E5CC]"
+                    className="flex-1 px-2.5 py-1.5 bg-[#141418] border border-[#2B2B34] rounded font-mono text-[11px] text-[#D4D4D8] focus:border-[#00CAE0]"
                   />
                   <button
                     type="button"
@@ -1701,7 +1701,7 @@ export const SystemSettingsModal: React.FC<SystemSettingsModalProps> = ({
                         setProjectInstallDir(newPath.trim());
                       }
                     }}
-                    className="px-2.5 py-1.5 bg-[#252832] hover:bg-[#303442] text-[#00E5CC] rounded text-[11px] font-semibold cursor-pointer shrink-0"
+                    className="px-2.5 py-1.5 bg-[#252832] hover:bg-[#303442] text-[#00CAE0] rounded text-[11px] font-semibold cursor-pointer shrink-0"
                   >
                     {language === 'en' ? 'Change' : 'Thay đổi'}
                   </button>
@@ -1739,7 +1739,7 @@ export const SystemSettingsModal: React.FC<SystemSettingsModalProps> = ({
                       : 'Xóa các tệp render tạm thời để giải phóng ổ cứng ngay lập tức'}
                   </div>
                 </div>
-                <span className="font-mono text-sm text-[#00E5CC]">{cacheSizeMb} MB</span>
+                <span className="font-mono text-sm text-[#00CAE0]">{cacheSizeMb} MB</span>
               </div>
               <button
                 type="button"
@@ -1765,7 +1765,7 @@ export const SystemSettingsModal: React.FC<SystemSettingsModalProps> = ({
                   : 'Kiểm tra tốc độ kết nối đám mây, WebGL Canvas 60 FPS và trình giải mã MediaRecorder:'}
               </div>
               {envTestDone && (
-                <div className="p-2.5 bg-[#00E5CC]/10 border border-[#00E5CC]/40 rounded space-y-1 text-[11px] text-[#00E5CC]">
+                <div className="p-2.5 bg-[#00CAE0]/10 border border-[#00CAE0]/40 rounded space-y-1 text-[11px] text-[#00CAE0]">
                   <div className="flex items-center gap-1.5 font-semibold">
                     <CheckCircle2 className="w-4 h-4" />
                     <span>
@@ -1789,7 +1789,7 @@ export const SystemSettingsModal: React.FC<SystemSettingsModalProps> = ({
               <button
                 type="button"
                 onClick={() => setEnvTestDone(true)}
-                className="px-3.5 py-1.5 bg-[#00E5CC] text-[#090D12] font-semibold rounded cursor-pointer"
+                className="px-3.5 py-1.5 bg-[#00CAE0] text-[#090D12] font-semibold rounded cursor-pointer"
               >
                 {language === 'en' ? 'Start Environment Test' : 'Start Environment Test (Kiểm tra ngay)'}
               </button>
@@ -1801,7 +1801,7 @@ export const SystemSettingsModal: React.FC<SystemSettingsModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-1.5 font-semibold bg-[#00E5CC] text-[#090D12] rounded cursor-pointer"
+            className="px-4 py-1.5 font-semibold bg-[#00CAE0] text-[#090D12] rounded cursor-pointer"
           >
             {language === 'en' ? 'Save & Close' : 'Lưu & Đóng'}
           </button>

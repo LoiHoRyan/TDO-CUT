@@ -3611,6 +3611,52 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                 <span>{isEn ? 'Add Standard Text' : 'A+ Thêm chữ mặc định'}</span>
               </button>
 
+              {onGenerateAutoCaptions && (
+                <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-2.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-white">Phụ đề tự động (Whisper AI)</span>
+                    {onToggleBilingualSubtitles && (
+                      <label className="flex items-center gap-1.5 text-[11px] text-[#D4D4D8] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={bilingualSubtitles}
+                          onChange={(e) => onToggleBilingualSubtitles(e.target.checked)}
+                          className="accent-[#00CAE0]"
+                        />
+                        <span>Song ngữ</span>
+                      </label>
+                    )}
+                  </div>
+                  {isGeneratingCaptions && (
+                    <div className="text-[11px] text-[#00CAE0]">
+                      {captionProgressText || 'Đang nhận diện...'} ({captionProgressPct}%)
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      disabled={isGeneratingCaptions}
+                      onClick={onGenerateAutoCaptions}
+                      className="py-2 px-3 rounded-lg bg-[#00CAE0] disabled:opacity-50 text-[#090D12] font-bold text-xs cursor-pointer"
+                    >
+                      {isGeneratingCaptions ? `Đang tạo (${captionProgressPct}%)` : 'Tạo phụ đề tự động'}
+                    </button>
+                    {onSpeakSubtitleTts && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const txt = textClips[0]?.subtitleText || textClips[0]?.name || '';
+                          if (txt) onSpeakSubtitleTts(txt);
+                        }}
+                        className="py-2 px-3 rounded-lg bg-[#25262C] text-white border border-white/15 font-semibold text-xs cursor-pointer"
+                      >
+                        Chuyển chữ thành giọng
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Text Templates Grid */}
               <div className="pt-2">
                 <div className="text-xs font-bold text-[#94A3B8] mb-2 uppercase">

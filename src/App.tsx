@@ -1295,8 +1295,9 @@ export default function App() {
   const activeRecorderRef = useRef<MediaRecorder | null>(null);
 
   // AI Captions & Prompt State
-  const [bilingualSubtitles, setBilingualSubtitles] = useState<boolean>(true);
-  const [removeFillerWords, setRemoveFillerWords] = useState<boolean>(true);
+  const [bilingualSubtitles, setBilingualSubtitles] = useState<boolean>(false);
+  const [bilingualTargetLang, setBilingualTargetLang] = useState<string>('en');
+  const [removeFillerWords, setRemoveFillerWords] = useState<boolean>(false);
   const [captionLanguage, setCaptionLanguage] = useState<string>('auto');
   const [isGeneratingCaptions, setIsGeneratingCaptions] = useState<boolean>(false);
   const [captionProgressText, setCaptionProgressText] = useState<string>('');
@@ -3381,7 +3382,7 @@ export default function App() {
         if (!cleanedText) continue;
         let finalCaption = cleanedText;
         if (bilingualSubtitles) {
-          const targetBilingualCode = captionLanguage === 'vi' ? 'en' : 'vi';
+          const targetBilingualCode = bilingualTargetLang || (captionLanguage === 'vi' ? 'en' : 'vi');
           const translated = await translateSubtitleLine(cleanedText, targetBilingualCode);
           if (translated && translated.toLowerCase() !== cleanedText.toLowerCase()) {
             finalCaption = `${cleanedText}\n${translated}`;
@@ -7049,49 +7050,36 @@ export default function App() {
                         })}
                       </div>
 
-                      {/* Auto Captions (Phụ đề tự động AI) */}
+                      {/* Text-to-Audio (Chuyển văn bản thành giọng nói) */}
                       <div
                         data-no-marquee="true"
-                        className="p-2.5 bg-[#1E1E26] border border-[#30303E] rounded space-y-2"
+                        className="p-2.5 bg-[#22222A] border border-[#32323E] rounded space-y-2"
                       >
                         <div className="flex items-center justify-between">
                           <span className="font-semibold text-[#00CAE0]">
-                            Phụ đề tự động (Auto Captions)
+                            Chuyển văn bản thành giọng nói (Text-to-Audio)
                           </span>
                         </div>
-                        <label className="flex items-center gap-2 text-[11px] text-[#D4D4D8] cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={bilingualSubtitles}
-                            onChange={(e) => setBilingualSubtitles(e.target.checked)}
-                            className="accent-[#00CAE0]"
-                          />
-                          <span>Phụ đề song ngữ (Bilingual Subtitles Việt - Anh)</span>
-                        </label>
-                        <label className="flex items-center gap-2 text-[11px] text-[#D4D4D8] cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={bilingualSubtitles}
-                            onChange={(e) => setBilingualSubtitles(e.target.checked)}
-                            className="accent-[#00CAE0]"
-                          />
-                          <span>Phụ đề song ngữ (Bilingual)</span>
-                        </label>
-                        <label className="flex items-center gap-2 text-[11px] text-[#D4D4D8] cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={removeFillerWords}
-                            onChange={(e) => setRemoveFillerWords(e.target.checked)}
-                            className="accent-[#00CAE0]"
-                          />
-                          <span>Xóa từ thừa &amp; khoảng lặng (Identify filler words)</span>
-                        </label>
+                        <p className="text-[10px] text-[#9CA3AF]">
+                          Đọc nội dung phụ đề / văn bản đang chọn bằng giọng AI trình duyệt.
+                        </p>
                         <button
                           type="button"
-                          onClick={() => handleGenerateAutoCaptions()}
-                          className="w-full py-1.5 bg-[#00CAE0]/20 hover:bg-[#00CAE0] hover:text-black text-[#00CAE0] border border-[#00CAE0]/40 font-semibold rounded transition-colors cursor-pointer"
+                          onClick={() => {
+                            const targetTxt =
+                              activeSubtitleClip?.subtitleText ||
+                              activeSubtitleClip?.name ||
+                              clips.find((c) => c.trackIndex === 2 && c.subtitleText)?.subtitleText ||
+                              '';
+                            if (targetTxt) {
+                              handleSpeakSubtitleTts(targetTxt);
+                            } else {
+                              showToast('Hãy thêm hoặc chọn một câu văn bản trên Timeline trước!');
+                            }
+                          }}
+                          className="w-full py-1.5 bg-[#00CAE0] hover:bg-[#00D8EE] text-[#090D12] font-bold rounded transition-colors cursor-pointer"
                         >
-                          Tạo Phụ đề Tự động trên Timeline
+                          Đọc giọng nói (Text-to-Audio)
                         </button>
                       </div>
 
@@ -7790,11 +7778,36 @@ export default function App() {
                         <label className="flex items-center gap-2 text-[11px] text-[#D4D4D8] cursor-pointer">
                           <input
                             type="checkbox"
+                            checked={bilingualSubtitles}
+                            onChange={(e) => setBilingualSubtitles(e.target.checked)}
+                            className="accent-[#00CAE0]"
+                          />
+                          <span>Phụ đề song ngữ</span>
+                        </label>
+                        {bilingualSubtitles && (
+                          <div className="flex items-center justify-between gap-2 text-[11px] pl-5">
+                            <span className="text-[#A1A1AA]">Ngôn ngữ dịch:</span>
+                            <select
+                              value={bilingualTargetLang}
+                              onChange={(e) => setBilingualTargetLang(e.target.value)}
+                              className="max-w-[155px] px-2 py-1 bg-[#141418] border border-[#32323C] rounded text-white text-[11px] outline-none"
+                            >
+                              {WHISPER_243_LANGUAGES.filter((l) => l.code !== 'auto').map((lang) => (
+                                <option key={`bi-${lang.code}`} value={lang.code}>
+                                  {lang.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                        <label className="flex items-center gap-2 text-[11px] text-[#D4D4D8] cursor-pointer">
+                          <input
+                            type="checkbox"
                             checked={removeFillerWords}
                             onChange={(e) => setRemoveFillerWords(e.target.checked)}
                             className="accent-[#00CAE0]"
                           />
-                          <span>Lọc từ thừa (ờ, à, ừm)</span>
+                          <span>Lọc từ thừa</span>
                         </label>
                         {isGeneratingCaptions && (
                           <div className="p-2 bg-[#141418] border border-[#2C2C36] rounded space-y-1">

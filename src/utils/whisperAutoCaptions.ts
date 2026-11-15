@@ -411,13 +411,15 @@ export async function transcribeAudioWithWhisper(
         .trim();
       if (!clean) continue;
 
-      const tsStart = typeof ch.timestamp?.[0] === 'number' ? ch.timestamp[0] : 0;
+      const sliceDurSec = slice.length / 16000;
+      const rawStart = typeof ch.timestamp?.[0] === 'number' ? Math.max(0, ch.timestamp[0]) : 0;
+      const tsStart = Math.min(sliceDurSec - 0.2, rawStart);
       const tsEnd =
-        typeof ch.timestamp?.[1] === 'number'
-          ? ch.timestamp[1]
-          : Math.min(slice.length / 16000, tsStart + Math.max(1.2, clean.split(/\s+/).length * 0.45));
+        typeof ch.timestamp?.[1] === 'number' && ch.timestamp[1] > tsStart
+          ? Math.min(sliceDurSec, ch.timestamp[1])
+          : Math.min(sliceDurSec, tsStart + Math.max(1.0, clean.split(/\s+/).length * 0.38));
 
-      const dur = Math.max(0.6, tsEnd - tsStart);
+      const dur = Math.max(0.4, tsEnd - tsStart);
       segments.push({
         text: clean,
         startTime: Number((startTimeOffset + chunkOffsetSec + tsStart).toFixed(2)),

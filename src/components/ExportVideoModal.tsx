@@ -196,6 +196,7 @@ class Mp4DemuxVideoDecoder {
   private samples: Mp4SampleInfo[] = [];
   private decodedFrames: VideoFrame[] = [];
   private nextFeedDtsIdx: number = 0;
+  private hasFlushedEnd: boolean = false;
   private ready: boolean = false;
   public readonly width: number;
   public readonly height: number;
@@ -380,6 +381,7 @@ class Mp4DemuxVideoDecoder {
     }
     this.decodedFrames = [];
     this.nextFeedDtsIdx = 0;
+    this.hasFlushedEnd = false;
     this.decoder = new VideoDecoder({
       output: (frame) => {
         this.decodedFrames.push(frame);
@@ -432,6 +434,7 @@ class Mp4DemuxVideoDecoder {
         this.decoder.reset();
         this.decoder.configure(this.config!);
         this.nextFeedDtsIdx = keyIdx;
+        this.hasFlushedEnd = false;
       } catch {
         return null;
       }
@@ -492,14 +495,19 @@ class Mp4DemuxVideoDecoder {
       }
 
       // If we reached the end of the clip/samples and still haven't reached targetUs,
-      // flush remaining frames at the end of the clip
+      // flush remaining frames at the end of the clip ONCE with a safety timeout so Android never hangs
       if (
+        !this.hasFlushedEnd &&
         this.nextFeedDtsIdx >= this.samples.length &&
         (this.decodedFrames.length === 0 ||
           this.decodedFrames[this.decodedFrames.length - 1].timestamp < targetUs)
       ) {
+        this.hasFlushedEnd = true;
         try {
-          await this.decoder.flush();
+          await Promise.race([
+            this.decoder.flush().catch(() => {}),
+            new Promise<void>((r) => setTimeout(r, 400)),
+          ]);
         } catch {
           // Ignore
         }
@@ -562,6 +570,7 @@ class Mp4DemuxVideoDecoder {
     }
     this.decodedFrames = [];
     this.nextFeedDtsIdx = 0;
+    this.hasFlushedEnd = false;
     if (this.decoder && this.config) {
       try {
         if (this.decoder.state !== 'closed') {
@@ -3193,8 +3202,14 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                 } catch {
                   // Fallback
                 }
+                const bpStartMs = performance.now();
                 timer = setInterval(() => {
-                  if (videoEncoder.encodeQueueSize <= 2 || abortExportRef.current || videoEncoderError) {
+                  if (
+                    videoEncoder.encodeQueueSize <= 2 ||
+                    abortExportRef.current ||
+                    videoEncoderError ||
+                    performance.now() - bpStartMs >= 1500
+                  ) {
                     onDone();
                   }
                 }, 8);
@@ -3227,7 +3242,12 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           }
 
           try {
-            await videoEncoder.flush();
+            await Promise.race([
+              videoEncoder.flush(),
+              new Promise<void>((_, reject) =>
+                setTimeout(() => reject(new Error('VideoEncoder flush timeout')), 5000)
+              ),
+            ]);
           } catch (flushErr) {
             console.error('[WebCodecs VideoEncoder] flush error:', flushErr);
             videoEncoderError = flushErr instanceof Error ? flushErr : new Error(String(flushErr));

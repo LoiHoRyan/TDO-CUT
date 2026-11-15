@@ -1730,13 +1730,13 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
               aria-label="Thu nhỏ về bàn dựng"
               className="pointer-events-auto flex items-center justify-center w-8 h-8 rounded-full bg-black/60 backdrop-blur-md text-white border border-white/20 active:scale-95 shadow-lg cursor-pointer hover:bg-black/80"
             >
-              <Minimize2 className="w-4 h-4 text-[#00E5CC]" />
+              <Minimize2 className="w-4 h-4 text-[#00CAE0]" />
             </button>
 
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-white/80 border border-white/10 text-[10px] font-mono">
                 <span>{aspectRatio === 'original' ? (currentClip?.nativeAspectRatio || videoClips[0]?.nativeAspectRatio || 'Gốc') : aspectRatio}</span>
-                <span className="text-[#00E5CC] font-bold">{exportRes.toUpperCase()}</span>
+                <span className="text-[#00CAE0] font-bold">{exportRes.toUpperCase()}</span>
               </div>
             </div>
           </div>
@@ -1761,7 +1761,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                 type="button"
                 onClick={handlePlayToggle}
                 aria-label={isPlaying ? 'Tạm dừng' : 'Phát'}
-                className="w-9 h-9 rounded-full bg-[#00E5CC] text-[#071013] flex items-center justify-center active:scale-90 shadow-md transition-transform cursor-pointer"
+                className="w-9 h-9 rounded-full bg-[#00CAE0] text-[#071013] flex items-center justify-center active:scale-90 shadow-md transition-transform cursor-pointer"
               >
                 {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
               </button>
@@ -1824,7 +1824,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
               <span className="font-mono">
                 {exportRes.toUpperCase()}
               </span>
-              <ChevronDown className="w-3 h-3 text-[#00E5CC]" />
+              <ChevronDown className="w-3 h-3 text-[#00CAE0]" />
             </button>
 
             {/* Resolution Dropdown Popover */}
@@ -1861,14 +1861,14 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                       }}
                       className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left cursor-pointer transition-colors ${
                         exportRes === q.id
-                          ? 'bg-[#00E5CC]/20 text-[#00E5CC] font-bold'
+                          ? 'bg-[#00CAE0]/20 text-[#00CAE0] font-bold'
                           : isLight
                           ? 'hover:bg-gray-100 text-[#0F172A]'
                           : 'hover:bg-white/5 text-white'
                       }`}
                     >
                       <span>{q.label}</span>
-                      {exportRes === q.id && <Check className="w-3.5 h-3.5 text-[#00E5CC]" />}
+                      {exportRes === q.id && <Check className="w-3.5 h-3.5 text-[#00CAE0]" />}
                     </button>
                   ))}
                 </div>
@@ -1880,7 +1880,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
           <button
             type="button"
             onClick={onOpenExport}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#00E5CC] hover:bg-[#00F5DC] active:bg-[#00D2C4] text-[#071013] font-bold text-xs shadow-sm cursor-pointer active:scale-95 transition-all"
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#00CAE0] hover:bg-[#00D8EE] active:bg-[#00B8CE] text-[#071013] font-bold text-xs shadow-sm cursor-pointer active:scale-95 transition-all"
           >
             <Upload className="w-3.5 h-3.5 stroke-[2.5]" />
             <span>{isEn ? 'Export' : 'Xuất'}</span>
@@ -1902,7 +1902,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
               }}
               className="flex flex-col items-center justify-center gap-3 text-center p-6 cursor-pointer max-w-xs"
             >
-              <div className="w-16 h-16 rounded-2xl bg-[#00E5CC]/15 border border-[#00E5CC]/40 flex items-center justify-center text-[#00E5CC] shadow-lg">
+              <div className="w-16 h-16 rounded-2xl bg-[#00CAE0]/15 border border-[#00CAE0]/40 flex items-center justify-center text-[#00CAE0] shadow-lg">
                 <Film className="w-8 h-8" />
               </div>
               <div className="text-white font-bold text-sm">Chưa có video nào trong dự án</div>
@@ -1912,7 +1912,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   e.stopPropagation();
                   setShowAddMediaModal(true);
                 }}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#00E5CC] text-[#071013] font-bold text-xs active:scale-95 cursor-pointer shadow-md hover:bg-[#00F5DC] transition-all"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#00CAE0] text-[#071013] font-bold text-xs active:scale-95 cursor-pointer shadow-md hover:bg-[#00D8EE] transition-all"
               >
                 <Plus className="w-4 h-4 stroke-[2.5]" />
                 <span>+ Chọn video từ điện thoại / máy tính</span>
@@ -1945,7 +1945,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                 : 'bg-white/5 hover:bg-white/10 border-white/10 text-white'
             }`}
           >
-            <Maximize2 className="w-4 h-4 text-[#00E5CC]" />
+            <Maximize2 className="w-4 h-4 text-[#00CAE0]" />
           </button>
           <button
             type="button"
@@ -1975,7 +1975,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
             type="button"
             onClick={handlePlayToggle}
             aria-label={isPlaying ? 'Tạm dừng video' : 'Phát video'}
-            className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer shadow-md active:scale-90 transition-transform bg-[#00E5CC] text-[#071013] hover:bg-[#00F5DC]"
+            className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer shadow-md active:scale-90 transition-transform bg-[#00CAE0] text-[#071013] hover:bg-[#00D8EE]"
           >
             {isPlaying ? (
               <Pause className="w-4 h-4 fill-current" />
@@ -2021,7 +2021,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
         {/* Stationary White Center Playhead Indicator (Vertically aligned directly below Play button) */}
         <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex flex-col items-center">
           <div className="w-3 h-3 bg-white rotate-45 -mt-1 shadow-md border border-black/30" />
-          <div className="w-[2px] flex-1 bg-white shadow-[0_0_8px_rgba(255,255,255,0.95)]" />
+          <div className="w-[2px] flex-1 bg-white shadow-sm" />
         </div>
 
         {/* Touch-Scrollable Horizontal Timeline Strip */}
@@ -2085,13 +2085,13 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                       ? 'border-rose-500/60 bg-rose-500/20 text-rose-400'
                       : isLight
                       ? 'border-gray-200 bg-white/90 hover:bg-white text-gray-700'
-                      : 'border-white/10 bg-[#191A23] hover:bg-[#222430] text-[#94A3B8] hover:text-[#00E5CC]'
+                      : 'border-white/10 bg-[#191A23] hover:bg-[#222430] text-[#94A3B8] hover:text-[#00CAE0]'
                   }`}
                 >
                   {trackMuted[0] ? (
                     <VolumeX className="w-4 h-4 text-rose-400 shrink-0" />
                   ) : (
-                    <Volume2 className="w-4 h-4 text-[#00E5CC] shrink-0" />
+                    <Volume2 className="w-4 h-4 text-[#00CAE0] shrink-0" />
                   )}
                   <span className="text-[7.5px] font-semibold mt-0.5 leading-none whitespace-nowrap">
                     {trackMuted[0] ? (isEn ? 'Muted' : 'Đã tắt') : (isEn ? 'Mute' : 'Tắt tiếng')}
@@ -2109,14 +2109,14 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   className={`flex flex-col items-center justify-center w-11 h-11 rounded-xl border text-center cursor-pointer active:scale-95 transition-all shadow-xs ${
                     isLight
                       ? 'border-gray-200 bg-white/90 hover:bg-white text-gray-700'
-                      : 'border-white/10 bg-[#191A23] hover:bg-[#222430] text-[#94A3B8] hover:text-[#00E5CC]'
+                      : 'border-white/10 bg-[#191A23] hover:bg-[#222430] text-[#94A3B8] hover:text-[#00CAE0]'
                   }`}
                 >
                   <div className="w-5 h-5 rounded-md overflow-hidden flex items-center justify-center bg-black/50 shrink-0 border border-white/15 relative">
                     {coverDataUrl ? (
                       <img src={coverDataUrl} alt="Cover" className="w-full h-full object-cover" />
                     ) : (
-                      <ImageIcon className="w-3 h-3 text-[#00E5CC]" />
+                      <ImageIcon className="w-3 h-3 text-[#00CAE0]" />
                     )}
                     <div className="absolute inset-0 bg-black/25 flex items-center justify-center opacity-70 hover:opacity-100">
                       <Wand2 className="w-2 h-2 text-white" />
@@ -2138,7 +2138,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   <button
                     type="button"
                     onClick={handleReorderEnd}
-                    className="h-14 px-3 rounded-xl bg-[#00E5CC] text-black font-bold text-xs flex items-center gap-1.5 shadow-lg active:scale-95 cursor-pointer shrink-0"
+                    className="h-14 px-3 rounded-xl bg-[#00CAE0] text-black font-bold text-xs flex items-center gap-1.5 shadow-lg active:scale-95 cursor-pointer shrink-0"
                   >
                     <Check className="w-4 h-4 stroke-[3]" />
                     <span>Xong</span>
@@ -2164,14 +2164,14 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                         }}
                         className={`w-14 h-14 aspect-square rounded-xl border-2 flex flex-col justify-between p-1 shrink-0 relative transition-all shadow-md cursor-grab active:cursor-grabbing select-none ${
                           isDraggingThis
-                            ? 'border-[#00E5CC] ring-2 ring-[#00E5CC]/60 scale-105 z-40 bg-[#00E5CC]/30'
+                            ? 'border-[#00CAE0] ring-2 ring-[#00CAE0]/60 scale-105 z-40 bg-[#00CAE0]/30'
                             : isLight
                             ? 'border-gray-300 bg-white text-gray-800'
                             : 'border-white/20 bg-[#1A1C24] text-white'
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className="text-[7.5px] font-bold px-1 rounded bg-black/75 text-[#00E5CC]">
+                          <span className="text-[7.5px] font-bold px-1 rounded bg-black/75 text-[#00CAE0]">
                             #{idx + 1}
                           </span>
                         </div>
@@ -2189,7 +2189,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     e.stopPropagation();
                     setShowAddMediaModal(true);
                   }}
-                  className="absolute h-11 rounded-xl border-2 border-dashed border-[#00E5CC]/60 bg-[#00E5CC]/10 flex items-center justify-center gap-2 text-xs font-bold text-[#00E5CC] cursor-pointer hover:bg-[#00E5CC]/20 active:scale-98 transition-all px-4"
+                  className="absolute h-11 rounded-xl border-2 border-dashed border-[#00CAE0]/60 bg-[#00CAE0]/10 flex items-center justify-center gap-2 text-xs font-bold text-[#00CAE0] cursor-pointer hover:bg-[#00CAE0]/20 active:scale-98 transition-all px-4"
                 >
                   <Plus className="w-4 h-4 stroke-[2.5]" />
                   <span>+ Thêm video / tệp đầu tiên</span>
@@ -2233,7 +2233,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                           }}
                           className={`absolute h-11 rounded-lg overflow-hidden border flex items-center px-1.5 transition-all cursor-pointer shadow-xs ${
                             isSelected
-                              ? 'border-2 border-white ring-2 ring-white/60 bg-[#00E5CC]/25 z-10'
+                              ? 'border-2 border-white ring-2 ring-white/60 bg-[#00CAE0]/25 z-10'
                               : isLight
                               ? 'bg-[#E2E8F0] border-[#CBD5E1] text-[#0F172A]'
                               : 'bg-[#1A1C24] border-[#2E313D] text-white'
@@ -2251,7 +2251,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                                 e.stopPropagation();
                               }}
                               title="Kéo đầu clip để cắt ngắn video (khi thả tay sẽ nhảy về 00:00:00)"
-                              className="absolute left-0 inset-y-0 w-4 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-l-md touch-none select-none active:bg-[#00E5CC]"
+                              className="absolute left-0 inset-y-0 w-4 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-l-md touch-none select-none active:bg-[#00CAE0]"
                             >
                               <div className="flex gap-0.5 pointer-events-none">
                                 <div className="w-[1px] h-3 bg-black/80" />
@@ -2262,7 +2262,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
 
                           {/* Duration Badge & Title */}
                           <div className="min-w-0 flex-1 z-10 pointer-events-none flex items-center justify-between pl-3 pr-3">
-                            <span className="text-[8px] font-mono font-bold bg-black/70 backdrop-blur-xs text-[#00E5CC] px-1 py-0.5 rounded shadow-xs">
+                            <span className="text-[8px] font-mono font-bold bg-black/70 backdrop-blur-xs text-[#00CAE0] px-1 py-0.5 rounded shadow-xs">
                               {clip.duration.toFixed(1)}s
                             </span>
                             <span className="text-[9.5px] font-bold truncate text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] max-w-[65%]">
@@ -2282,7 +2282,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                                 e.stopPropagation();
                               }}
                               title="Chạm ngón tay kéo mép phải để thu ngắn video cắt bỏ đoạn thừa"
-                              className="absolute right-0 inset-y-0 w-4 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-r-md touch-none select-none active:bg-[#00E5CC]"
+                              className="absolute right-0 inset-y-0 w-4 bg-white text-black flex items-center justify-center cursor-ew-resize z-20 shadow-md rounded-r-md touch-none select-none active:bg-[#00CAE0]"
                             >
                               <div className="flex gap-0.5 pointer-events-none">
                                 <div className="w-[1px] h-3 bg-black/80" />
@@ -2303,10 +2303,10 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                               handleOpenTransitionSeam(nextClip.id, clip.startTime + clip.duration);
                             }}
                             title="Thêm hiệu ứng chuyển tiếp tại điểm cắt này"
-                            className="absolute z-20 top-1/2 -translate-y-1/2 w-5 h-5 rounded bg-white text-black shadow-md border border-gray-300 flex items-center justify-center cursor-pointer active:scale-90 hover:bg-[#00E5CC] hover:text-black transition-all"
+                            className="absolute z-20 top-1/2 -translate-y-1/2 w-5 h-5 rounded bg-white text-black shadow-md border border-gray-300 flex items-center justify-center cursor-pointer active:scale-90 hover:bg-[#00CAE0] hover:text-black transition-all"
                           >
                             {nextClip.transitionType && nextClip.transitionType !== 'none' ? (
-                              <ArrowRightLeft className="w-3 h-3 text-[#00D2C4]" />
+                              <ArrowRightLeft className="w-3 h-3 text-[#00B8CE]" />
                             ) : (
                               <span className="font-bold text-xs leading-none">|</span>
                             )}
@@ -2327,7 +2327,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                       setShowAddMediaModal(true);
                     }}
                     title="Thêm video / ảnh vào dòng thời gian"
-                    className="absolute z-10 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg bg-white text-black flex items-center justify-center font-bold shadow-md active:scale-95 hover:bg-[#00E5CC] transition-all cursor-pointer"
+                    className="absolute z-10 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg bg-white text-black flex items-center justify-center font-bold shadow-md active:scale-95 hover:bg-[#00CAE0] transition-all cursor-pointer"
                   >
                     <Plus className="w-5 h-5 stroke-[2.8]" />
                   </button>
@@ -2382,7 +2382,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                         }}
                         className={`absolute h-7 rounded-[3px] border flex items-center px-1.5 gap-1.5 text-[9px] font-semibold truncate cursor-grab active:cursor-grabbing shadow-xs ${
                           activeLongPressClipId === clip.id
-                            ? 'scale-[1.03] ring-2 ring-[#00E5CC] shadow-xl shadow-cyan-500/40 z-30 bg-[#0284C7] text-white transition-none'
+                            ? 'scale-[1.03] ring-2 ring-[#00CAE0] shadow-xl shadow-cyan-500/40 z-30 bg-[#0284C7] text-white transition-none'
                             : isSelected
                             ? 'bg-[#0284C7]/50 border-2 border-white ring-2 ring-[#0284C7]/60 text-white z-10 transition-transform duration-150'
                             : 'bg-[#0284C7]/30 border-[#0284C7] text-[#38BDF8] transition-transform duration-150'
@@ -2506,7 +2506,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                         }}
                         className={`absolute h-7 rounded-[3px] border px-1.5 flex items-center gap-1.5 text-[9px] font-semibold truncate cursor-grab active:cursor-grabbing shadow-xs select-none ${
                           activeLongPressClipId === clip.id
-                            ? 'scale-[1.02] ring-2 ring-[#00E5CC] shadow-xl shadow-cyan-500/40 z-30 bg-[#F97316] text-white transition-none'
+                            ? 'scale-[1.02] ring-2 ring-[#00CAE0] shadow-xl shadow-cyan-500/40 z-30 bg-[#F97316] text-white transition-none'
                             : isSelected
                             ? 'bg-[#F97316] text-white border-2 border-white ring-2 ring-[#F97316]/50 z-10 transition-transform duration-150'
                             : 'bg-[#C2410C]/25 text-[#FB923C] border-[#F97316] transition-transform duration-150'
@@ -2628,9 +2628,9 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     }`}
                   >
                     <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center mb-0.5">
-                      <ChevronLeft className="w-4 h-4 text-[#00E5CC]" />
+                      <ChevronLeft className="w-4 h-4 text-[#00CAE0]" />
                     </div>
-                    <span className="text-[9.5px] font-semibold text-[#00E5CC] whitespace-nowrap">Quay lại</span>
+                    <span className="text-[9.5px] font-semibold text-[#00CAE0] whitespace-nowrap">Quay lại</span>
                   </button>
 
                   <button
@@ -2641,10 +2641,10 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     }}
                     className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-[#00E5CC]/20 border border-[#00E5CC] flex items-center justify-center mb-0.5 text-[#00E5CC]">
+                    <div className="w-7 h-7 rounded-lg bg-[#00CAE0]/20 border border-[#00CAE0] flex items-center justify-center mb-0.5 text-[#00CAE0]">
                       <Type className="w-4 h-4" />
                     </div>
-                    <span className="text-[9.5px] font-medium text-[#00E5CC] whitespace-nowrap">Sửa chữ</span>
+                    <span className="text-[9.5px] font-medium text-[#00CAE0] whitespace-nowrap">Sửa chữ</span>
                   </button>
 
                   <button
@@ -2708,7 +2708,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     onClick={onSplitClip}
                     className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
+                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00CAE0]">
                       <Split className="w-4 h-4" />
                     </div>
                     <span className="text-[9.5px] font-medium whitespace-nowrap">Tách</span>
@@ -2751,9 +2751,9 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     }`}
                   >
                     <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center mb-0.5">
-                      <ChevronLeft className="w-4 h-4 text-[#00E5CC]" />
+                      <ChevronLeft className="w-4 h-4 text-[#00CAE0]" />
                     </div>
-                    <span className="text-[9.5px] font-semibold text-[#00E5CC] whitespace-nowrap">Quay lại</span>
+                    <span className="text-[9.5px] font-semibold text-[#00CAE0] whitespace-nowrap">Quay lại</span>
                   </button>
 
                   <button
@@ -2761,7 +2761,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     onClick={onSplitClip}
                     className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
+                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00CAE0]">
                       <Split className="w-4 h-4" />
                     </div>
                     <span className="text-[9.5px] font-medium whitespace-nowrap">Tách</span>
@@ -2794,7 +2794,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     onClick={() => setActiveDrawer('volume')}
                     className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
+                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00CAE0]">
                       <Volume2 className="w-4 h-4" />
                     </div>
                     <span className="text-[9.5px] font-medium whitespace-nowrap">Âm lượng</span>
@@ -2805,7 +2805,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     onClick={() => setActiveDrawer('speed')}
                     className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
+                    <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00CAE0]">
                       <Gauge className="w-4 h-4" />
                     </div>
                     <span className="text-[9.5px] font-medium whitespace-nowrap">Tốc độ</span>
@@ -2844,13 +2844,13 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   type="button"
                   onClick={() => onSelectClip(null)}
                   className={`flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] active:scale-90 transition-transform cursor-pointer ${
-                    isLight ? 'text-[#0F172A] hover:text-[#00A89A]' : 'text-white hover:text-[#00E5CC]'
+                    isLight ? 'text-[#0F172A] hover:text-[#00A89A]' : 'text-white hover:text-[#00CAE0]'
                   }`}
                 >
                   <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center mb-0.5">
-                    <ChevronLeft className="w-4 h-4 text-[#00E5CC]" />
+                    <ChevronLeft className="w-4 h-4 text-[#00CAE0]" />
                   </div>
-                  <span className="text-[9.5px] font-semibold text-[#00E5CC] whitespace-nowrap">Quay lại</span>
+                  <span className="text-[9.5px] font-semibold text-[#00CAE0] whitespace-nowrap">Quay lại</span>
                 </button>
 
                 {/* Split (Tách) */}
@@ -2859,7 +2859,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   onClick={onSplitClip}
                   className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
                 >
-                  <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
+                  <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00CAE0]">
                     <Split className="w-4 h-4" />
                   </div>
                   <span className="text-[9.5px] font-medium text-current whitespace-nowrap">Tách</span>
@@ -2907,7 +2907,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   onClick={() => setActiveDrawer('speed')}
                   className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
                 >
-                  <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
+                  <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00CAE0]">
                     <Gauge className="w-4 h-4" />
                   </div>
                   <span className="text-[9.5px] font-medium text-current whitespace-nowrap">Tốc độ</span>
@@ -2919,7 +2919,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   onClick={() => setActiveDrawer('volume')}
                   className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
                 >
-                  <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
+                  <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00CAE0]">
                     <Volume2 className="w-4 h-4" />
                   </div>
                   <span className="text-[9.5px] font-medium text-current whitespace-nowrap">Âm lượng</span>
@@ -2932,11 +2932,11 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     onUpdateClipProp('autoCutout', !currentClip.autoCutout);
                   }}
                   className={`flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform ${
-                    currentClip.autoCutout ? 'text-[#00E5CC]' : ''
+                    currentClip.autoCutout ? 'text-[#00CAE0]' : ''
                   }`}
                 >
                   <div className={`w-7 h-7 rounded-lg border flex items-center justify-center mb-0.5 ${
-                    currentClip.autoCutout ? 'bg-[#00E5CC]/20 border-[#00E5CC]' : 'bg-white/5 border-white/10'
+                    currentClip.autoCutout ? 'bg-[#00CAE0]/20 border-[#00CAE0]' : 'bg-white/5 border-white/10'
                   }`}>
                     <Wand2 className="w-4 h-4" />
                   </div>
@@ -2949,7 +2949,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   onClick={onOpenCropModal}
                   className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
                 >
-                  <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
+                  <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00CAE0]">
                     <Crop className="w-4 h-4" />
                   </div>
                   <span className="text-[9.5px] font-medium whitespace-nowrap">Cắt cúp</span>
@@ -2961,7 +2961,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   onClick={onFlipHorizontal}
                   className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
                 >
-                  <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
+                  <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00CAE0]">
                     <FlipHorizontal2 className="w-4 h-4" />
                   </div>
                   <span className="text-[9.5px] font-medium whitespace-nowrap">Lật</span>
@@ -2973,7 +2973,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   onClick={() => setActiveDrawer('filters')}
                   className="flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform"
                 >
-                  <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00E5CC]">
+                  <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center mb-0.5 text-[#00CAE0]">
                     <Filter className="w-4 h-4" />
                   </div>
                   <span className="text-[9.5px] font-medium whitespace-nowrap">Bộ lọc</span>
@@ -3027,7 +3027,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   }}
                   className={`flex flex-col items-center justify-center py-1 px-3 min-w-[58px] rounded-lg cursor-pointer transition-all active:scale-95 ${
                     isActive
-                      ? 'text-[#00E5CC] bg-[#00E5CC]/15 font-bold'
+                      ? 'text-[#00CAE0] bg-[#00CAE0]/15 font-bold'
                       : isLight
                       ? 'text-[#475569] hover:text-[#0F172A]'
                       : 'text-[#94A3B8] hover:text-white'
@@ -3073,13 +3073,13 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   onAddMedia('video');
                   setShowAddMediaModal(false);
                 }}
-                className="w-full p-3 rounded-2xl bg-[#00E5CC]/15 border border-[#00E5CC]/40 hover:bg-[#00E5CC]/25 flex items-center gap-3 active:scale-98 transition-all cursor-pointer text-left"
+                className="w-full p-3 rounded-2xl bg-[#00CAE0]/15 border border-[#00CAE0]/40 hover:bg-[#00CAE0]/25 flex items-center gap-3 active:scale-98 transition-all cursor-pointer text-left"
               >
-                <div className="w-10 h-10 rounded-xl bg-[#00E5CC] text-[#071013] flex items-center justify-center font-bold shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-[#00CAE0] text-[#071013] flex items-center justify-center font-bold shrink-0">
                   <Film className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
-                  <div className="font-bold text-xs text-[#00E5CC]">🎬 Thư viện Video</div>
+                  <div className="font-bold text-xs text-[#00CAE0]">🎬 Thư viện Video</div>
                   <div className="text-[10px] text-[#94A3B8] truncate">Mở video từ Thư viện điện thoại / Google Photos</div>
                 </div>
               </button>
@@ -3090,9 +3090,9 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   onAddMedia('image');
                   setShowAddMediaModal(false);
                 }}
-                className="w-full p-3 rounded-2xl bg-purple-500/15 border border-purple-500/30 hover:bg-purple-500/25 flex items-center gap-3 active:scale-98 transition-all cursor-pointer text-left"
+                className="w-full p-3 rounded-2xl bg-[#26272E] border border-[#343640] hover:bg-[#2F3038] flex items-center gap-3 active:scale-98 transition-all cursor-pointer text-left"
               >
-                <div className="w-10 h-10 rounded-xl bg-purple-500 text-white flex items-center justify-center font-bold shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-[#00CAE0] text-[#090D12] flex items-center justify-center font-bold shrink-0">
                   <ImageIcon className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
@@ -3172,7 +3172,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   onClick={() => setTransitionCategory(cat.id)}
                   className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
                     transitionCategory === cat.id
-                      ? 'bg-[#00E5CC] text-[#071013]'
+                      ? 'bg-[#00CAE0] text-[#071013]'
                       : isLight
                       ? 'bg-gray-100 text-[#475569]'
                       : 'bg-white/10 text-[#94A3B8]'
@@ -3200,7 +3200,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                       style={{ background: tr.swatch }}
                       className={`w-full aspect-square rounded-xl flex items-center justify-center text-lg shadow-sm border-2 transition-all ${
                         isSelected
-                          ? 'border-[#00E5CC] ring-4 ring-[#00E5CC]/40 scale-105'
+                          ? 'border-[#00CAE0] ring-4 ring-[#00CAE0]/40 scale-105'
                           : 'border-transparent'
                       }`}
                     >
@@ -3230,10 +3230,10 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     onUpdateClipProp('transitionDuration', val);
                   }
                 }}
-                className="flex-1 accent-[#00E5CC] h-1.5 cursor-pointer"
+                className="flex-1 accent-[#00CAE0] h-1.5 cursor-pointer"
               />
               <span className="text-[10px] font-mono text-[#94A3B8]">3.5s</span>
-              <span className="font-mono text-xs text-[#00E5CC] font-bold w-10 text-right">
+              <span className="font-mono text-xs text-[#00CAE0] font-bold w-10 text-right">
                 {transitionDuration.toFixed(1)}s
               </span>
             </div>
@@ -3246,7 +3246,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   const type = transitionClip?.transitionType || 'zoom_in';
                   onApplyTransitionToAll(type, transitionDuration);
                 }}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold text-[#00E5CC] bg-[#00E5CC]/15 active:scale-95 cursor-pointer"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold text-[#00CAE0] bg-[#00CAE0]/15 active:scale-95 cursor-pointer"
               >
                 <Layers className="w-3.5 h-3.5" />
                 <span>Tất cả</span>
@@ -3259,7 +3259,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
               <button
                 type="button"
                 onClick={() => setActiveDrawer(null)}
-                className="w-8 h-8 rounded-full bg-[#00E5CC] text-black flex items-center justify-center font-bold active:scale-95 shadow-sm cursor-pointer"
+                className="w-8 h-8 rounded-full bg-[#00CAE0] text-black flex items-center justify-center font-bold active:scale-95 shadow-sm cursor-pointer"
               >
                 <Check className="w-4 h-4 stroke-[3]" />
               </button>
@@ -3328,7 +3328,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   onClick={() => setStickerCategory(cat.id)}
                   className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
                     stickerCategory === cat.id
-                      ? 'bg-[#00E5CC] text-[#071013]'
+                      ? 'bg-[#00CAE0] text-[#071013]'
                       : isLight
                       ? 'bg-gray-100 text-[#475569]'
                       : 'bg-white/10 text-[#94A3B8]'
@@ -3370,8 +3370,8 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     }}
                     className={`aspect-square rounded-2xl border p-1.5 flex flex-col items-center justify-center text-center cursor-pointer active:scale-90 transition-transform shadow-xs ${
                       isLight
-                        ? 'bg-[#F8FAFC] border-[#E2E8F0] hover:border-[#00E5CC]'
-                        : 'bg-[#1E202B] border-[#2E3140] hover:border-[#00E5CC]'
+                        ? 'bg-[#F8FAFC] border-[#E2E8F0] hover:border-[#00CAE0]'
+                        : 'bg-[#1E202B] border-[#2E3140] hover:border-[#00CAE0]'
                     }`}
                   >
                     {flagUrl ? (
@@ -3418,7 +3418,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
             {/* Header */}
             <div className="flex items-center justify-between p-3 border-b border-inherit shrink-0">
               <div className="flex items-center gap-2 font-bold text-sm">
-                <Music className="w-4 h-4 text-[#00E5CC]" />
+                <Music className="w-4 h-4 text-[#00CAE0]" />
                 <span>{isEn ? 'Add Sound' : 'Thêm âm thanh'}</span>
               </div>
               <button
@@ -3438,7 +3438,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   onAddMedia('audio');
                   setActiveDrawer(null);
                 }}
-                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#0284C7] to-[#00E5CC] text-white font-bold text-xs shadow-md active:scale-98 transition-transform cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[#00CAE0] text-[#090D12] text-white font-bold text-xs shadow-md active:scale-98 transition-transform cursor-pointer"
               >
                 <FolderOpen className="w-4 h-4" />
                 <span>{isEn ? '📁 Pick Audio from Device / Google Drive' : '📁 Chọn tệp âm thanh từ thiết bị / Google Drive'}</span>
@@ -3469,7 +3469,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   }}
                   className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
                     audioCategory === cat.id
-                      ? 'bg-[#00E5CC] text-[#071013]'
+                      ? 'bg-[#00CAE0] text-[#071013]'
                       : isLight
                       ? 'bg-gray-100 text-[#475569]'
                       : 'bg-white/10 text-[#94A3B8]'
@@ -3491,8 +3491,8 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     key={sfx.id}
                     className={`flex items-center justify-between p-2.5 rounded-xl border shadow-xs transition-colors ${
                       isLight
-                        ? 'bg-[#F8FAFC] border-[#E2E8F0] hover:border-[#00E5CC]'
-                        : 'bg-[#1E202B] border-[#2E3140] hover:border-[#00E5CC]'
+                        ? 'bg-[#F8FAFC] border-[#E2E8F0] hover:border-[#00CAE0]'
+                        : 'bg-[#1E202B] border-[#2E3140] hover:border-[#00CAE0]'
                     }`}
                   >
                     {/* Play Preview Button */}
@@ -3508,7 +3508,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                             setTimeout(() => setActivePlayingAudioId(null), sfx.durationSec * 1000);
                           }
                         }}
-                        className="w-8 h-8 rounded-full bg-[#00E5CC] text-black flex items-center justify-center shrink-0 active:scale-90 transition-transform cursor-pointer"
+                        className="w-8 h-8 rounded-full bg-[#00CAE0] text-black flex items-center justify-center shrink-0 active:scale-90 transition-transform cursor-pointer"
                       >
                         {isPlayingThis ? (
                           <Pause className="w-3.5 h-3.5 fill-current" />
@@ -3540,7 +3540,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                         );
                         setActiveDrawer(null);
                       }}
-                      className="px-3 py-1 rounded-full bg-[#00E5CC] text-black font-bold text-xs active:scale-95 transition-transform cursor-pointer"
+                      className="px-3 py-1 rounded-full bg-[#00CAE0] text-black font-bold text-xs active:scale-95 transition-transform cursor-pointer"
                     >
                       Sử dụng
                     </button>
@@ -3567,7 +3567,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
             {/* Header */}
             <div className="flex items-center justify-between p-3 border-b border-inherit shrink-0">
               <div className="flex items-center gap-2 font-bold text-sm">
-                <Type className="w-4 h-4 text-[#00E5CC]" />
+                <Type className="w-4 h-4 text-[#00CAE0]" />
                 <span>{isEn ? 'Add Text & Subtitles' : 'Thêm văn bản & Phụ đề'}</span>
               </div>
               <button
@@ -3599,7 +3599,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   );
                   setActiveDrawer(null);
                 }}
-                className="w-full py-3 px-4 rounded-xl bg-[#00E5CC] text-black font-bold text-sm flex items-center justify-center gap-2 shadow-sm active:scale-98 transition-transform cursor-pointer"
+                className="w-full py-3 px-4 rounded-xl bg-[#00CAE0] text-black font-bold text-sm flex items-center justify-center gap-2 shadow-sm active:scale-98 transition-transform cursor-pointer"
               >
                 <Plus className="w-4 h-4 stroke-[3]" />
                 <span>{isEn ? 'Add Standard Text' : 'A+ Thêm chữ mặc định'}</span>
@@ -3614,7 +3614,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   {(
                     [
                       { title: '🔥 TikTok Viral Hook', bg: 'linear-gradient(135deg, #FF0055 0%, #7000FF 100%)', text: 'XEM ĐẾN CUỐI NHÉ 🔥' },
-                      { title: '⚡ Cyberpunk Neon', bg: 'linear-gradient(135deg, #00E5CC 0%, #0284C7 100%)', text: 'NEON CYBERPUNK 2077' },
+                      { title: '⚡ Cyberpunk Neon', bg: 'linear-gradient(135deg, #00CAE0 0%, #0284C7 100%)', text: 'NEON CYBERPUNK 2077' },
                       { title: '🎬 Điện ảnh Cinema', bg: 'linear-gradient(135deg, #F59E0B 0%, #EF4444 100%)', text: 'CINEMATIC TRAILER' },
                       { title: '📰 Tin tức Breaking', bg: 'linear-gradient(135deg, #DC2626 0%, #991B1B 100%)', text: 'BREAKING NEWS 24/7' },
                     ] as const
@@ -3685,13 +3685,13 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
               {/* Header */}
               <div className="flex items-center justify-between p-3.5 border-b border-inherit shrink-0">
                 <div className="flex items-center gap-2 font-bold text-sm">
-                  <Type className="w-4 h-4 text-[#00E5CC]" />
+                  <Type className="w-4 h-4 text-[#00CAE0]" />
                   <span>{isEn ? 'Edit Text Style & Content' : 'Chỉnh sửa Văn bản & Kiểu chữ'}</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setActiveDrawer(null)}
-                  className="px-3 py-1 rounded-full bg-[#00E5CC] text-black font-bold text-xs shadow-sm active:scale-95 cursor-pointer"
+                  className="px-3 py-1 rounded-full bg-[#00CAE0] text-black font-bold text-xs shadow-sm active:scale-95 cursor-pointer"
                 >
                   Xong
                 </button>
@@ -3712,7 +3712,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     onClick={() => setTextEditTab(tab.id as any)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                       textEditTab === tab.id
-                        ? 'bg-[#00E5CC] text-[#090D12] shadow-sm'
+                        ? 'bg-[#00CAE0] text-[#090D12] shadow-sm'
                         : isLight
                         ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                         : 'bg-white/5 text-[#94A3B8] hover:bg-white/10'
@@ -3734,7 +3734,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                       value={currentSubtitle}
                       onChange={(e) => onUpdateClipProp('subtitleText', e.target.value, targetTextClip.id)}
                       placeholder="Nhập chữ của bạn tại đây..."
-                      className={`w-full p-3 rounded-xl border text-sm font-semibold focus:outline-none focus:border-[#00E5CC] transition-colors resize-none ${
+                      className={`w-full p-3 rounded-xl border text-sm font-semibold focus:outline-none focus:border-[#00CAE0] transition-colors resize-none ${
                         isLight ? 'bg-gray-50 border-gray-300 text-black' : 'bg-[#1C1E2A] border-[#2E3140] text-white'
                       }`}
                     />
@@ -3745,7 +3745,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                           key={phrase}
                           type="button"
                           onClick={() => onUpdateClipProp('subtitleText', phrase, targetTextClip.id)}
-                          className="px-2.5 py-1 rounded-lg text-xs bg-white/5 hover:bg-white/10 border border-white/10 active:scale-95 cursor-pointer text-[#00E5CC]"
+                          className="px-2.5 py-1 rounded-lg text-xs bg-white/5 hover:bg-white/10 border border-white/10 active:scale-95 cursor-pointer text-[#00CAE0]"
                         >
                           {phrase}
                         </button>
@@ -3776,7 +3776,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                           style={{ fontFamily: f.id }}
                           className={`p-3 rounded-xl border text-left text-xs font-bold transition-all cursor-pointer ${
                             currentFontFamily === f.id
-                              ? 'border-[#00E5CC] bg-[#00E5CC]/20 text-[#00E5CC]'
+                              ? 'border-[#00CAE0] bg-[#00CAE0]/20 text-[#00CAE0]'
                               : isLight
                               ? 'border-gray-200 bg-gray-50 text-gray-800'
                               : 'border-white/10 bg-[#1E202B] text-white hover:bg-white/5'
@@ -3796,7 +3796,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     <div>
                       <div className="flex items-center justify-between text-xs font-bold mb-2">
                         <span className="text-[#94A3B8]">Kích thước phông chữ</span>
-                        <span className="font-mono text-[#00E5CC]">{currentFontSize}px</span>
+                        <span className="font-mono text-[#00CAE0]">{currentFontSize}px</span>
                       </div>
                       <input
                         type="range"
@@ -3805,7 +3805,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                         step={1}
                         value={currentFontSize}
                         onChange={(e) => onUpdateClipProp('fontSize', Number(e.target.value), targetTextClip.id)}
-                        className="w-full accent-[#00E5CC] cursor-pointer"
+                        className="w-full accent-[#00CAE0] cursor-pointer"
                       />
                     </div>
 
@@ -3813,7 +3813,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                       <label className="text-xs font-bold text-[#94A3B8] block mb-2">Màu sắc chữ</label>
                       <div className="grid grid-cols-6 gap-2">
                         {[
-                          '#FFFFFF', '#000000', '#00E5CC', '#FACC15',
+                          '#FFFFFF', '#000000', '#00CAE0', '#FACC15',
                           '#F43F5E', '#38BDF8', '#A855F7', '#4ADE80',
                           '#FB923C', '#E2E8F0', '#EC4899', '#10B981',
                         ].map((hex) => (
@@ -3824,7 +3824,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                             style={{ backgroundColor: hex }}
                             className={`w-full aspect-square rounded-xl border-2 transition-transform active:scale-90 cursor-pointer shadow-xs ${
                               currentTextColor.toLowerCase() === hex.toLowerCase()
-                                ? 'border-[#00E5CC] scale-110 ring-2 ring-[#00E5CC]/60'
+                                ? 'border-[#00CAE0] scale-110 ring-2 ring-[#00CAE0]/60'
                                 : 'border-white/20'
                             }`}
                           />
@@ -3855,7 +3855,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                             onClick={() => onUpdateClipProp('textStrokeColor', sw.color, targetTextClip.id)}
                             className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                               currentStrokeColor === sw.color
-                                ? 'border-[#00E5CC] bg-[#00E5CC]/20 text-[#00E5CC]'
+                                ? 'border-[#00CAE0] bg-[#00CAE0]/20 text-[#00CAE0]'
                                 : 'border-white/10 bg-white/5'
                             }`}
                           >
@@ -3868,7 +3868,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     <div>
                       <div className="flex items-center justify-between text-xs font-bold mb-2">
                         <span className="text-[#94A3B8]">Độ dày viền chữ</span>
-                        <span className="font-mono text-[#00E5CC]">{currentStrokeWidth}px</span>
+                        <span className="font-mono text-[#00CAE0]">{currentStrokeWidth}px</span>
                       </div>
                       <input
                         type="range"
@@ -3877,7 +3877,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                         step={1}
                         value={currentStrokeWidth}
                         onChange={(e) => onUpdateClipProp('textStrokeWidth', Number(e.target.value), targetTextClip.id)}
-                        className="w-full accent-[#00E5CC] cursor-pointer"
+                        className="w-full accent-[#00CAE0] cursor-pointer"
                       />
                     </div>
 
@@ -3898,7 +3898,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                             onClick={() => onUpdateClipProp('textBgColor', bgItem.bg, targetTextClip.id)}
                             className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                               currentBgColor === bgItem.bg
-                                ? 'border-[#00E5CC] bg-[#00E5CC]/20 text-[#00E5CC]'
+                                ? 'border-[#00CAE0] bg-[#00CAE0]/20 text-[#00CAE0]'
                                 : 'border-white/10 bg-white/5'
                             }`}
                           >
@@ -3918,7 +3918,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                         type="button"
                         onClick={() => onUpdateClipProp('textBold', !isBold, targetTextClip.id)}
                         className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 font-bold text-xs cursor-pointer ${
-                          isBold ? 'border-[#00E5CC] bg-[#00E5CC]/20 text-[#00E5CC]' : 'border-white/10 bg-white/5'
+                          isBold ? 'border-[#00CAE0] bg-[#00CAE0]/20 text-[#00CAE0]' : 'border-white/10 bg-white/5'
                         }`}
                       >
                         <Bold className="w-5 h-5 stroke-[3]" />
@@ -3929,7 +3929,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                         type="button"
                         onClick={() => onUpdateClipProp('textItalic', !isItalic, targetTextClip.id)}
                         className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 font-bold text-xs cursor-pointer ${
-                          isItalic ? 'border-[#00E5CC] bg-[#00E5CC]/20 text-[#00E5CC]' : 'border-white/10 bg-white/5'
+                          isItalic ? 'border-[#00CAE0] bg-[#00CAE0]/20 text-[#00CAE0]' : 'border-white/10 bg-white/5'
                         }`}
                       >
                         <Italic className="w-5 h-5 stroke-[2.5]" />
@@ -3940,7 +3940,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                         type="button"
                         onClick={() => onUpdateClipProp('textShadow', !hasShadow, targetTextClip.id)}
                         className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 font-bold text-xs cursor-pointer ${
-                          hasShadow ? 'border-[#00E5CC] bg-[#00E5CC]/20 text-[#00E5CC]' : 'border-white/10 bg-white/5'
+                          hasShadow ? 'border-[#00CAE0] bg-[#00CAE0]/20 text-[#00CAE0]' : 'border-white/10 bg-white/5'
                         }`}
                       >
                         <Sparkles className="w-5 h-5" />
@@ -3951,7 +3951,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     <div>
                       <div className="flex items-center justify-between text-xs font-bold mb-2">
                         <span className="text-[#94A3B8]">Độ cong chữ (Text Curve)</span>
-                        <span className="font-mono text-[#00E5CC]">{currentCurve}°</span>
+                        <span className="font-mono text-[#00CAE0]">{currentCurve}°</span>
                       </div>
                       <input
                         type="range"
@@ -3960,7 +3960,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                         step={5}
                         value={currentCurve}
                         onChange={(e) => onUpdateClipProp('textCurveDeg', Number(e.target.value), targetTextClip.id)}
-                        className="w-full accent-[#00E5CC] cursor-pointer"
+                        className="w-full accent-[#00CAE0] cursor-pointer"
                       />
                     </div>
                   </div>
@@ -4014,7 +4014,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   }}
                   className={`p-2.5 rounded-xl border flex flex-col items-center justify-center cursor-pointer active:scale-95 transition-transform ${
                     aspectRatio === r.id
-                      ? 'border-[#00E5CC] bg-[#00E5CC]/15 text-[#00E5CC] font-bold'
+                      ? 'border-[#00CAE0] bg-[#00CAE0]/15 text-[#00CAE0] font-bold'
                       : isLight
                       ? 'bg-gray-100 border-gray-200 text-[#0F172A]'
                       : 'bg-white/5 border-white/10 text-white'
@@ -4050,7 +4050,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
             <div className="py-4 space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-[#94A3B8]">Tốc độ hiện tại:</span>
-                <span className="font-mono text-sm font-bold text-[#00E5CC]">
+                <span className="font-mono text-sm font-bold text-[#00CAE0]">
                   {(currentClip.speed || 1.0).toFixed(1)}x
                 </span>
               </div>
@@ -4061,7 +4061,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                 step={0.1}
                 value={currentClip.speed || 1.0}
                 onChange={(e) => onUpdateClipProp('speed', Number(e.target.value))}
-                className="w-full accent-[#00E5CC] h-2 cursor-pointer"
+                className="w-full accent-[#00CAE0] h-2 cursor-pointer"
               />
               <div className="grid grid-cols-6 gap-1.5 pt-1">
                 {[0.2, 0.5, 1.0, 1.5, 2.0, 5.0].map((s) => (
@@ -4071,7 +4071,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                     onClick={() => onUpdateClipProp('speed', s)}
                     className={`py-1.5 rounded-lg text-xs font-mono font-semibold border cursor-pointer ${
                       currentClip.speed === s
-                        ? 'bg-[#00E5CC] text-black border-[#00E5CC]'
+                        ? 'bg-[#00CAE0] text-black border-[#00CAE0]'
                         : isLight
                         ? 'bg-gray-100 text-[#0F172A]'
                         : 'bg-white/10 text-white'
@@ -4107,7 +4107,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
             <div className="py-4 space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-[#94A3B8]">Âm lượng:</span>
-                <span className="font-mono text-sm font-bold text-[#00E5CC]">
+                <span className="font-mono text-sm font-bold text-[#00CAE0]">
                   {currentClip.volume ?? 100}%
                 </span>
               </div>
@@ -4118,7 +4118,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                 step={5}
                 value={currentClip.volume ?? 100}
                 onChange={(e) => onUpdateClipProp('volume', Number(e.target.value))}
-                className="w-full accent-[#00E5CC] h-2 cursor-pointer"
+                className="w-full accent-[#00CAE0] h-2 cursor-pointer"
               />
               <div className="flex items-center justify-between gap-3 pt-2">
                 <button
@@ -4141,7 +4141,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   type="button"
                   onClick={() => onUpdateClipProp('volume', 200)}
                   className={`flex-1 py-2 rounded-xl font-bold text-xs cursor-pointer ${
-                    isLight ? 'bg-[#00E5CC]/25 text-[#0F766E]' : 'bg-[#00E5CC]/20 text-[#00E5CC]'
+                    isLight ? 'bg-[#00CAE0]/25 text-[#0F766E]' : 'bg-[#00CAE0]/20 text-[#00CAE0]'
                   }`}
                 >
                   Tăng cực đại (200%)
@@ -4243,7 +4243,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                       ].forEach((k) => onUpdateClipProp(k, 0, target.id));
                     }
                   }}
-                  className="text-xs text-[#00E5CC] hover:underline font-medium cursor-pointer"
+                  className="text-xs text-[#00CAE0] hover:underline font-medium cursor-pointer"
                 >
                   Đặt lại về 0
                 </button>
@@ -4276,7 +4276,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   <div key={adj.key} className="space-y-1">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-[#94A3B8]">{adj.label}</span>
-                      <span className="font-mono text-[#00E5CC] font-bold">
+                      <span className="font-mono text-[#00CAE0] font-bold">
                         {currentVal}
                       </span>
                     </div>
@@ -4292,7 +4292,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                         }
                         onUpdateClipProp(adj.key, Number(e.target.value), targetId);
                       }}
-                      className="w-full accent-[#00E5CC] h-1.5 cursor-pointer"
+                      className="w-full accent-[#00CAE0] h-1.5 cursor-pointer"
                     />
                   </div>
                 );

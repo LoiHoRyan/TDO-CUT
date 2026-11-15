@@ -1292,14 +1292,14 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               }
               className={`flex items-center gap-0.5 p-1 rounded transition-colors cursor-pointer ${
                 toolMode === 'razor'
-                  ? 'bg-[#00E5CC]/20 text-[#00E5CC]'
+                  ? 'bg-[#00CAE0]/20 text-[#00CAE0]'
                   : tbBtnClass
               }`}
             >
               {toolMode === 'select' ? (
-                <MousePointer className="w-4 h-4 text-[#00E5CC]" />
+                <MousePointer className="w-4 h-4 text-[#00CAE0]" />
               ) : (
-                <Scissors className="w-4 h-4 text-[#00E5CC]" />
+                <Scissors className="w-4 h-4 text-[#00CAE0]" />
               )}
               <ChevronDown className="w-2.5 h-2.5 text-[#9CA3AF]" />
             </button>
@@ -1320,7 +1320,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   }}
                   className={`w-full flex items-center gap-2 px-3 py-1.5 cursor-pointer text-left ${
                     toolMode === 'select'
-                      ? 'text-[#00E5CC] font-semibold bg-[#00E5CC]/10'
+                      ? 'text-[#00CAE0] font-semibold bg-[#00CAE0]/10'
                       : isLight
                       ? 'hover:bg-[#F1F5F9]'
                       : 'hover:bg-[#252832]'
@@ -1337,7 +1337,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   }}
                   className={`w-full flex items-center gap-2 px-3 py-1.5 cursor-pointer text-left ${
                     toolMode === 'razor'
-                      ? 'text-[#00E5CC] font-semibold bg-[#00E5CC]/10'
+                      ? 'text-[#00CAE0] font-semibold bg-[#00CAE0]/10'
                       : isLight
                       ? 'hover:bg-[#F1F5F9]'
                       : 'hover:bg-[#252832]'
@@ -1498,7 +1498,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               <path d="M17 5h2v14h-2" />
               <path d="M12 7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z" />
               <path d="M8 17c0-2 2-3 4-3s4 1 4 3" />
-              <path d="M18 3l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z" fill="#00E5CC" stroke="none" />
+              <path d="M18 3l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2z" fill="#00CAE0" stroke="none" />
             </svg>
           </button>
 
@@ -1511,7 +1511,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M16 3l5 5-9 9H7v-5L16 3z" />
               <path d="M4 20l2-2" />
-              <path d="M4 6l1 1.5L6.5 8 5 8.5 4 10 3.5 8.5 2 8l1.5-.5L4 6z" fill="#00E5CC" stroke="none" />
+              <path d="M4 6l1 1.5L6.5 8 5 8.5 4 10 3.5 8.5 2 8l1.5-.5L4 6z" fill="#00CAE0" stroke="none" />
             </svg>
           </button>
 
@@ -1536,7 +1536,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="10" cy="8" r="3.5" />
               <path d="M3 19c0-3 3-5 7-5s7 2 7 5" />
-              <path d="M19 6l.8 1.6 1.7.8-1.7.8-.8 1.6-.8-1.6-1.7-.8 1.7-.8.8-1.6z" fill="#00E5CC" stroke="none" />
+              <path d="M19 6l.8 1.6 1.7.8-1.7.8-.8 1.6-.8-1.6-1.7-.8 1.7-.8.8-1.6z" fill="#00CAE0" stroke="none" />
             </svg>
           </button>
 
@@ -1591,7 +1591,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               title={language === 'en' ? 'More AI & Smart Editing Tools' : 'Xem toàn bộ công cụ AI & Tiện ích'}
               className={`p-1.5 rounded transition-colors cursor-pointer ${
                 isSmartToolsOpen
-                  ? 'bg-[#00E5CC]/20 text-[#00E5CC]'
+                  ? 'bg-[#00CAE0]/20 text-[#00CAE0]'
                   : tbSubBtnClass
               }`}
             >
@@ -1618,7 +1618,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                       isLight ? 'hover:bg-[#F1F5F9]' : 'hover:bg-[#222530]'
                     }`}
                   >
-                    <Film className="w-4 h-4 text-[#00E5CC] shrink-0" />
+                    <Film className="w-4 h-4 text-[#00CAE0] shrink-0" />
                     <div>
                       <div className={`font-semibold ${isLight ? 'text-[#0F172A]' : 'text-white'}`}>{language === 'en' ? 'Auto Scene Cut' : 'Tách cảnh tự động AI'}</div>
                       <div className={`text-[10px] ${isLight ? 'text-[#64748B]' : 'text-[#9CA3AF]'}`}>{language === 'en' ? 'Detects transitions and cuts video' : 'Tự động phát hiện chuyển cảnh và cắt clip'}</div>
@@ -1754,7 +1754,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               title={language === 'en' ? 'Set In Point (Shortcut: I)' : 'Đặt điểm vào In (Phím I)'}
               className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold cursor-pointer transition-colors ${
                 markInSec !== null
-                  ? 'bg-[#00E5CC]/25 text-[#00E5CC] border border-[#00E5CC]/40'
+                  ? 'bg-[#00CAE0]/25 text-[#00CAE0] border border-[#00CAE0]/40'
                   : isLight
                   ? 'text-[#64748B] hover:text-[#0F172A]'
                   : 'text-[#9CA3AF] hover:text-white'
@@ -1785,7 +1785,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   title={language === 'en' ? 'Loop playback between In/Out' : 'Phát lặp trong vùng [In-Out]'}
                   className={`px-1.5 py-0.5 rounded text-[10px] font-semibold cursor-pointer ${
                     loopRangeEnabled
-                      ? 'bg-[#00E5CC] text-black font-bold'
+                      ? 'bg-[#00CAE0] text-black font-bold'
                       : isLight
                       ? 'text-[#475569] hover:text-[#0F172A] hover:bg-[#E2E8F0]'
                       : 'text-[#D4D4D8] hover:text-white hover:bg-[#252830]'
@@ -1819,7 +1819,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
         {/* Right Timeline Controls (Multi-select status, Mic, Magnet P, Snap N, Link, Pre-render, dB Meter, Zoom) */}
         <div className="flex items-center gap-1.5 shrink-0">
           {effectiveSelectedIds.length > 1 && (
-            <span className="px-2 py-0.5 rounded bg-[#00E5CC]/15 border border-[#00E5CC]/30 text-[10px] font-semibold text-[#00E5CC]">
+            <span className="px-2 py-0.5 rounded bg-[#00CAE0]/15 border border-[#00CAE0]/30 text-[10px] font-semibold text-[#00CAE0]">
               {language === 'en' ? `${effectiveSelectedIds.length} clips selected` : `Đã chọn ${effectiveSelectedIds.length} clip`}
             </span>
           )}
@@ -1842,7 +1842,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             title={language === 'en' ? 'Main track magnet (Ripple Auto-snap - P)' : 'Nam châm trục chính (Tự động khít cảnh - Phím P)'}
             className={`px-1.5 py-1 rounded border text-[11px] font-mono flex items-center gap-1 transition-all cursor-pointer ${
               snapEnabled
-                ? 'text-[#00E5CC] bg-[#00E5CC]/15 border-[#00E5CC]/40 shadow-xs'
+                ? 'text-[#00CAE0] bg-[#00CAE0]/15 border-[#00CAE0]/40 shadow-xs'
                 : isLight
                 ? 'text-[#475569] bg-[#F1F5F9] border-[#CBD5E1] hover:text-[#0F172A]'
                 : 'text-[#9CA3AF] bg-[#1C1D22] border-[#2A2C34] hover:text-white hover:border-[#383C48]'
@@ -1858,7 +1858,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             title={language === 'en' ? 'Auto-snapping clip edges (N)' : 'Tự động bắt dính mép clip (Phím N)'}
             className={`px-2 py-0.5 rounded border text-[11px] font-mono font-bold transition-all cursor-pointer ${
               autoSnapEdge
-                ? 'text-[#00E5CC] bg-[#00E5CC]/15 border-[#00E5CC]/40 shadow-xs'
+                ? 'text-[#00CAE0] bg-[#00CAE0]/15 border-[#00CAE0]/40 shadow-xs'
                 : isLight
                 ? 'text-[#475569] bg-[#F1F5F9] border-[#CBD5E1] hover:text-[#0F172A]'
                 : 'text-[#9CA3AF] bg-[#1C1D22] border-[#2A2C34] hover:text-white hover:border-[#383C48]'
@@ -1874,7 +1874,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             title={audioLinked ? (language === 'en' ? 'Linked Selection (Ctrl+G)' : 'Đang liên kết Video & Audio') : (language === 'en' ? 'Unlinked Selection' : 'Đã tháo liên kết')}
             className={`p-1.5 rounded border transition-all cursor-pointer ${
               audioLinked
-                ? 'text-[#00E5CC] bg-[#00E5CC]/15 border-[#00E5CC]/40'
+                ? 'text-[#00CAE0] bg-[#00CAE0]/15 border-[#00CAE0]/40'
                 : isLight
                 ? 'text-[#475569] bg-[#F1F5F9] border-[#CBD5E1] hover:text-[#0F172A]'
                 : 'text-[#9CA3AF] bg-[#1C1D22] border-[#2A2C34] hover:text-white'
@@ -1894,11 +1894,11 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
           >
             <div
               style={{ height: isPlaying ? `${40 + ((Math.round(playheadSec * 29)) % 55)}%` : '20%' }}
-              className="w-1 bg-gradient-to-t from-emerald-400 via-amber-400 to-rose-500 rounded-xs transition-all"
+              className="w-1 bg-[#00CAE0] rounded-xs transition-all"
             />
             <div
               style={{ height: isPlaying ? `${30 + ((Math.round(playheadSec * 37)) % 60)}%` : '15%' }}
-              className="w-1 bg-gradient-to-t from-emerald-400 via-amber-400 to-rose-500 rounded-xs transition-all"
+              className="w-1 bg-[#00CAE0] rounded-xs transition-all"
             />
           </div>
 
@@ -1932,7 +1932,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               }}
               title={`Thu phóng Timeline (${Math.round(pixelsPerSecond)} px/s)`}
               aria-label="Thanh phóng to thu nhỏ Timeline"
-              className="w-24 sm:w-32 accent-[#00E5CC] cursor-pointer h-1.5"
+              className="w-24 sm:w-32 accent-[#00CAE0] cursor-pointer h-1.5"
             />
             <button
               type="button"
@@ -1957,7 +1957,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               className={`px-1.5 py-0.5 text-[9.5px] font-mono font-semibold rounded cursor-pointer transition-colors ${
                 isLight
                   ? 'text-[#475569] hover:text-[#00C7B7] hover:bg-[#E2E8F0]'
-                  : 'text-[#9CA3AF] hover:text-[#00E5CC] hover:bg-[#252830]'
+                  : 'text-[#9CA3AF] hover:text-[#00CAE0] hover:bg-[#252830]'
               }`}
             >
               Fit
@@ -2064,9 +2064,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                       ) * pixelsPerSecond
                     }px`,
                   }}
-                  className="absolute top-0 bottom-0 bg-[#00E5CC]/20 border-x-2 border-[#00E5CC] pointer-events-none z-20 flex items-center justify-between px-1"
+                  className="absolute top-0 bottom-0 bg-[#00CAE0]/20 border-x-2 border-[#00CAE0] pointer-events-none z-20 flex items-center justify-between px-1"
                 >
-                  <span className="text-[9px] font-mono font-bold text-[#00E5CC]">IN</span>
+                  <span className="text-[9px] font-mono font-bold text-[#00CAE0]">IN</span>
                   <span className="text-[9px] font-mono font-bold text-[#F59E0B]">OUT</span>
                 </div>
               )}
@@ -2111,7 +2111,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   onDrop={(e) => handleDropOnTrack(e, tIdx)}
                   className={`relative flex items-center transition-all duration-150 ${
                     isDropTarget
-                      ? 'bg-[#00E5CC]/10 ring-1 ring-[#00E5CC]/60'
+                      ? 'bg-[#00CAE0]/10 ring-1 ring-[#00CAE0]/60'
                       : isMainVideo
                       ? isLight
                         ? 'bg-[#FFFFFF] border-b border-[#E2E8F0]'
@@ -2150,7 +2150,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                         className="hover:text-white cursor-pointer p-0.5"
                       >
                         {isLocked ? (
-                          <Lock className="w-2.5 h-2.5 text-[#00E5CC]" />
+                          <Lock className="w-2.5 h-2.5 text-[#00CAE0]" />
                         ) : (
                           <Unlock className="w-2.5 h-2.5" />
                         )}
@@ -2196,7 +2196,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                             disabled={rowPosition === 0}
                             onClick={() => onMoveTrackOrder(tIdx, 'up')}
                             title="Di chuyển tầng Timeline này lên trên"
-                            className="hover:text-[#00E5CC] disabled:opacity-25 cursor-pointer"
+                            className="hover:text-[#00CAE0] disabled:opacity-25 cursor-pointer"
                           >
                             <ChevronUp className="w-2.5 h-2.5" />
                           </button>
@@ -2205,7 +2205,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                             disabled={rowPosition === visibleTracks.length - 1}
                             onClick={() => onMoveTrackOrder(tIdx, 'down')}
                             title="Di chuyển tầng Timeline này xuống dưới"
-                            className="hover:text-[#00E5CC] disabled:opacity-25 cursor-pointer"
+                            className="hover:text-[#00CAE0] disabled:opacity-25 cursor-pointer"
                           >
                             <ChevronDown className="w-2.5 h-2.5" />
                           </button>
@@ -2292,9 +2292,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                     {isMainVideo && trackClips.length === 0 && (
                       <div
                         data-testid="base-timeline-origin-slot"
-                        className="absolute inset-y-1.5 left-0 w-[440px] max-w-[90%] rounded border border-dashed border-[#00E5CC]/45 bg-[#00E5CC]/[0.05] flex items-center gap-2.5 px-3 pointer-events-none select-none"
+                        className="absolute inset-y-1.5 left-0 w-[440px] max-w-[90%] rounded border border-dashed border-[#00CAE0]/45 bg-[#00CAE0]/[0.05] flex items-center gap-2.5 px-3 pointer-events-none select-none"
                       >
-                        <span className="px-1.5 py-0.5 rounded bg-[#00E5CC]/20 border border-[#00E5CC]/50 font-mono text-[10px] font-bold text-[#00E5CC] shrink-0">
+                        <span className="px-1.5 py-0.5 rounded bg-[#00CAE0]/20 border border-[#00CAE0]/50 font-mono text-[10px] font-bold text-[#00CAE0] shrink-0">
                           Mốc gốc 00:00
                         </span>
                         <span className="text-[11px] text-[#A1A1AA] truncate">
@@ -2356,13 +2356,13 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                         const bgClass = clip.stickerEmoji
                           ? 'bg-[#6D28D9]'
                           : isFxClip
-                          ? 'bg-[#4F46E5]'
+                          ? 'bg-[#463F6E]'
                           : isFilterClip
-                          ? 'bg-[#0E7490]'
+                          ? 'bg-[#2B5B6C]'
                           : isTextOrSub
-                          ? 'bg-[#B06553]'
+                          ? 'bg-[#7A483B]'
                           : isAudio
-                          ? 'bg-[#145369]'
+                          ? 'bg-[#1E4D5C]'
                           : 'bg-[#136F72]';
 
                         return (
@@ -2387,7 +2387,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                                 : 'cursor-grab active:cursor-grabbing'
                             } ${bgClass} ${isHidden || isMuted || clip.disabled ? 'opacity-35 grayscale' : ''} ${
                               isSelected
-                                ? 'border-2 border-white shadow-[0_0_12px_rgba(0,229,204,0.55)] brightness-125 z-30 after:absolute after:inset-0 after:bg-white/10 after:pointer-events-none'
+                                ? 'border-2 border-white shadow-sm brightness-125 z-30 after:absolute after:inset-0 after:bg-white/10 after:pointer-events-none'
                                 : 'border border-[#1E3A40] opacity-90 hover:brightness-110'
                             }`}
                           >
@@ -2430,7 +2430,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                                     className={`w-[1.5px] shrink-0 rounded-t-[0.5px] ${
                                       clip.muted || isMuted || (clip.volume ?? 100) === 0
                                         ? 'bg-[#64748B]/45'
-                                        : 'bg-[#00E5CC]/90'
+                                        : 'bg-[#00CAE0]/90'
                                     }`}
                                   />
                                 ))}
@@ -2447,7 +2447,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                                     ? { paddingLeft: `${wfStartIdx * 3 + 4}px` }
                                     : undefined
                                 }
-                                className="absolute inset-x-0 bottom-0 h-2.5 bg-[#062328]/85 border-t border-[#00E5CC]/30 px-1 flex items-end justify-start gap-[1.5px] pointer-events-none overflow-hidden z-[5]"
+                                className="absolute inset-x-0 bottom-0 h-2.5 bg-[#062328]/85 border-t border-[#00CAE0]/30 px-1 flex items-end justify-start gap-[1.5px] pointer-events-none overflow-hidden z-[5]"
                               >
                                 {computeClipWaveformBars(
                                   clip,
@@ -2460,7 +2460,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                                     key={wfStartIdx + bIdx}
                                     data-waveform-bar="true"
                                     style={{ height: `${Math.max(8, Math.round(amp * 100))}%` }}
-                                    className="w-[1.5px] shrink-0 rounded-t-[0.5px] bg-[#00E5CC]/85"
+                                    className="w-[1.5px] shrink-0 rounded-t-[0.5px] bg-[#00CAE0]/85"
                                   />
                                 ))}
                               </div>
@@ -2599,7 +2599,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                               : 'cursor-grab active:cursor-grabbing'
                           } ${isHidden || clip.disabled ? 'opacity-35 grayscale' : ''} ${
                             isSelected
-                              ? 'border-2 border-white shadow-[0_0_12px_rgba(0,229,204,0.55)] brightness-125 z-30 after:absolute after:inset-0 after:bg-white/10 after:pointer-events-none'
+                              ? 'border-2 border-white shadow-sm brightness-125 z-30 after:absolute after:inset-0 after:bg-white/10 after:pointer-events-none'
                               : 'border border-[#1E3A40] opacity-90'
                           }`}
                         >
@@ -2607,7 +2607,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                           <div
                             className={`flex items-center px-1.5 h-3.5 text-[9.5px] truncate leading-none shrink-0 ${
                               isSelected
-                                ? 'bg-[#00E5CC] text-[#090D12] font-bold'
+                                ? 'bg-[#00CAE0] text-[#090D12] font-bold'
                                 : 'bg-[#126E72] text-[#E2F8F5] font-medium'
                             }`}
                           >
@@ -2639,7 +2639,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                               {clip.transitionType && clip.transitionType !== 'none' && (
                                 <span
                                   title={`Chuyển tiếp: ${clip.transitionType} (${clip.transitionDuration ?? 0.6}s)`}
-                                  className="px-1 py-0.2 bg-[#00E5CC] text-[#071013] font-extrabold text-[8px] rounded-xs leading-tight shadow"
+                                  className="px-1 py-0.2 bg-[#00CAE0] text-[#071013] font-extrabold text-[8px] rounded-xs leading-tight shadow"
                                 >
                                   ⋈ {clip.transitionType}
                                 </span>
@@ -2687,7 +2687,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                                 <span
                                   key={kf.id}
                                   style={{ left: `${kf.timeOffset * pixelsPerSecond}px` }}
-                                  className="absolute bottom-0.5 -translate-x-1/2 w-2 h-2 rotate-45 bg-[#00E5CC] border border-black"
+                                  className="absolute bottom-0.5 -translate-x-1/2 w-2 h-2 rotate-45 bg-[#00CAE0] border border-black"
                                 />
                               ))}
                           </div>
@@ -2717,14 +2717,14 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                                 className={`w-[1.5px] shrink-0 rounded-t-[0.5px] ${
                                   clip.muted || isMuted || (clip.volume ?? 100) === 0
                                     ? 'bg-[#64748B]/45'
-                                    : 'bg-[#00E5CC]/90'
+                                    : 'bg-[#00CAE0]/90'
                                 }`}
                               />
                             ))}
                             {orderIdx === 0 && (
                               <span
                                 title="Audio Linked (∞)"
-                                className="px-0.5 bg-[#0A1318]/90 text-[7px] text-[#00E5CC] font-mono rounded-xs leading-none ml-0.5 relative z-10 shrink-0 self-center"
+                                className="px-0.5 bg-[#0A1318]/90 text-[7px] text-[#00CAE0] font-mono rounded-xs leading-none ml-0.5 relative z-10 shrink-0 self-center"
                               >
                                 ∞
                               </span>
@@ -2749,7 +2749,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                                 className={`absolute left-0 top-0 bottom-0 cursor-ew-resize z-20 flex items-center justify-center ${
                                   isSelected
                                     ? 'w-2 bg-white text-black font-bold text-[9px]'
-                                    : 'w-1 hover:bg-[#00E5CC]'
+                                    : 'w-1 hover:bg-[#00CAE0]'
                                 }`}
                               >
                                 {isSelected && '⋮'}
@@ -2769,7 +2769,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                                 className={`absolute right-0 top-0 bottom-0 cursor-ew-resize z-20 flex items-center justify-center ${
                                   isSelected
                                     ? 'w-2 bg-white text-black font-bold text-[9px]'
-                                    : 'w-1 hover:bg-[#00E5CC]'
+                                    : 'w-1 hover:bg-[#00CAE0]'
                                 }`}
                               >
                                 {isSelected && '⋮'}
@@ -2812,7 +2812,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                                 left: `${gapLeftPx}px`,
                                 width: `${gapWidthPx}px`,
                               }}
-                              className="absolute top-1.5 bottom-1.5 z-25 rounded-xs border border-dashed border-[#00E5CC]/45 bg-[#00E5CC]/[0.06] hover:bg-[#00E5CC]/20 text-[#00E5CC] flex items-center justify-center text-[9px] font-mono cursor-pointer transition-colors overflow-hidden"
+                              className="absolute top-1.5 bottom-1.5 z-25 rounded-xs border border-dashed border-[#00CAE0]/45 bg-[#00CAE0]/[0.06] hover:bg-[#00CAE0]/20 text-[#00CAE0] flex items-center justify-center text-[9px] font-mono cursor-pointer transition-colors overflow-hidden"
                             >
                               <span className="truncate px-1">⇄ {gapSec.toFixed(1)}s</span>
                             </button>
@@ -2935,10 +2935,10 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                               style={{ left: `${seamLeftPx}px` }}
                               className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 z-35 w-6 h-6 rounded flex items-center justify-center text-[11px] font-black shadow-md cursor-pointer transition-all before:absolute before:-inset-2 before:content-[''] ${
                                 isDragOverSeam
-                                  ? 'scale-125 bg-[#00E5CC] text-[#071013] border-2 border-white shadow-[0_0_16px_rgba(0,229,204,1)] ring-2 ring-[#00E5CC]'
+                                  ? 'scale-125 bg-[#00CAE0] text-[#071013] border-2 border-white shadow-sm ring-2 ring-[#00CAE0]'
                                   : hasTr
-                                  ? 'bg-[#00E5CC] text-[#071013] border border-white shadow-[0_0_8px_rgba(0,229,204,0.8)] hover:scale-115'
-                                  : 'bg-[#181B24]/95 hover:bg-[#00E5CC] text-[#E4E4E7] hover:text-[#071013] border border-white/35 hover:scale-115'
+                                  ? 'bg-[#00CAE0] text-[#071013] border border-white shadow-sm hover:scale-115'
+                                  : 'bg-[#181B24]/95 hover:bg-[#00CAE0] text-[#E4E4E7] hover:text-[#071013] border border-white/35 hover:scale-115'
                               }`}
                             >
                               ⋈
@@ -2962,7 +2962,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                 width: `${Math.max(2, Math.abs(marqueeBox.currX - marqueeBox.startX))}px`,
                 height: `${Math.max(2, Math.abs(marqueeBox.currY - marqueeBox.startY))}px`,
               }}
-              className="absolute z-40 pointer-events-none border border-[#00E5CC] bg-[#00E5CC]/15 rounded-xs shadow-[0_0_8px_rgba(0,229,204,0.35)]"
+              className="absolute z-40 pointer-events-none border border-[#00CAE0] bg-[#00CAE0]/15 rounded-xs shadow-sm"
             />
           )}
 
@@ -2973,7 +2973,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               style={{
                 left: `${TRACK_HEADER_WIDTH + snapGuideTimeSec * pixelsPerSecond}px`,
               }}
-              className="absolute top-0 bottom-0 z-40 w-[1.5px] bg-[#00E5CC] shadow-[0_0_10px_#00E5CC] pointer-events-none"
+              className="absolute top-0 bottom-0 z-40 w-[1.5px] bg-[#00CAE0] shadow-sm pointer-events-none"
             />
           )}
 
@@ -3075,7 +3075,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   <span
                     key={bIdx}
                     style={{ height: `${Math.max(8, Math.round(amp * 100))}%` }}
-                    className="w-[1.5px] shrink-0 rounded-t-[0.5px] bg-[#00E5CC]/90"
+                    className="w-[1.5px] shrink-0 rounded-t-[0.5px] bg-[#00CAE0]/90"
                   />
                 ))}
               </div>
@@ -3224,7 +3224,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               setShowEditPilotPopover(true);
               setContextMenu(null);
             }}
-            className="w-full px-3 py-1.5 text-left hover:bg-[#2B2F3E] flex items-center justify-between font-medium text-[#00E5CC] cursor-pointer"
+            className="w-full px-3 py-1.5 text-left hover:bg-[#2B2F3E] flex items-center justify-between font-medium text-[#00CAE0] cursor-pointer"
           >
             <span>{language === 'en' ? 'Functions' : 'Chức năng'}</span>
           </button>
@@ -3377,7 +3377,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             className="w-full px-3 py-1.5 text-left hover:bg-[#2B2F3E] flex items-center justify-between cursor-pointer"
           >
             <span>{language === 'en' ? 'Scene Split' : 'Tách cảnh'}</span>
-            <span className="text-[10px] font-mono text-[#00E5CC]">Ctrl+Shift+B</span>
+            <span className="text-[10px] font-mono text-[#00CAE0]">Ctrl+Shift+B</span>
           </button>
 
           <button
@@ -3619,7 +3619,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             className="mb-2 w-72 p-3 bg-[#1E1F28] border border-[#363948] rounded-xl shadow-2xl space-y-3 text-xs text-[#E4E4E7]"
           >
             <div className="flex items-center justify-between border-b border-[#2D303E] pb-1.5">
-              <span className="font-bold text-[#00E5CC] flex items-center gap-1.5">
+              <span className="font-bold text-[#00CAE0] flex items-center gap-1.5">
                 <span>
                   {language === 'en'
                     ? 'Functions — Timeline Automation'
@@ -3678,13 +3678,13 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   value={targetDurationSec}
                   onChange={(e) => onTargetDurationChange(Math.max(0, Number(e.target.value)))}
                   aria-label={language === 'en' ? 'Target duration (sec)' : 'Thời lượng đích (giây)'}
-                  className="w-12 px-1 py-0.5 text-[11px] font-mono text-center bg-[#121215] text-[#00E5CC] border border-[#32323A] rounded"
+                  className="w-12 px-1 py-0.5 text-[11px] font-mono text-center bg-[#121215] text-[#00CAE0] border border-[#32323A] rounded"
                 />
               </div>
               <button
                 type="button"
                 onClick={onShuffleRange}
-                className="w-full py-1.5 bg-[#00E5CC] hover:bg-[#00F5D4] text-[#090D12] font-bold rounded flex items-center justify-center gap-1.5 cursor-pointer"
+                className="w-full py-1.5 bg-[#00CAE0] hover:bg-[#00F5D4] text-[#090D12] font-bold rounded flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Shuffle className="w-3.5 h-3.5" />
                 <span>
@@ -3708,7 +3708,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                     key={sec}
                     type="button"
                     onClick={() => onBatchTrim(sec)}
-                    className="py-1 text-[10px] font-mono bg-[#2A2A32] hover:bg-[#00E5CC] hover:text-black text-[#E4E4E7] rounded cursor-pointer"
+                    className="py-1 text-[10px] font-mono bg-[#2A2A32] hover:bg-[#00CAE0] hover:text-black text-[#E4E4E7] rounded cursor-pointer"
                   >
                     {sec}s
                   </button>
@@ -3737,7 +3737,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                 <button
                   type="button"
                   onClick={() => onBatchTrim([minTrimSec, Math.max(minTrimSec, maxTrimSec)])}
-                  className="flex-1 py-0.5 text-[10px] font-semibold bg-[#2A2B36] hover:bg-[#00E5CC] hover:text-black text-[#00E5CC] border border-[#00E5CC]/40 rounded cursor-pointer"
+                  className="flex-1 py-0.5 text-[10px] font-semibold bg-[#2A2B36] hover:bg-[#00CAE0] hover:text-black text-[#00CAE0] border border-[#00CAE0]/40 rounded cursor-pointer"
                 >
                   {language === 'en' ? 'Random' : 'Ngẫu nhiên'}
                 </button>
@@ -3750,21 +3750,21 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                 <button
                   type="button"
                   onClick={() => onAddTrackLayer('overlay')}
-                  className="py-1 text-[10px] bg-[#252630] hover:bg-[#00E5CC] hover:text-black rounded cursor-pointer"
+                  className="py-1 text-[10px] bg-[#252630] hover:bg-[#00CAE0] hover:text-black rounded cursor-pointer"
                 >
                   {language === 'en' ? '+ PIP Layer' : '+ Layer PIP'}
                 </button>
                 <button
                   type="button"
                   onClick={() => onAddTrackLayer('text')}
-                  className="py-1 text-[10px] bg-[#252630] hover:bg-[#00E5CC] hover:text-black rounded cursor-pointer"
+                  className="py-1 text-[10px] bg-[#252630] hover:bg-[#00CAE0] hover:text-black rounded cursor-pointer"
                 >
                   {language === 'en' ? '+ Text Layer' : '+ Layer Chữ'}
                 </button>
                 <button
                   type="button"
                   onClick={() => onAddTrackLayer('audio')}
-                  className="py-1 text-[10px] bg-[#252630] hover:bg-[#00E5CC] hover:text-black rounded cursor-pointer"
+                  className="py-1 text-[10px] bg-[#252630] hover:bg-[#00CAE0] hover:text-black rounded cursor-pointer"
                 >
                   {language === 'en' ? '+ Audio Layer' : '+ Layer Nhạc'}
                 </button>
@@ -3798,7 +3798,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               e.stopPropagation();
               setShowEditPilotPopover((v) => !v);
             }}
-            className="px-3 py-1.5 flex items-center text-xs font-semibold text-[#E4E4E7] hover:text-[#00E5CC] cursor-pointer"
+            className="px-3 py-1.5 flex items-center text-xs font-semibold text-[#E4E4E7] hover:text-[#00CAE0] cursor-pointer"
           >
             <span>{language === 'en' ? 'Functions' : 'Chức năng'}</span>
           </button>

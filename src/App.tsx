@@ -239,7 +239,7 @@ function NumericBoxWithSteppers({
 
   return (
     <div
-      className={`flex items-center justify-between bg-[#222228] border border-[#32323C] focus-within:border-[#00E5CC] rounded px-1 py-0.5 ${widthClass} shrink-0`}
+      className={`flex items-center justify-between bg-[#222228] border border-[#32323C] focus-within:border-[#00CAE0] rounded px-1 py-0.5 ${widthClass} shrink-0`}
     >
       {prefix && <span className="text-[10px] text-[#71717A] mr-0.5 select-none">{prefix}</span>}
       <input
@@ -294,7 +294,7 @@ function NumericBoxWithSteppers({
             setTextBuffer(step < 1 ? String(Number(next.toFixed(2))) : String(Math.round(next)));
             onChange(next);
           }}
-          className="text-[8px] text-[#9CA3AF] hover:text-[#00E5CC] leading-[8px] cursor-pointer select-none"
+          className="text-[8px] text-[#9CA3AF] hover:text-[#00CAE0] leading-[8px] cursor-pointer select-none"
         >
           ▴
         </button>
@@ -307,7 +307,7 @@ function NumericBoxWithSteppers({
             setTextBuffer(step < 1 ? String(Number(next.toFixed(2))) : String(Math.round(next)));
             onChange(next);
           }}
-          className="text-[8px] text-[#9CA3AF] hover:text-[#00E5CC] leading-[8px] cursor-pointer select-none"
+          className="text-[8px] text-[#9CA3AF] hover:text-[#00CAE0] leading-[8px] cursor-pointer select-none"
         >
           ▾
         </button>
@@ -768,11 +768,11 @@ function CapCutCropModal({ clip, onClose, onConfirm }: CapCutCropModalProps) {
               data-testid="crop-modal-play-toggle"
               title={isCropPlaying ? 'Tạm dừng' : 'Phát thử video'}
               onClick={() => setIsCropPlaying((p) => !p)}
-              className="w-6 h-6 rounded bg-[#232530] hover:bg-[#00E5CC] hover:text-black text-white flex items-center justify-center cursor-pointer shrink-0 transition-colors"
+              className="w-6 h-6 rounded bg-[#232530] hover:bg-[#00CAE0] hover:text-black text-white flex items-center justify-center cursor-pointer shrink-0 transition-colors"
             >
               {isCropPlaying ? '⏸' : '▶'}
             </button>
-            <span data-testid="crop-modal-current-timecode" className="text-[#00E5CC] shrink-0">
+            <span data-testid="crop-modal-current-timecode" className="text-[#00CAE0] shrink-0">
               {formatTimecode(cropPlayheadSec, 30)}
             </span>
             <span className="text-[#52525B] shrink-0">/</span>
@@ -791,7 +791,7 @@ function CapCutCropModal({ clip, onClose, onConfirm }: CapCutCropModalProps) {
                 if (isCropPlaying) setIsCropPlaying(false);
                 seekCropVideoTo(Number(e.target.value));
               }}
-              className="flex-1 h-1.5 accent-[#00E5CC] bg-[#272730] rounded-lg cursor-pointer"
+              className="flex-1 h-1.5 accent-[#00CAE0] bg-[#272730] rounded-lg cursor-pointer"
             />
           </div>
         </div>
@@ -844,7 +844,7 @@ function CapCutCropModal({ clip, onClose, onConfirm }: CapCutCropModalProps) {
                       onClick={() => applyAspectPreset(preset)}
                       className={`w-full px-3 py-1.5 text-left text-xs flex items-center justify-between hover:bg-[#2E2E3A] cursor-pointer ${
                         cropAspectPreset === preset
-                          ? 'text-[#00E5CC] font-semibold'
+                          ? 'text-[#00CAE0] font-semibold'
                           : 'text-[#E4E4E7]'
                       }`}
                     >
@@ -885,7 +885,7 @@ function CapCutCropModal({ clip, onClose, onConfirm }: CapCutCropModalProps) {
                   cropAspectPreset,
                 })
               }
-              className="px-4 py-1 bg-[#00E5CC] hover:bg-[#00F5DC] text-[#090D12] font-bold rounded cursor-pointer"
+              className="px-4 py-1 bg-[#00CAE0] hover:bg-[#00D8EE] text-[#090D12] font-bold rounded cursor-pointer"
             >
               Xác nhận
             </button>
@@ -1431,7 +1431,7 @@ export default function App() {
     setTimelineTracks((prev) =>
       kind === 'audio' ? [...prev, newTrack] : [newTrack, ...prev]
     );
-    showToast(`Đã thêm tầng "${newTrack.label}" vào Timeline (Bấm Ctrl+Z nếu muốn hoàn tác)!`);
+    /* toast removed */
   };
 
   // Delete a custom Layer/Track from Timeline (Recorded in Undo History)
@@ -1656,7 +1656,7 @@ export default function App() {
         setSelectedClipId(null);
         setSelectedClipIds([]);
       }
-      showToast(`Đã kéo thả "${payload.name}" vào tầng Layer ${trackToUse} tại ${startSec}s!`);
+      /* toast removed */
       return;
     }
 
@@ -1687,7 +1687,7 @@ export default function App() {
       ]);
       setSelectedClipId(newId);
       setSelectedClipIds([newId]);
-      showToast(`Đã kéo thả hiệu ứng âm thanh "${payload.name}" xuống Timeline!`);
+      /* toast removed */
       return;
     }
 
@@ -1719,7 +1719,7 @@ export default function App() {
       ]);
       setSelectedClipId(newId);
       setSelectedClipIds([newId]);
-      showToast(`Đã kéo thả văn bản "${payload.name}" vào Timeline tại ${startSec}s!`);
+      /* toast removed */
       return;
     }
 
@@ -1790,7 +1790,7 @@ export default function App() {
       setPlayheadSec(startSec);
       setInspectorMode('clip');
       setInspectorTab('video');
-      showToast(`Đã kéo thả nhãn dán "${payload.name}" vào Timeline tại ${startSec}s!`);
+      /* toast removed */
       return;
     }
 
@@ -1835,7 +1835,7 @@ export default function App() {
           setPlayheadSec(Number((clipAtDrop.startTime + 0.2).toFixed(2)));
         }
       }
-      showToast(`Đã kéo thả hiệu ứng "${payload.name}" áp dụng lên clip!`);
+      /* toast removed */
       return;
     }
 
@@ -1914,7 +1914,7 @@ export default function App() {
           setPlayheadSec(Number((clipAtDrop.startTime + 0.2).toFixed(2)));
         }
       }
-      showToast(`Đã kéo thả bộ lọc màu "${payload.name}" vào clip!`);
+      /* toast removed */
       return;
     }
 
@@ -1940,13 +1940,13 @@ export default function App() {
       ]);
       setSelectedClipId(newId);
       setSelectedClipIds([newId]);
-      showToast(`Đã kéo thả Lớp Điều Chỉnh (Adjustment Layer) xuống Timeline!`);
+      /* toast removed */
     }
   };
 
   const handleUndo = () => {
     if (historyPast.length === 0) {
-      showToast('Không còn thao tác nào để hoàn tác (Ctrl+Z)');
+      /* toast removed */
       return;
     }
     lastUndoCommitRef.current = { key: null, ts: 0 };
@@ -1975,12 +1975,12 @@ export default function App() {
     setAntiDetect(previous.antiDetect);
     setBlurredPadding916(previous.blurredPadding916);
     setProjectColorSpace(previous.projectColorSpace);
-    showToast('Đã hoàn tác thông số / thao tác về trạng thái trước đó (Undo - Ctrl+Z)');
+    /* toast removed */
   };
 
   const handleRedo = () => {
     if (historyFuture.length === 0) {
-      showToast('Không còn thao tác nào để làm lại (Ctrl+Y)');
+      /* toast removed */
       return;
     }
     lastUndoCommitRef.current = { key: null, ts: 0 };
@@ -2009,7 +2009,7 @@ export default function App() {
     setAntiDetect(next.antiDetect);
     setBlurredPadding916(next.blurredPadding916);
     setProjectColorSpace(next.projectColorSpace);
-    showToast('Đã làm lại thao tác (Redo - Ctrl+Y)');
+    /* toast removed */
   };
 
   // Copy / Cut / Paste / Disable / Group / Ungroup Clip Handlers
@@ -2026,7 +2026,7 @@ export default function App() {
     const copied = clips.filter((c) => targetIds.has(c.id)).map((c) => ({ ...c }));
     if (copied.length === 0) return;
     setClipboardClips(copied);
-    showToast(`Đã sao chép ${copied.length} clip vào bộ nhớ tạm (Ctrl+C)!`);
+    /* toast removed */
   };
 
   const handleCutSelectedClips = (fallbackClipId?: string) => {
@@ -2048,12 +2048,12 @@ export default function App() {
     });
     setSelectedClipId(null);
     setSelectedClipIds([]);
-    showToast(`Đã cắt ${cutItems.length} clip vào bộ nhớ tạm (Ctrl+X)!`);
+    /* toast removed */
   };
 
   const handlePasteClipboardClips = (targetTimeSec?: number, targetTrackIndex?: number) => {
     if (clipboardClips.length === 0) {
-      showToast('Chưa có clip nào trong bộ nhớ tạm (Hãy bấm Ctrl+C trước)!');
+      /* toast removed */
       return;
     }
     const baseStart = Math.min(...clipboardClips.map((c) => c.startTime));
@@ -2076,7 +2076,7 @@ export default function App() {
     commitClips((prev) => [...prev, ...pasted]);
     setSelectedClipIds(newIds);
     setSelectedClipId(newIds[0] ?? null);
-    showToast(`Đã dán ${pasted.length} clip tại ${destStart.toFixed(2)}s (Ctrl+V)!`);
+    /* toast removed */
   };
 
   const handleToggleDisableClip = (targetClipId?: string) => {
@@ -2093,7 +2093,7 @@ export default function App() {
     commitClips((prev) =>
       prev.map((c) => (targetIds.has(c.id) ? { ...c, disabled: !c.disabled } : c))
     );
-    showToast('Đã chuyển trạng thái Vô hiệu hoá / Bật clip (Phím V)!');
+    /* toast removed */
   };
 
   const handleGroupSelectedClips = () => {
@@ -2105,7 +2105,7 @@ export default function App() {
     const gid = `grp-${Date.now()}`;
     const idSet = new Set(ids);
     commitClips((prev) => prev.map((c) => (idSet.has(c.id) ? { ...c, groupId: gid } : c)));
-    showToast(`Đã nhóm ${ids.length} clip liên kết chặt với nhau (Ctrl+G)!`);
+    /* toast removed */
   };
 
   const handleUngroupSelectedClips = () => {
@@ -2122,7 +2122,7 @@ export default function App() {
           : c
       )
     );
-    showToast('Đã bỏ nhóm các clip đang chọn (Ctrl+Shift+G)!');
+    /* toast removed */
   };
 
   // Smooth 60-FPS Hardware-Synced Playback Loop via requestAnimationFrame (Zero interval drift / lag)
@@ -2217,7 +2217,7 @@ export default function App() {
       showToast(
         language === 'en'
           ? `Deleted ${deletedCardCount} media file(s) & ${deletedClipCount} linked clip(s) from Timeline!`
-          : `Đã xóa tận gốc ${deletedCardCount} tệp phương tiện và ${deletedClipCount} clip liên kết trên Timeline!`
+          : `Đã xóa ${deletedCardCount} tệp phương tiện và ${deletedClipCount} clip liên kết trên Timeline!`
       );
     } else if (deletedCardCount > 0) {
       showToast(
@@ -2375,7 +2375,7 @@ export default function App() {
                 : c
             )
           );
-          showToast(`Đã gộp ${targetIds.size} clip thành Clip ghép (Compound Clip - Alt+G)!`);
+          /* toast removed */
         }
       } else if (e.code === 'Space') {
         e.preventDefault();
@@ -2383,25 +2383,25 @@ export default function App() {
       } else if (e.code === 'KeyB' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         commitClips((prev) => splitClipAtPlayhead(prev, playheadSec, selectedClipId));
-        showToast('Đã tách đôi clip tại Playhead (Ctrl+B)');
+        /* toast removed */
       } else if (e.code === 'KeyQ') {
         e.preventDefault();
         commitClips((prev) => trimClipStartToPlayhead(prev, playheadSec, selectedClipId, snapEnabled));
-        showToast('Đã cắt bỏ phần đầu đến Playhead (Phím Q)');
+        /* toast removed */
       } else if (e.code === 'KeyW') {
         e.preventDefault();
         commitClips((prev) => trimClipEndToPlayhead(prev, playheadSec, selectedClipId, snapEnabled));
-        showToast('Đã cắt bỏ phần đuôi từ Playhead (Phím W)');
+        /* toast removed */
       } else if (e.code === 'KeyM') {
         e.preventDefault();
         const newMarker: TimelineMarker = {
           id: `mk-${Date.now()}`,
           timeSec: Number(playheadSec.toFixed(2)),
           label: `Dấu mốc ${markers.length + 1}`,
-          color: '#00E5CC',
+          color: '#00CAE0',
         };
         setMarkers((prev) => [...prev, newMarker]);
-        showToast(`Đã thả dấu mốc (Marker) tại ${playheadSec.toFixed(2)}s (Phím M)`);
+        /* toast removed */
       } else if (!e.ctrlKey && !e.metaKey && !e.altKey && e.code === 'KeyI') {
         e.preventDefault();
         const pt = Number(playheadSec.toFixed(2));
@@ -2633,7 +2633,7 @@ export default function App() {
     commitClips((prev) =>
       prev.map((c) => (c.id === currentClip.id ? addOrToggleKeyframeAtTime(c, playheadSec) : c))
     );
-    showToast(`Đã gắn/gỡ Keyframe (◆) cho "${propertyLabel}" tại ${playheadSec.toFixed(2)}s!`);
+    /* toast removed */
   };
 
   // Real File Upload Handler with Natural Sort & Real Video Metadata + Thumbnail Extraction
@@ -2870,7 +2870,7 @@ export default function App() {
         timeLabel: `${mm}:${ss}`,
         type: isAudio ? 'audio' : 'video',
         added: true,
-        gradient: 'linear-gradient(135deg, #00E5CC 0%, #1E293B 100%)',
+        gradient: 'linear-gradient(135deg, #00CAE0 0%, #1E293B 100%)',
         mediaUrl: objectUrl,
         thumbnailUrl: meta.thumb,
         mediaWidth: meta.width,
@@ -3083,7 +3083,7 @@ export default function App() {
         setSelectedClipIds([]);
       }
     }
-    showToast(`Đã thêm ${newOverlayClips.length} tệp Lớp phủ (PIP) vào Timeline tại ${playheadSec.toFixed(2)}s!`);
+    /* toast removed */
     e.target.value = '';
   };
 
@@ -3161,9 +3161,9 @@ export default function App() {
 
       recorder.start(200);
       setIsRecordingMedia(true);
-      showToast('Đang quay màn hình/camera... Bấm lại nút "Đang ghi" để dừng.');
+      /* toast removed */
     } catch {
-      showToast('Không thể mở quyền quay màn hình trong khung xem trước.');
+      /* toast removed */
     }
   };
 
@@ -3185,7 +3185,7 @@ export default function App() {
     } catch {
       // Ignore storage error
     }
-    showToast('Đã xóa sạch toàn bộ video, dự án và thông tin liên quan!');
+    /* toast removed */
   };
 
   // Push media card to timeline
@@ -3233,7 +3233,7 @@ export default function App() {
     });
     setSelectedClipId(newId);
     setMediaCards((prev) => prev.map((m) => (m.id === card.id ? { ...m, added: true } : m)));
-    showToast(`Đã đẩy "${card.name}" xuống Timeline!`);
+    /* toast removed */
   };
 
   // Add Web Audio Synthesizer SFX to Audio Track
@@ -3262,7 +3262,7 @@ export default function App() {
         mediaUrl: wavUrl,
       },
     ]);
-    showToast(`Đã phát thử & chèn hiệu ứng âm thanh "${label}" vào Track Âm thanh!`);
+    /* toast removed */
   };
 
   // Import real .SRT file onto Subtitle Track
@@ -3274,7 +3274,7 @@ export default function App() {
     if (parsedSubs.length > 0) {
       commitClips((prev) => [...prev, ...parsedSubs]);
       setSelectedClipId(parsedSubs[0].id);
-      showToast(`Đã nạp ${parsedSubs.length} dòng phụ đề từ "${file.name}" lên Track Văn bản!`);
+      /* toast removed */
     }
     e.target.value = '';
   };
@@ -3549,7 +3549,7 @@ export default function App() {
       // Fallback to WebAudio tone
     }
     webAudioEngine.playSfx('ding', 0.4);
-    showToast(`Đang đọc giọng nói AI (Text-to-Speech): "${textToSpeak.slice(0, 28)}..."`);
+    /* toast removed */
   };
 
   // Resize clip left/right edge by dragging handles (Strictly capped by original source media duration)
@@ -3607,7 +3607,7 @@ export default function App() {
           timeLabel: `00:0${Math.round(defaultImageDuration)}`,
           type: 'video',
           added: false,
-          gradient: 'linear-gradient(135deg, #00E5CC 0%, #0284C7 100%)',
+          gradient: 'linear-gradient(135deg, #00CAE0 0%, #0284C7 100%)',
           mediaUrl: dataUrl,
           thumbnailUrl: dataUrl,
         },
@@ -3619,7 +3619,7 @@ export default function App() {
       a.click();
       showToast('Đã chụp ảnh tĩnh .PNG, lưu vào Kho Phương tiện và tải xuống!');
     } catch {
-      showToast('Đã cập nhật Ảnh bìa dự án!');
+      /* toast removed */
     }
   };
 
@@ -3666,10 +3666,10 @@ export default function App() {
             : `Đã mở dự án TDO CUT "${parsed.projectName}" (${parsed.clips.length} clips)!`
         );
       } else {
-        showToast('Tệp dự án .tdocut.json không hợp lệ!');
+        /* toast removed */
       }
     } catch {
-      showToast('Không thể đọc tệp dự án .tdocut.json!');
+      /* toast removed */
     }
     e.target.value = '';
   };
@@ -3679,7 +3679,7 @@ export default function App() {
     const inT = markInSec ?? 0;
     const outT = markOutSec ?? Math.max(inT + 2, playheadSec);
     if (Math.abs(outT - inT) < 0.1) {
-      showToast('Hãy đặt Điểm vào [I] và Điểm ra [O] cách nhau ít nhất 0.1s!');
+      /* toast removed */
       return;
     }
     commitClips((prev) => rippleTrimTimelineRange(prev, inT, outT, mode, trackLocks));
@@ -3697,7 +3697,7 @@ export default function App() {
   const handleRemoveDeadAirSilence = () => {
     const res = removeTimelineDeadAirAndSilence(clips, 0.14);
     if (res.trimmedClipsCount === 0 && res.removedSec === 0) {
-      showToast('Timeline đã khít, không phát hiện khoảng lặng thừa!');
+      /* toast removed */
       return;
     }
     commitClips(res.clips);
@@ -3770,7 +3770,7 @@ export default function App() {
     setSubProjects((prev) => [...generatedSubs, ...prev]);
     setSidebarFolder('subproject');
     setTopLeftCategory('media');
-    showToast(`Đã tạo ${cfg.variantCount} kịch bản Timeline biến thể trong mục "Dự án con"!`);
+    /* toast removed */
   };
 
   // AI Scene Cut handler ("Bắt đầu cắt clip")
@@ -3831,7 +3831,7 @@ export default function App() {
       setRangeEndIndex(next.filter((c) => c.trackIndex === 0).length);
       return next;
     });
-    showToast(`AI đã tự động tách ${count} phân cảnh (#1..#${count}) và đẩy xuống Timeline!`);
+    /* toast removed */
   };
 
   // CapCut Draft JSON & FFmpeg Command previews
@@ -4110,7 +4110,7 @@ export default function App() {
       setSelectedClipId(allIds[0] ?? null);
     }
     if (allIds.length > 0) {
-      showToast(`Đã chọn tất cả ${allIds.length} mục!`);
+      /* toast removed */
     }
   };
 
@@ -4197,7 +4197,7 @@ export default function App() {
     setMediaCards((prev) =>
       prev.map((m) => (pushedCardIds.has(m.id) ? { ...m, added: true } : m))
     );
-    showToast(`Đã đẩy ${cardsToPush.length} tệp đã chọn xuống Timeline!`);
+    /* toast removed */
   };
 
   // Push or apply any set of selected resource IDs from the active Zone 1 tab onto the Timeline
@@ -4243,7 +4243,7 @@ export default function App() {
             }))
           );
           commitClips(mergedClips);
-          showToast(`Đã nạp ${matchedSubs.length} dự án con lên Timeline!`);
+          /* toast removed */
         }
         return;
       }
@@ -4289,7 +4289,7 @@ export default function App() {
       commitClips((prev) => [...prev, ...newAudioClips]);
       setSelectedClipIds(newIds);
       setSelectedClipId(newIds[0] ?? null);
-      showToast(`Đã thêm ${newAudioClips.length} hiệu ứng âm thanh vào Timeline!`);
+      /* toast removed */
       return;
     }
 
@@ -4325,7 +4325,7 @@ export default function App() {
       commitClips((prev) => [...prev, ...newTextClips]);
       setSelectedClipIds(newIds);
       setSelectedClipId(newIds[0] ?? null);
-      showToast(`Đã thêm ${newTextClips.length} mẫu văn bản vào Timeline!`);
+      /* toast removed */
       return;
     }
 
@@ -4412,7 +4412,7 @@ export default function App() {
       setPlayheadSec(baseStart);
       setInspectorMode('clip');
       setInspectorTab('video');
-      showToast(`Đã thêm ${newStkClips.length} nhãn dán vào Timeline tại ${baseStart}s!`);
+      /* toast removed */
       return;
     }
 
@@ -4862,10 +4862,10 @@ export default function App() {
                     setActiveView('workstation');
                     setIsTopMenuOpen(false);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center justify-between cursor-pointer"
+                  className="w-full px-3 py-1.5 text-left hover:bg-[#00CAE0]/15 hover:text-[#00CAE0] flex items-center justify-between cursor-pointer"
                 >
                   <span className="flex items-center gap-1.5">
-                    <Plus className="w-3.5 h-3.5 text-[#00E5CC]" />
+                    <Plus className="w-3.5 h-3.5 text-[#00CAE0]" />
                     <span>{language === 'en' ? 'New Project' : 'Dự án mới (New project)'}</span>
                   </span>
                   <span className="font-mono text-[10px] text-[#71717A]">Ctrl+N</span>
@@ -4876,10 +4876,10 @@ export default function App() {
                     mediaInputRef.current?.click();
                     setIsTopMenuOpen(false);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center justify-between cursor-pointer"
+                  className="w-full px-3 py-1.5 text-left hover:bg-[#00CAE0]/15 hover:text-[#00CAE0] flex items-center justify-between cursor-pointer"
                 >
                   <span className="flex items-center gap-1.5">
-                    <FolderOpen className="w-3.5 h-3.5 text-[#00E5CC]" />
+                    <FolderOpen className="w-3.5 h-3.5 text-[#00CAE0]" />
                     <span>{language === 'en' ? 'Import Media' : 'Nhập tệp (Import media)'}</span>
                   </span>
                   <span className="font-mono text-[10px] text-[#71717A]">Ctrl+I</span>
@@ -4890,10 +4890,10 @@ export default function App() {
                     handleExportTdoCutProject();
                     setIsTopMenuOpen(false);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center justify-between cursor-pointer"
+                  className="w-full px-3 py-1.5 text-left hover:bg-[#00CAE0]/15 hover:text-[#00CAE0] flex items-center justify-between cursor-pointer"
                 >
                   <span className="flex items-center gap-1.5">
-                    <Download className="w-3.5 h-3.5 text-[#00E5CC]" />
+                    <Download className="w-3.5 h-3.5 text-[#00CAE0]" />
                     <span>{uiText.saveProjectJson}</span>
                   </span>
                 </button>
@@ -4903,7 +4903,7 @@ export default function App() {
                     tdoCutProjectInputRef.current?.click();
                     setIsTopMenuOpen(false);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center justify-between cursor-pointer"
+                  className="w-full px-3 py-1.5 text-left hover:bg-[#00CAE0]/15 hover:text-[#00CAE0] flex items-center justify-between cursor-pointer"
                 >
                   <span className="flex items-center gap-1.5">
                     <FolderOpen className="w-3.5 h-3.5 text-[#F59E0B]" />
@@ -4916,10 +4916,10 @@ export default function App() {
                     setIsExportModalOpen(true);
                     setIsTopMenuOpen(false);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center justify-between cursor-pointer"
+                  className="w-full px-3 py-1.5 text-left hover:bg-[#00CAE0]/15 hover:text-[#00CAE0] flex items-center justify-between cursor-pointer"
                 >
                   <span className="flex items-center gap-1.5">
-                    <Upload className="w-3.5 h-3.5 text-[#00E5CC]" />
+                    <Upload className="w-3.5 h-3.5 text-[#00CAE0]" />
                     <span>{language === 'en' ? 'Export Video' : 'Xuất video (Export)'}</span>
                   </span>
                   <span className="font-mono text-[10px] text-[#71717A]">Ctrl+E</span>
@@ -4938,9 +4938,9 @@ export default function App() {
                     setIsTopMenuOpen(false);
                     showToast('Đã xuất file XML tương thích Adobe Premiere & DaVinci Resolve!');
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center gap-1.5 cursor-pointer"
+                  className="w-full px-3 py-1.5 text-left hover:bg-[#00CAE0]/15 hover:text-[#00CAE0] flex items-center gap-1.5 cursor-pointer"
                 >
-                  <FileCode className="w-3.5 h-3.5 text-[#00E5CC]" />
+                  <FileCode className="w-3.5 h-3.5 text-[#00CAE0]" />
                   <span>{language === 'en' ? 'Export XML (Premiere / DaVinci)' : 'Xuất XML (Premiere / DaVinci)'}</span>
                 </button>
 
@@ -4954,9 +4954,9 @@ export default function App() {
                     handleRemoveDeadAirSilence();
                     setIsTopMenuOpen(false);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center gap-1.5 cursor-pointer"
+                  className="w-full px-3 py-1.5 text-left hover:bg-[#00CAE0]/15 hover:text-[#00CAE0] flex items-center gap-1.5 cursor-pointer"
                 >
-                  <Zap className="w-3.5 h-3.5 text-[#00E5CC]" />
+                  <Zap className="w-3.5 h-3.5 text-[#00CAE0]" />
                   <span>{uiText.removeSilence}</span>
                 </button>
                 <button
@@ -4965,9 +4965,9 @@ export default function App() {
                     handleSyncVideoClipsToBeats();
                     setIsTopMenuOpen(false);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center gap-1.5 cursor-pointer"
+                  className="w-full px-3 py-1.5 text-left hover:bg-[#00CAE0]/15 hover:text-[#00CAE0] flex items-center gap-1.5 cursor-pointer"
                 >
-                  <Music className="w-3.5 h-3.5 text-[#00E5CC]" />
+                  <Music className="w-3.5 h-3.5 text-[#00CAE0]" />
                   <span>{uiText.autoBeatSync}</span>
                 </button>
                 <button
@@ -4976,10 +4976,10 @@ export default function App() {
                     handleUndo();
                     setIsTopMenuOpen(false);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center justify-between cursor-pointer"
+                  className="w-full px-3 py-1.5 text-left hover:bg-[#00CAE0]/15 hover:text-[#00CAE0] flex items-center justify-between cursor-pointer"
                 >
                   <span className="flex items-center gap-1.5">
-                    <Undo2 className="w-3.5 h-3.5 text-[#00E5CC]" />
+                    <Undo2 className="w-3.5 h-3.5 text-[#00CAE0]" />
                     <span>{language === 'en' ? 'Undo' : 'Hoàn tác (Undo)'}</span>
                   </span>
                   <span className="font-mono text-[10px] text-[#71717A]">Ctrl+Z</span>
@@ -4990,9 +4990,9 @@ export default function App() {
                     setIsSettingsModalOpen(true);
                     setIsTopMenuOpen(false);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center gap-1.5 cursor-pointer"
+                  className="w-full px-3 py-1.5 text-left hover:bg-[#00CAE0]/15 hover:text-[#00CAE0] flex items-center gap-1.5 cursor-pointer"
                 >
-                  <Settings className="w-3.5 h-3.5 text-[#00E5CC]" />
+                  <Settings className="w-3.5 h-3.5 text-[#00CAE0]" />
                   <span>
                     {language === 'en'
                       ? 'Settings & Language (VI / EN)'
@@ -5006,9 +5006,9 @@ export default function App() {
                     setIsMatrixModalOpen(true);
                     setIsTopMenuOpen(false);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center gap-1.5 cursor-pointer"
+                  className="w-full px-3 py-1.5 text-left hover:bg-[#00CAE0]/15 hover:text-[#00CAE0] flex items-center gap-1.5 cursor-pointer"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-[#00E5CC]" />
+                  <Sparkles className="w-3.5 h-3.5 text-[#00CAE0]" />
                   <span>
                     {language === 'en'
                       ? 'Matrix Batch Generator'
@@ -5022,9 +5022,9 @@ export default function App() {
                     setInspectorMode('project_details');
                     setIsTopMenuOpen(false);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-[#00E5CC]/15 hover:text-[#00E5CC] flex items-center gap-1.5 cursor-pointer"
+                  className="w-full px-3 py-1.5 text-left hover:bg-[#00CAE0]/15 hover:text-[#00CAE0] flex items-center gap-1.5 cursor-pointer"
                 >
-                  <Info className="w-3.5 h-3.5 text-[#00E5CC]" />
+                  <Info className="w-3.5 h-3.5 text-[#00CAE0]" />
                   <span>{language === 'en' ? 'Project Info' : 'Chi tiết dự án (Project Info)'}</span>
                 </button>
                 <button
@@ -5033,10 +5033,10 @@ export default function App() {
                     setActiveView('home');
                     setIsTopMenuOpen(false);
                   }}
-                  className="w-full px-3 py-1.5 text-left text-[#00E5CC] hover:bg-[#00E5CC]/15 font-semibold cursor-pointer"
+                  className="w-full px-3 py-1.5 text-left text-[#00CAE0] hover:bg-[#00CAE0]/15 font-semibold cursor-pointer"
                 >
                   <span className="flex items-center gap-1.5">
-                    <Home className="w-3.5 h-3.5 text-[#00E5CC]" />
+                    <Home className="w-3.5 h-3.5 text-[#00CAE0]" />
                     <span>{language === 'en' ? 'Back to Home Hub' : 'Về màn hình Trang chủ (Back to Home)'}</span>
                   </span>
                 </button>
@@ -5063,14 +5063,14 @@ export default function App() {
                   aria-label="Sửa tên dự án"
                   className={`px-2 py-0.5 text-xs rounded font-medium w-44 text-center border ${
                     themeMode === 'light'
-                      ? 'bg-white border-[#00D2C4] text-[#0F172A]'
-                      : 'bg-[#111114] border-[#00E5CC] text-white'
+                      ? 'bg-white border-[#00B8CE] text-[#0F172A]'
+                      : 'bg-[#111114] border-[#00CAE0] text-white'
                   }`}
                 />
                 <button
                   type="button"
                   onClick={() => setIsEditingProjectName(false)}
-                  className="p-1 text-[#00E5CC] cursor-pointer"
+                  className="p-1 text-[#00CAE0] cursor-pointer"
                 >
                   <Check className="w-3.5 h-3.5" />
                 </button>
@@ -5097,7 +5097,7 @@ export default function App() {
             )}
 
           {statusToast && (
-            <span className="px-2 py-0.5 text-[10px] font-medium bg-[#00E5CC]/15 text-[#00E5CC] border border-[#00E5CC]/30 rounded animate-pulse">
+            <span className="px-2 py-0.5 text-[10px] font-medium bg-[#25262C] text-[#D4D4D8] border border-[#343640] rounded">
               {language === 'en' ? translateViToEnText(statusToast) : statusToast}
             </span>
           )}
@@ -5138,7 +5138,7 @@ export default function App() {
               </>
             ) : (
               <>
-                <Moon className="w-3.5 h-3.5 text-[#00E5CC]" />
+                <Moon className="w-3.5 h-3.5 text-[#00CAE0]" />
                 <span className="hidden md:inline">
                   {language === 'en' ? 'Dark' : 'Tối'}
                 </span>
@@ -5161,8 +5161,8 @@ export default function App() {
             className={`p-1.5 rounded border transition-all cursor-pointer ${
               inspectorMode === 'project_details' && activeView === 'workstation'
                 ? themeMode === 'light'
-                  ? 'bg-[#CCFBF1] text-[#0F766E] border-[#00E5CC]'
-                  : 'bg-[#242630] text-[#00E5CC] border-[#00E5CC]/50'
+                  ? 'bg-[#CCFBF1] text-[#0F766E] border-[#00CAE0]'
+                  : 'bg-[#242630] text-[#00CAE0] border-[#00CAE0]/50'
                 : themeMode === 'light'
                 ? 'bg-[#F1F5F9] text-[#475569] border-[#CBD5E1] hover:text-[#0F172A] hover:bg-[#E2E8F0]'
                 : 'bg-[#1A1B22] text-[#D1D5DB] border-[#2D303C] hover:text-white hover:border-[#383C48]'
@@ -5209,14 +5209,14 @@ export default function App() {
                 : 'bg-[#1E2028] hover:bg-[#262832] text-[#E4E4E7] border-[#2E313C]'
             }`}
           >
-            <Download className="w-3.5 h-3.5 text-[#00E5CC]" />
+            <Download className="w-3.5 h-3.5 text-[#00CAE0]" />
             <span>{language === 'en' ? 'Save Project' : 'Lưu Dự án'}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setIsExportModalOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-1 text-xs font-bold bg-[#00E5CC] hover:bg-[#00F5DC] active:bg-[#00D2C4] text-[#071013] rounded transition-all shadow-xs cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-1 text-xs font-bold bg-[#00CAE0] hover:bg-[#00D8EE] active:bg-[#00B8CE] text-[#071013] rounded transition-all shadow-xs cursor-pointer"
           >
             <Upload className="w-3.5 h-3.5" />
             <span>{language === 'en' ? 'Export' : 'Xuất'}</span>
@@ -5442,7 +5442,7 @@ export default function App() {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                  <Code2 className="w-4 h-4 text-[#00E5CC]" />
+                  <Code2 className="w-4 h-4 text-[#00CAE0]" />
                   <span>Kiến trúc Mã nguồn PyQt6 Desktop &amp; FFmpeg Filter Complex</span>
                 </h2>
                 <p className="text-xs text-[#A1A1AA]">
@@ -5452,7 +5452,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setActiveView('workstation')}
-                className="px-3 py-1.5 text-xs font-semibold bg-[#222228] hover:bg-[#2C2C36] text-[#00E5CC] border border-[#00E5CC]/40 rounded cursor-pointer"
+                className="px-3 py-1.5 text-xs font-semibold bg-[#222228] hover:bg-[#2C2C36] text-[#00CAE0] border border-[#00CAE0]/40 rounded cursor-pointer"
               >
                 ← Quay lại Bàn dựng Timeline
               </button>
@@ -5543,7 +5543,7 @@ export default function App() {
                 ? packTrackClipsContiguously([...prev, copy], 0)
                 : [...prev, copy]
             );
-            showToast(`Đã nhân bản clip "${target.name}"!`);
+            /* toast removed */
           }}
           onSetAspectRatio={setAspectRatio}
           onSetPreviewQuality={setPreviewQuality}
@@ -5733,10 +5733,10 @@ export default function App() {
               className={`hidden md:flex col-span-4 flex-col rounded overflow-hidden min-h-0 transition-colors border ${
                 themeMode === 'light'
                   ? activeZoneFocus === 'resource_pool'
-                    ? 'bg-[#FFFFFF] border-[#00E5CC]'
+                    ? 'bg-[#FFFFFF] border-[#00CAE0]'
                     : 'bg-[#FFFFFF] border-[#E2E8F0]'
                   : activeZoneFocus === 'resource_pool'
-                  ? 'bg-[#18181C] border-[#00E5CC]/60'
+                  ? 'bg-[#18181C] border-[#00CAE0]/60'
                   : 'bg-[#18181C] border-[#2B2B30]'
               }`}
             >
@@ -5806,13 +5806,13 @@ export default function App() {
                         active
                           ? themeMode === 'light'
                             ? 'text-[#00A89A] font-semibold bg-[#E6FFFA] shadow-xs border border-[#99F6E4]'
-                            : 'text-[#00E5CC] font-semibold bg-[#1C1D24] shadow-xs border border-[#2A2C38]'
+                            : 'text-[#00CAE0] font-semibold bg-[#1C1D24] shadow-xs border border-[#2A2C38]'
                           : themeMode === 'light'
                           ? 'text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9]'
                           : 'text-[#9CA3AF] hover:text-white hover:bg-[#1A1B22]'
                       }`}
                     >
-                      <Icon className={`w-3.5 h-3.5 ${active ? 'text-[#00E5CC]' : 'text-[#8E929E]'}`} />
+                      <Icon className={`w-3.5 h-3.5 ${active ? 'text-[#00CAE0]' : 'text-[#8E929E]'}`} />
                       <span>{tab.label}</span>
                     </button>
                   );
@@ -5836,7 +5836,7 @@ export default function App() {
                           className={`w-full flex items-center justify-between px-2 py-1.5 rounded font-semibold text-[11px] cursor-pointer ${
                             themeMode === 'light'
                               ? 'bg-[#E2E8F0] text-[#0F172A]'
-                              : 'bg-[#23252C] text-[#00E5CC]'
+                              : 'bg-[#23252C] text-[#00CAE0]'
                           }`}
                         >
                           <span>Nhập</span>
@@ -5850,7 +5850,7 @@ export default function App() {
                             sidebarFolder === 'all'
                               ? themeMode === 'light'
                                 ? 'bg-[#CCFBF1] text-[#0F766E] font-semibold border border-[#5EEAD4]'
-                                : 'bg-[#1F343A] text-[#00E5CC] font-semibold'
+                                : 'bg-[#26272E] text-[#00CAE0] font-semibold'
                               : themeMode === 'light'
                               ? 'text-[#475569] hover:text-[#0F172A] hover:bg-[#E2E8F0]'
                               : 'text-[#D4D4D8] hover:text-white'
@@ -5866,7 +5866,7 @@ export default function App() {
                             sidebarFolder === 'timeline'
                               ? themeMode === 'light'
                                 ? 'bg-[#CCFBF1] text-[#0F766E] font-semibold border border-[#5EEAD4]'
-                                : 'bg-[#1F343A] text-[#00E5CC] font-semibold'
+                                : 'bg-[#26272E] text-[#00CAE0] font-semibold'
                               : themeMode === 'light'
                               ? 'text-[#475569] hover:text-[#0F172A] hover:bg-[#E2E8F0]'
                               : 'text-[#D4D4D8] hover:text-white'
@@ -5882,7 +5882,7 @@ export default function App() {
                             sidebarFolder === 'subproject'
                               ? themeMode === 'light'
                                 ? 'bg-[#CCFBF1] text-[#0F766E] font-semibold border border-[#5EEAD4]'
-                                : 'bg-[#1F343A] text-[#00E5CC] font-semibold'
+                                : 'bg-[#26272E] text-[#00CAE0] font-semibold'
                               : themeMode === 'light'
                               ? 'text-[#475569] hover:text-[#0F172A] hover:bg-[#E2E8F0]'
                               : 'text-[#D4D4D8] hover:text-white'
@@ -5890,7 +5890,7 @@ export default function App() {
                         >
                           <span>Dự án con</span>
                           <span className={`text-[9px] font-mono px-1 rounded ${
-                            themeMode === 'light' ? 'bg-[#E2E8F0] text-[#0F766E]' : 'bg-[#272730] text-[#00E5CC]'
+                            themeMode === 'light' ? 'bg-[#E2E8F0] text-[#0F766E]' : 'bg-[#272730] text-[#00CAE0]'
                           }`}>
                             {subProjects.length}
                           </span>
@@ -5907,7 +5907,7 @@ export default function App() {
                             sidebarFolder === 'brand'
                               ? themeMode === 'light'
                                 ? 'bg-[#CCFBF1] text-[#0F766E] font-semibold border border-[#5EEAD4]'
-                                : 'bg-[#1F343A] text-[#00E5CC] font-semibold'
+                                : 'bg-[#26272E] text-[#00CAE0] font-semibold'
                               : themeMode === 'light'
                               ? 'bg-white hover:bg-[#F1F5F9] text-[#334155] border border-[#CBD5E1]'
                               : 'bg-[#2A2B32] hover:bg-[#34353E] text-[#E4E4E7]'
@@ -5937,7 +5937,7 @@ export default function App() {
                             sidebarFolder === 'cloud'
                               ? themeMode === 'light'
                                 ? 'bg-[#CCFBF1] text-[#0F766E] font-semibold border border-[#5EEAD4]'
-                                : 'bg-[#1F343A] text-[#00E5CC] font-semibold'
+                                : 'bg-[#26272E] text-[#00CAE0] font-semibold'
                               : themeMode === 'light'
                               ? 'bg-white hover:bg-[#F1F5F9] text-[#334155] border border-[#CBD5E1]'
                               : 'bg-[#2A2B32] hover:bg-[#34353E] text-[#E4E4E7]'
@@ -5954,7 +5954,7 @@ export default function App() {
                             sidebarFolder === 'library'
                               ? themeMode === 'light'
                                 ? 'bg-[#CCFBF1] text-[#0F766E] font-semibold border border-[#5EEAD4]'
-                                : 'bg-[#1F343A] text-[#00E5CC] font-semibold'
+                                : 'bg-[#26272E] text-[#00CAE0] font-semibold'
                               : themeMode === 'light'
                               ? 'bg-white hover:bg-[#F1F5F9] text-[#334155] border border-[#CBD5E1]'
                               : 'bg-[#2A2B32] hover:bg-[#34353E] text-[#E4E4E7]'
@@ -5967,7 +5967,7 @@ export default function App() {
                     </>
                   ) : (
                     <div className="space-y-1">
-                      <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#00E5CC]">
+                      <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#00CAE0]">
                         {topLeftCategory === 'audio'
                           ? 'Danh mục Âm thanh'
                           : topLeftCategory === 'text'
@@ -6069,13 +6069,13 @@ export default function App() {
                               setInspectorTab('adjust');
                               setAdjustSubTab('hsl');
                             }
-                            showToast(`Đã lọc danh mục "${item.label}"`);
+                            /* toast removed */
                           }}
                           className={`w-full text-left px-2 py-1.5 rounded transition-colors cursor-pointer ${
                             subCategoryFilter === item.id
                               ? themeMode === 'light'
                                 ? 'bg-[#CCFBF1] text-[#0F766E] font-semibold border border-[#5EEAD4]'
-                                : 'bg-[#1F343A] text-[#00E5CC] font-semibold'
+                                : 'bg-[#26272E] text-[#00CAE0] font-semibold'
                               : themeMode === 'light'
                               ? 'text-[#475569] hover:text-[#0F172A] hover:bg-[#E2E8F0]'
                               : 'text-[#D4D4D8] hover:text-white hover:bg-[#22222A]'
@@ -6110,16 +6110,16 @@ export default function App() {
                   {selectedResourceIds.length > 0 && (
                     <div
                       data-no-marquee="true"
-                      className="absolute bottom-11 left-2 right-2 flex items-center justify-between gap-1 px-2 py-1 bg-[#0B1E22]/95 backdrop-blur-xs border border-[#00E5CC]/60 rounded shadow-lg z-30"
+                      className="absolute bottom-11 left-2 right-2 flex items-center justify-between gap-1 px-2 py-1 bg-[#18181C]/95 backdrop-blur-xs border border-[#00CAE0]/60 rounded shadow-lg z-30"
                     >
                       <div className="flex items-center gap-1 min-w-0">
-                        <span className="px-1.5 py-0.5 text-[10px] font-bold bg-[#00E5CC] text-[#071013] rounded whitespace-nowrap shrink-0">
+                        <span className="px-1.5 py-0.5 text-[10px] font-bold bg-[#00CAE0] text-[#071013] rounded whitespace-nowrap shrink-0">
                           Đã chọn {selectedResourceIds.length}
                         </span>
                         <button
                           type="button"
                           onClick={handleSelectAllCurrentResources}
-                          className="px-1.5 py-0.5 text-[10px] font-medium bg-[#182C32] hover:bg-[#223D45] text-[#00E5CC] border border-[#00E5CC]/30 rounded cursor-pointer whitespace-nowrap shrink-0"
+                          className="px-1.5 py-0.5 text-[10px] font-medium bg-[#25262C] hover:bg-[#2F3038] text-[#00CAE0] border border-[#00CAE0]/30 rounded cursor-pointer whitespace-nowrap shrink-0"
                         >
                           Tất cả
                         </button>
@@ -6138,7 +6138,7 @@ export default function App() {
                             <button
                               type="button"
                               onClick={() => handleDeleteMediaCardsAndClips(selectedResourceIds, true)}
-                              title="Xóa tận gốc các tệp và clip liên kết đang chọn (Phím Delete)"
+                              title="Xóa các tệp và clip đã chọn (Delete)"
                               className="px-1.5 py-0.5 text-[10px] font-semibold bg-[#EF4444]/20 hover:bg-[#EF4444] text-[#FCA5A5] hover:text-white border border-[#EF4444]/40 rounded cursor-pointer whitespace-nowrap"
                             >
                               Xóa
@@ -6147,7 +6147,7 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => handlePushResourceIdsToTimeline(selectedResourceIds)}
-                          className="px-2 py-0.5 text-[10px] font-bold bg-[#00E5CC] hover:bg-[#00F5DC] text-[#071013] rounded shadow cursor-pointer whitespace-nowrap"
+                          className="px-2 py-0.5 text-[10px] font-bold bg-[#00CAE0] hover:bg-[#00D8EE] text-[#071013] rounded shadow cursor-pointer whitespace-nowrap"
                         >
                           + Thêm vào Timeline ({selectedResourceIds.length})
                         </button>
@@ -6174,7 +6174,7 @@ export default function App() {
                               : 'bg-[#25252D] hover:bg-[#30303B] text-white border-[#383844]'
                           }`}
                         >
-                          <span className="w-3.5 h-3.5 rounded-full bg-[#00E5CC] text-[#090D12] flex items-center justify-center font-black text-[10px]">
+                          <span className="w-3.5 h-3.5 rounded-full bg-[#00CAE0] text-[#090D12] flex items-center justify-center font-black text-[10px]">
                             +
                           </span>
                           <span>Nhập</span>
@@ -6191,7 +6191,7 @@ export default function App() {
                               : 'bg-[#25252D] hover:bg-[#30303B] text-[#D4D4D8] border-[#383844]'
                           }`}
                         >
-                          <Video className="w-3.5 h-3.5 text-[#00E5CC]" />
+                          <Video className="w-3.5 h-3.5 text-[#00CAE0]" />
                           <span>{isRecordingMedia ? 'Đang ghi...' : 'Ghi'}</span>
                         </button>
 
@@ -6254,14 +6254,14 @@ export default function App() {
                               <button
                                 type="button"
                                 onClick={handleSelectAllCurrentResources}
-                                className="px-2 py-1 text-[10px] font-medium bg-[#25252E] hover:bg-[#30303C] text-[#00E5CC] border border-[#383846] rounded cursor-pointer"
+                                className="px-2 py-1 text-[10px] font-medium bg-[#25252E] hover:bg-[#30303C] text-[#00CAE0] border border-[#383846] rounded cursor-pointer"
                               >
                                 Chọn tất cả
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleSaveSubProject()}
-                                className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold bg-[#00E5CC] text-black rounded cursor-pointer"
+                                className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold bg-[#00CAE0] text-black rounded cursor-pointer"
                               >
                                 <Plus className="w-3 h-3" />
                                 <span>Lưu Timeline hiện tại</span>
@@ -6288,8 +6288,8 @@ export default function App() {
                                 }}
                                 className={`p-2 rounded flex items-center justify-between gap-2 cursor-pointer transition-colors ${
                                   isSubSelected
-                                    ? 'bg-[#00E5CC]/15 border-2 border-[#00E5CC] shadow-[0_0_10px_rgba(0,229,204,0.3)]'
-                                    : 'bg-[#22222A] border border-[#32323E] hover:border-[#00E5CC]/50'
+                                    ? 'bg-[#00CAE0]/15 border-2 border-[#00CAE0] shadow-sm'
+                                    : 'bg-[#22222A] border border-[#32323E] hover:border-[#00CAE0]/50'
                                 }`}
                               >
                                 <div className="min-w-0">
@@ -6306,9 +6306,9 @@ export default function App() {
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     commitClips(sub.clips.map((c) => ({ ...c })));
-                                    showToast(`Đã nạp "${sub.name}" lên Timeline!`);
+                                    /* toast removed */
                                   }}
-                                  className="px-2.5 py-1 text-[10px] font-semibold bg-[#00E5CC] text-black rounded shrink-0 cursor-pointer"
+                                  className="px-2.5 py-1 text-[10px] font-semibold bg-[#00CAE0] text-black rounded shrink-0 cursor-pointer"
                                 >
                                   Nạp
                                 </button>
@@ -6325,7 +6325,7 @@ export default function App() {
                             <button
                               type="button"
                               onClick={handleSelectAllCurrentResources}
-                              className="text-[10px] text-[#00E5CC] hover:underline cursor-pointer"
+                              className="text-[10px] text-[#00CAE0] hover:underline cursor-pointer"
                             >
                               Chọn tất cả
                             </button>
@@ -6356,7 +6356,7 @@ export default function App() {
                                 }}
                                 className={`flex items-center justify-between px-2.5 py-1.5 rounded text-xs cursor-pointer ${
                                   isClipItemSelected
-                                    ? 'bg-[#00E5CC]/15 border border-[#00E5CC] text-white'
+                                    ? 'bg-[#00CAE0]/15 border border-[#00CAE0] text-white'
                                     : 'bg-[#22222A] text-[#D4D4D8] hover:bg-[#2A2A34]'
                                 }`}
                               >
@@ -6364,7 +6364,7 @@ export default function App() {
                                   #{idx + 1} · {c.name} (Layer {c.trackIndex})
                                 </span>
                                 <div className="flex items-center gap-1.5 ml-2 shrink-0">
-                                  <span className="font-mono text-[10px] text-[#00E5CC]">
+                                  <span className="font-mono text-[10px] text-[#00CAE0]">
                                     {c.duration.toFixed(1)}s
                                   </span>
                                   <button
@@ -6398,7 +6398,7 @@ export default function App() {
                             <button
                               type="button"
                               onClick={handleSelectAllCurrentResources}
-                              className="text-[10px] text-[#00E5CC] hover:underline cursor-pointer shrink-0"
+                              className="text-[10px] text-[#00CAE0] hover:underline cursor-pointer shrink-0"
                             >
                               Chọn tất cả
                             </button>
@@ -6465,12 +6465,12 @@ export default function App() {
                                   }}
                                   className={`relative p-2.5 rounded text-left cursor-grab active:cursor-grabbing transition-all ${
                                     isStockSelected
-                                      ? 'bg-[#00E5CC]/15 border-2 border-[#00E5CC] shadow-[0_0_12px_rgba(0,229,204,0.4)]'
-                                      : 'bg-[#22222A] hover:border-[#00E5CC] border border-[#32323E]'
+                                      ? 'bg-[#00CAE0]/15 border-2 border-[#00CAE0] shadow-sm'
+                                      : 'bg-[#22222A] hover:border-[#00CAE0] border border-[#32323E]'
                                   }`}
                                 >
                                   {isStockSelected && (
-                                    <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-[#00E5CC] text-[#071013] font-black text-[10px] flex items-center justify-center shadow">
+                                    <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-[#00CAE0] text-[#071013] font-black text-[10px] flex items-center justify-center shadow">
                                       ✓
                                     </span>
                                   )}
@@ -6490,7 +6490,7 @@ export default function App() {
                                     {stock.name}
                                   </div>
                                   <div className="flex items-center justify-between mt-1.5">
-                                    <span className="text-[10px] font-mono text-[#00E5CC]">
+                                    <span className="text-[10px] font-mono text-[#00CAE0]">
                                       {stock.dur}s
                                     </span>
                                     <button
@@ -6503,7 +6503,7 @@ export default function App() {
                                             : [stock.id];
                                         handlePushResourceIdsToTimeline(idsToPush);
                                       }}
-                                      className="px-1.5 py-0.5 text-[10px] font-bold bg-[#00E5CC] text-[#071013] rounded cursor-pointer"
+                                      className="px-1.5 py-0.5 text-[10px] font-bold bg-[#00CAE0] text-[#071013] rounded cursor-pointer"
                                     >
                                       + Thêm
                                     </button>
@@ -6526,13 +6526,13 @@ export default function App() {
                                   type="button"
                                   data-no-marquee="true"
                                   onClick={handleSelectAllCurrentResources}
-                                  className="text-[10px] text-[#00E5CC] hover:underline cursor-pointer"
+                                  className="text-[10px] text-[#00CAE0] hover:underline cursor-pointer"
                                 >
                                   Chọn tất cả
                                 </button>
                               )}
                             </div>
-                            <span className="text-[10px] text-[#00E5CC] truncate">
+                            <span className="text-[10px] text-[#00CAE0] truncate">
                               Nhấp kéo tệp xuống Timeline hoặc kéo vùng trống để quét chọn
                             </span>
                           </div>
@@ -6540,9 +6540,9 @@ export default function App() {
                           {filteredMediaCards.length === 0 ? (
                             <div
                               onClick={() => mediaInputRef.current?.click()}
-                              className="h-40 border border-dashed border-[#383844] rounded flex flex-col items-center justify-center gap-2 text-center p-4 cursor-pointer hover:border-[#00E5CC]"
+                              className="h-40 border border-dashed border-[#383844] rounded flex flex-col items-center justify-center gap-2 text-center p-4 cursor-pointer hover:border-[#00CAE0]"
                             >
-                              <Upload className="w-6 h-6 text-[#00E5CC]" />
+                              <Upload className="w-6 h-6 text-[#00CAE0]" />
                               <span className="text-xs text-[#D4D4D8]">
                                 Bấm &ldquo;+ Nhập&rdquo; để tải nhiều file Video / Audio thật từ máy tính
                               </span>
@@ -6638,8 +6638,8 @@ export default function App() {
                                       }
                                       className={`relative aspect-video rounded overflow-hidden transition-all flex items-center justify-center ${
                                         isCardSelected
-                                          ? 'border-2 border-[#00E5CC] ring-2 ring-[#00E5CC]/40 shadow-[0_0_12px_rgba(0,229,204,0.45)]'
-                                          : 'border border-[#2E2E38] group-hover:border-[#00E5CC]'
+                                          ? 'border-2 border-[#00CAE0] ring-2 ring-[#00CAE0]/40 shadow-sm'
+                                          : 'border border-[#2E2E38] group-hover:border-[#00CAE0]'
                                       }`}
                                     >
                                       {card.type === 'folder' && (
@@ -6653,7 +6653,7 @@ export default function App() {
                                       {isCardSelected && (
                                         <span
                                           data-testid={`selected-badge-${card.id}`}
-                                          className="absolute bottom-1 left-1 w-4 h-4 rounded-full bg-[#00E5CC] text-[#071013] font-black text-[10px] flex items-center justify-center shadow pointer-events-none"
+                                          className="absolute bottom-1 left-1 w-4 h-4 rounded-full bg-[#00CAE0] text-[#071013] font-black text-[10px] flex items-center justify-center shadow pointer-events-none"
                                         >
                                           ✓
                                         </span>
@@ -6671,7 +6671,7 @@ export default function App() {
                                           e.stopPropagation();
                                           handleDeleteMediaCardsAndClips([card.id], true);
                                         }}
-                                        title="Xóa tận gốc tệp này khỏi Kho phương tiện & Timeline"
+                                        title="Xóa tệp này khỏi Kho phương tiện & Timeline"
                                         className="opacity-0 group-hover:opacity-100 absolute bottom-1 left-1 w-4 h-4 rounded-full bg-black/80 hover:bg-[#EF4444] text-white flex items-center justify-center text-[10px] transition-opacity cursor-pointer z-10"
                                       >
                                         ×
@@ -6695,7 +6695,7 @@ export default function App() {
                                             ? `Đẩy tất cả ${selectedResourceIds.length} tệp đang chọn xuống Timeline`
                                             : 'Đẩy xuống cuối Timeline'
                                         }
-                                        className="opacity-0 group-hover:opacity-100 absolute bottom-1 right-1 w-5 h-5 rounded-full bg-[#00E5CC] text-[#0A0E12] flex items-center justify-center shadow transition-opacity cursor-pointer"
+                                        className="opacity-0 group-hover:opacity-100 absolute bottom-1 right-1 w-5 h-5 rounded-full bg-[#00CAE0] text-[#0A0E12] flex items-center justify-center shadow transition-opacity cursor-pointer"
                                       >
                                         <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
                                       </button>
@@ -6704,7 +6704,7 @@ export default function App() {
                                       title={card.name}
                                       className={`mt-1 text-[10.5px] leading-tight line-clamp-2 ${
                                         isCardSelected
-                                          ? 'text-[#00E5CC] font-semibold'
+                                          ? 'text-[#00CAE0] font-semibold'
                                           : 'text-[#A1A1AA] group-hover:text-white'
                                       }`}
                                     >
@@ -6726,8 +6726,8 @@ export default function App() {
                         }`}
                       >
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <Scissors className="w-3.5 h-3.5 text-[#00E5CC] shrink-0" />
-                          <span className="text-[11px] font-semibold text-[#00E5CC] truncate">
+                          <Scissors className="w-3.5 h-3.5 text-[#00CAE0] shrink-0" />
+                          <span className="text-[11px] font-semibold text-[#00CAE0] truncate">
                             Công cụ cắt clip tự động
                           </span>
                           <span className={`text-[10px] truncate hidden xl:inline ${
@@ -6740,7 +6740,7 @@ export default function App() {
                           <button
                             type="button"
                             onClick={() => setIsSceneCutModalOpen(true)}
-                            className="px-2.5 py-1 text-[11px] font-bold bg-[#00E5CC] hover:bg-[#00F5DC] text-[#0A0E12] rounded whitespace-nowrap cursor-pointer"
+                            className="px-2.5 py-1 text-[11px] font-bold bg-[#00CAE0] hover:bg-[#00D8EE] text-[#0A0E12] rounded whitespace-nowrap cursor-pointer"
                           >
                             Bắt đầu cắt clip
                           </button>
@@ -6756,7 +6756,7 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => audioInputRef.current?.click()}
-                          className="py-2 px-2 bg-[#00E5CC] hover:bg-[#00F5DC] text-black font-semibold rounded flex items-center justify-center gap-1 cursor-pointer"
+                          className="py-2 px-2 bg-[#00CAE0] hover:bg-[#00D8EE] text-black font-semibold rounded flex items-center justify-center gap-1 cursor-pointer"
                         >
                           <Upload className="w-3.5 h-3.5" />
                           <span>Tải MP3 / WAV</span>
@@ -6773,7 +6773,7 @@ export default function App() {
                           }}
                           className="py-2 px-2 bg-[#25252E] hover:bg-[#30303C] text-white border border-[#383846] font-medium rounded flex items-center justify-center gap-1 cursor-pointer"
                         >
-                          <Volume2 className="w-3.5 h-3.5 text-[#00E5CC]" />
+                          <Volume2 className="w-3.5 h-3.5 text-[#00CAE0]" />
                           <span>Trích xuất âm thanh</span>
                         </button>
                       </div>
@@ -6795,7 +6795,7 @@ export default function App() {
                                   `Đã tách âm thanh từ "${firstVid.name}" xuống Track ♫!`
                                 );
                               }}
-                              className="text-[10px] text-[#00E5CC] hover:underline cursor-pointer"
+                              className="text-[10px] text-[#00CAE0] hover:underline cursor-pointer"
                             >
                               + Tách từ Video chính
                             </button>
@@ -6811,7 +6811,7 @@ export default function App() {
                                   setSelectedClipIds([aud.id]);
                                   setPlayheadSec(aud.startTime);
                                 }}
-                                className="p-2 rounded bg-[#22222A] border border-[#30303C] hover:border-[#00E5CC] flex items-center justify-between gap-2 cursor-pointer"
+                                className="p-2 rounded bg-[#22222A] border border-[#30303C] hover:border-[#00CAE0] flex items-center justify-between gap-2 cursor-pointer"
                               >
                                 <div className="min-w-0">
                                   <div className="font-medium text-white truncate">
@@ -6822,7 +6822,7 @@ export default function App() {
                                     {aud.duration.toFixed(1)}s · Âm lượng: {aud.volume}%
                                   </div>
                                 </div>
-                                <span className="px-2 py-0.5 text-[10px] font-mono bg-[#1F343A] text-[#00E5CC] rounded">
+                                <span className="px-2 py-0.5 text-[10px] font-mono bg-[#26272E] text-[#00CAE0] rounded">
                                   Track 1
                                 </span>
                               </div>
@@ -6843,7 +6843,7 @@ export default function App() {
                             <button
                               type="button"
                               onClick={handleSelectAllCurrentResources}
-                              className="text-[10px] text-[#00E5CC] hover:underline cursor-pointer shrink-0"
+                              className="text-[10px] text-[#00CAE0] hover:underline cursor-pointer shrink-0"
                             >
                               Chọn tất cả
                             </button>
@@ -6899,8 +6899,8 @@ export default function App() {
                                   }}
                                   className={`p-2 rounded flex items-center justify-between gap-2 cursor-grab active:cursor-grabbing transition-all ${
                                     isSfxSelected
-                                      ? 'bg-[#00E5CC]/15 border-2 border-[#00E5CC] shadow-[0_0_10px_rgba(0,229,204,0.35)]'
-                                      : 'bg-[#22222A] hover:border-[#00E5CC] border border-[#30303C]'
+                                      ? 'bg-[#00CAE0]/15 border-2 border-[#00CAE0] shadow-sm'
+                                      : 'bg-[#22222A] hover:border-[#00CAE0] border border-[#30303C]'
                                   }`}
                                 >
                                   <div className="min-w-0">
@@ -6936,7 +6936,7 @@ export default function App() {
                                           );
                                         }
                                       }}
-                                      className="px-2 py-1 text-[10px] font-semibold bg-[#00E5CC] text-black rounded cursor-pointer"
+                                      className="px-2 py-1 text-[10px] font-semibold bg-[#00CAE0] text-black rounded cursor-pointer"
                                     >
                                       + Thêm
                                     </button>
@@ -6995,7 +6995,7 @@ export default function App() {
                             setSelectedClipId(newId);
                             setSelectedClipIds([newId]);
                           }}
-                          className="py-2 px-2 bg-[#00E5CC] text-black font-semibold rounded flex items-center justify-center gap-1 cursor-grab active:cursor-grabbing"
+                          className="py-2 px-2 bg-[#00CAE0] text-black font-semibold rounded flex items-center justify-center gap-1 cursor-grab active:cursor-grabbing"
                         >
                           <Plus className="w-3.5 h-3.5" />
                           <span>Thêm / Kéo thả chữ</span>
@@ -7006,7 +7006,7 @@ export default function App() {
                           onClick={() => srtInputRef.current?.click()}
                           className="py-2 px-2 bg-[#25252E] hover:bg-[#30303C] text-white border border-[#383846] font-medium rounded flex items-center justify-center gap-1 cursor-pointer"
                         >
-                          <FileText className="w-3.5 h-3.5 text-[#00E5CC]" />
+                          <FileText className="w-3.5 h-3.5 text-[#00CAE0]" />
                           <span>Nhập file .SRT</span>
                         </button>
                       </div>
@@ -7024,7 +7024,7 @@ export default function App() {
                         <button
                           type="button"
                           onClick={handleSelectAllCurrentResources}
-                          className="text-[10px] text-[#00E5CC] hover:underline cursor-pointer shrink-0"
+                          className="text-[10px] text-[#00CAE0] hover:underline cursor-pointer shrink-0"
                         >
                           Chọn tất cả
                         </button>
@@ -7089,12 +7089,12 @@ export default function App() {
                               }}
                               className={`relative p-2.5 rounded cursor-grab active:cursor-grabbing transition-all ${
                                 isTplSelected
-                                  ? 'bg-[#00E5CC]/15 border-2 border-[#00E5CC] shadow-[0_0_10px_rgba(0,229,204,0.35)]'
-                                  : 'bg-[#22222A] hover:border-[#00E5CC] border border-[#30303C]'
+                                  ? 'bg-[#00CAE0]/15 border-2 border-[#00CAE0] shadow-sm'
+                                  : 'bg-[#22222A] hover:border-[#00CAE0] border border-[#30303C]'
                               }`}
                             >
                               <div className="flex items-center justify-between gap-1 mb-1">
-                                <span className="px-1.5 py-0.2 text-[9px] font-bold uppercase rounded bg-[#1F343A] text-[#00E5CC]">
+                                <span className="px-1.5 py-0.2 text-[9px] font-bold uppercase rounded bg-[#26272E] text-[#00CAE0]">
                                   {tpl.badge}
                                 </span>
                                 <button
@@ -7103,7 +7103,7 @@ export default function App() {
                                     e.stopPropagation();
                                     handlePushResourceIdsToTimeline([tpl.id]);
                                   }}
-                                  className="px-1.5 py-0.5 text-[9px] font-bold bg-[#00E5CC] text-[#071013] rounded cursor-pointer"
+                                  className="px-1.5 py-0.5 text-[9px] font-bold bg-[#00CAE0] text-[#071013] rounded cursor-pointer"
                                 >
                                   + Thêm
                                 </button>
@@ -7111,7 +7111,7 @@ export default function App() {
                               <div className="font-semibold text-white text-[11px] leading-snug line-clamp-2">
                                 {tpl.label}
                               </div>
-                              <div className="text-[10px] text-[#00E5CC] truncate mt-0.5">
+                              <div className="text-[10px] text-[#00CAE0] truncate mt-0.5">
                                 &ldquo;{tpl.text}&rdquo;
                               </div>
                             </div>
@@ -7125,7 +7125,7 @@ export default function App() {
                         className="p-2.5 bg-[#1E1E26] border border-[#30303E] rounded space-y-2"
                       >
                         <div className="flex items-center justify-between">
-                          <span className="font-semibold text-[#00E5CC]">
+                          <span className="font-semibold text-[#00CAE0]">
                             Phụ đề tự động (Auto Captions)
                           </span>
                         </div>
@@ -7134,7 +7134,7 @@ export default function App() {
                             type="checkbox"
                             checked={bilingualSubtitles}
                             onChange={(e) => setBilingualSubtitles(e.target.checked)}
-                            className="accent-[#00E5CC]"
+                            className="accent-[#00CAE0]"
                           />
                           <span>Phụ đề song ngữ (Bilingual Subtitles Việt - Anh)</span>
                         </label>
@@ -7143,14 +7143,14 @@ export default function App() {
                             type="checkbox"
                             checked={removeFillerWords}
                             onChange={(e) => setRemoveFillerWords(e.target.checked)}
-                            className="accent-[#00E5CC]"
+                            className="accent-[#00CAE0]"
                           />
                           <span>Xóa từ thừa &amp; khoảng lặng (Identify filler words)</span>
                         </label>
                         <button
                           type="button"
                           onClick={() => handleGenerateAutoCaptions()}
-                          className="w-full py-1.5 bg-[#00E5CC]/20 hover:bg-[#00E5CC] hover:text-black text-[#00E5CC] border border-[#00E5CC]/40 font-semibold rounded transition-colors cursor-pointer"
+                          className="w-full py-1.5 bg-[#00CAE0]/20 hover:bg-[#00CAE0] hover:text-black text-[#00CAE0] border border-[#00CAE0]/40 font-semibold rounded transition-colors cursor-pointer"
                         >
                           Tạo Phụ đề Tự động trên Timeline
                         </button>
@@ -7162,7 +7162,7 @@ export default function App() {
                           className="p-2.5 bg-[#22222A] border border-[#32323E] rounded space-y-2.5"
                         >
                           <div className="flex items-center justify-between">
-                            <span className="font-semibold text-[#00E5CC]">
+                            <span className="font-semibold text-[#00CAE0]">
                               Chỉnh sửa Phụ đề đang hiển thị
                             </span>
                             <button
@@ -7170,7 +7170,7 @@ export default function App() {
                               onClick={() =>
                                 handleSpeakSubtitleTts(activeSubtitleClip.subtitleText || '')
                               }
-                              className="px-2 py-0.5 text-[10px] font-semibold bg-[#00E5CC] text-black rounded cursor-pointer"
+                              className="px-2 py-0.5 text-[10px] font-semibold bg-[#00CAE0] text-black rounded cursor-pointer"
                             >
                               🔊 Đọc TTS
                             </button>
@@ -7288,7 +7288,7 @@ export default function App() {
                           <button
                             type="button"
                             onClick={handleSelectAllCurrentResources}
-                            className="text-[10px] text-[#00E5CC] hover:underline cursor-pointer shrink-0"
+                            className="text-[10px] text-[#00CAE0] hover:underline cursor-pointer shrink-0"
                           >
                             Chọn tất cả
                           </button>
@@ -7308,7 +7308,7 @@ export default function App() {
                                   : 'Tìm nhãn dán, mặt icon, cờ quốc gia (VD: Việt Nam, Nhật Bản, Mỹ)...'
                               }
                               aria-label="Tìm kiếm nhãn dán hoặc cờ quốc gia"
-                              className="w-full pl-6 pr-2 py-1 text-[11px] bg-[#121216] border border-[#2C2C34] focus:border-[#00E5CC] rounded text-white placeholder-[#71717A]"
+                              className="w-full pl-6 pr-2 py-1 text-[11px] bg-[#121216] border border-[#2C2C34] focus:border-[#00CAE0] rounded text-white placeholder-[#71717A]"
                             />
                           </div>
                           {stickerSearchQuery && (
@@ -7346,7 +7346,7 @@ export default function App() {
                               onClick={() => setSubCategoryFilter(pill.id)}
                               className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer ${
                                 subCategoryFilter === pill.id
-                                  ? 'bg-[#00E5CC] text-[#071013] font-bold'
+                                  ? 'bg-[#00CAE0] text-[#071013] font-bold'
                                   : 'bg-[#22222A] text-[#A1A1AA] hover:text-white border border-[#30303C]'
                               }`}
                             >
@@ -7436,7 +7436,7 @@ export default function App() {
                                         )
                                     );
                                   }
-                                  showToast('Đã gỡ nhãn dán khỏi clip!');
+                                  /* toast removed */
                                   return;
                                 }
 
@@ -7454,8 +7454,8 @@ export default function App() {
                               <div
                                 className={`relative aspect-square rounded-xl overflow-hidden border flex items-center justify-center p-2 transition-all ${
                                   isStkSelected
-                                    ? 'border-2 border-[#00E5CC] shadow-lg shadow-[#00E5CC]/20 ring-1 ring-[#00E5CC] bg-[#1E1F26]'
-                                    : 'border-[#2C2D35] bg-[#1C1D24] hover:border-[#00E5CC]/60 hover:bg-[#22232B]'
+                                    ? 'border-2 border-[#00CAE0] shadow-lg shadow-[#00CAE0]/20 ring-1 ring-[#00CAE0] bg-[#1E1F26]'
+                                    : 'border-[#2C2D35] bg-[#1C1D24] hover:border-[#00CAE0]/60 hover:bg-[#22232B]'
                                 }`}
                               >
 
@@ -7494,7 +7494,7 @@ export default function App() {
                                       handlePushResourceIdsToTimeline([stk.uid], 3, playheadSec);
                                     }}
                                     title="Thêm nhãn dán này vào Timeline"
-                                    className="absolute bottom-1.5 right-1.5 w-5 h-5 rounded-full bg-black/60 hover:bg-[#00E5CC] hover:text-black text-white flex items-center justify-center transition-colors shadow-xs z-10 cursor-pointer"
+                                    className="absolute bottom-1.5 right-1.5 w-5 h-5 rounded-full bg-black/60 hover:bg-[#00CAE0] hover:text-black text-white flex items-center justify-center transition-colors shadow-xs z-10 cursor-pointer"
                                   >
                                     <Download className="w-3 h-3" />
                                   </button>
@@ -7528,7 +7528,7 @@ export default function App() {
                         <button
                           type="button"
                           onClick={handleSelectAllCurrentResources}
-                          className="text-[10px] text-[#00E5CC] hover:underline cursor-pointer shrink-0"
+                          className="text-[10px] text-[#00CAE0] hover:underline cursor-pointer shrink-0"
                         >
                           Chọn tất cả
                         </button>
@@ -7582,8 +7582,8 @@ export default function App() {
                               <div
                                 className={`relative aspect-square rounded-xl overflow-hidden border transition-all ${
                                   isFxSelected
-                                    ? 'border-2 border-[#00E5CC] shadow-lg shadow-[#00E5CC]/25 ring-1 ring-[#00E5CC]'
-                                    : 'border-[#2C2D35] bg-[#1C1D24] hover:border-[#00E5CC]/60'
+                                    ? 'border-2 border-[#00CAE0] shadow-lg shadow-[#00CAE0]/25 ring-1 ring-[#00CAE0]'
+                                    : 'border-[#2C2D35] bg-[#1C1D24] hover:border-[#00CAE0]/60'
                                 }`}
                               >
                                 {/* Effect Visual Texture Swatch */}
@@ -7619,7 +7619,7 @@ export default function App() {
                                       );
                                     }}
                                     title="Thêm hiệu ứng này vào Timeline"
-                                    className="absolute bottom-1.5 right-1.5 w-5 h-5 rounded-full bg-black/60 hover:bg-[#00E5CC] hover:text-black text-white flex items-center justify-center transition-colors shadow-xs z-10 cursor-pointer"
+                                    className="absolute bottom-1.5 right-1.5 w-5 h-5 rounded-full bg-black/60 hover:bg-[#00CAE0] hover:text-black text-white flex items-center justify-center transition-colors shadow-xs z-10 cursor-pointer"
                                   >
                                     <Download className="w-3 h-3" />
                                   </button>
@@ -7669,7 +7669,7 @@ export default function App() {
                               `Đã áp dụng chuyển tiếp "${chosen}" (${dur}s) cho TẤT CẢ điểm cắt trên Timeline!`
                             );
                           }}
-                          className="px-2 py-1 text-[10px] font-bold bg-[#00E5CC] text-black rounded cursor-pointer shrink-0"
+                          className="px-2 py-1 text-[10px] font-bold bg-[#00CAE0] text-black rounded cursor-pointer shrink-0"
                         >
                           Áp dụng tất cả
                         </button>
@@ -7726,8 +7726,8 @@ export default function App() {
                               <div
                                 className={`relative aspect-square rounded-xl overflow-hidden border transition-all ${
                                   isTrSelected
-                                    ? 'border-2 border-[#00E5CC] shadow-lg shadow-[#00E5CC]/25 ring-1 ring-[#00E5CC]'
-                                    : 'border-[#2C2D35] bg-[#1C1D24] hover:border-[#00E5CC]/60 hover:bg-[#22232B]'
+                                    ? 'border-2 border-[#00CAE0] shadow-lg shadow-[#00CAE0]/25 ring-1 ring-[#00CAE0]'
+                                    : 'border-[#2C2D35] bg-[#1C1D24] hover:border-[#00CAE0]/60 hover:bg-[#22232B]'
                                 }`}
                               >
                                 {/* Transition Visual Gradient Swatch */}
@@ -7772,7 +7772,7 @@ export default function App() {
                                       );
                                     }}
                                     title="Áp dụng chuyển tiếp này vào điểm nối clip"
-                                    className="absolute bottom-1.5 right-1.5 w-5 h-5 rounded-full bg-black/60 hover:bg-[#00E5CC] hover:text-black text-white flex items-center justify-center transition-colors shadow-xs z-10 cursor-pointer"
+                                    className="absolute bottom-1.5 right-1.5 w-5 h-5 rounded-full bg-black/60 hover:bg-[#00CAE0] hover:text-black text-white flex items-center justify-center transition-colors shadow-xs z-10 cursor-pointer"
                                   >
                                     <Download className="w-3 h-3" />
                                   </button>
@@ -7806,9 +7806,9 @@ export default function App() {
                                 Number(e.target.value)
                               )
                             }
-                            className="flex-1 accent-[#00E5CC]"
+                            className="flex-1 accent-[#00CAE0]"
                           />
-                          <span className="font-mono text-[#00E5CC] w-10 text-right">
+                          <span className="font-mono text-[#00CAE0] w-10 text-right">
                             {(currentClip.transitionDuration ?? 0.6).toFixed(1)}s
                           </span>
                         </div>
@@ -7824,7 +7824,7 @@ export default function App() {
                         className="p-2.5 bg-[#1E1E26] border border-[#30303E] rounded space-y-2"
                       >
                         <div className="flex items-center justify-between">
-                          <span className="font-semibold text-[#00E5CC]">
+                          <span className="font-semibold text-[#00CAE0]">
                             {subCategoryFilter === 'bilingual'
                               ? 'Phụ đề Song Ngữ Việt - Anh'
                               : subCategoryFilter === 'lyrics'
@@ -7843,7 +7843,7 @@ export default function App() {
                               setBilingualSubtitles(nextVal);
                               handleGenerateAutoCaptions(undefined, nextVal, removeFillerWords);
                             }}
-                            className="accent-[#00E5CC]"
+                            className="accent-[#00CAE0]"
                           />
                           <span>Phụ đề song ngữ (Bilingual Subtitles Việt - Anh)</span>
                         </label>
@@ -7857,7 +7857,7 @@ export default function App() {
                               if (nextVal) handleRemoveDeadAirSilence();
                               handleGenerateAutoCaptions(undefined, bilingualSubtitles, nextVal);
                             }}
-                            className="accent-[#00E5CC]"
+                            className="accent-[#00CAE0]"
                           />
                           <span>Xóa từ thừa &amp; khoảng lặng (Identify filler words)</span>
                         </label>
@@ -7865,7 +7865,7 @@ export default function App() {
                           <button
                             type="button"
                             onClick={() => handleGenerateAutoCaptions()}
-                            className="py-1.5 px-2 bg-[#00E5CC] text-[#090D12] font-bold rounded cursor-pointer hover:bg-[#00F5DC] transition-colors"
+                            className="py-1.5 px-2 bg-[#00CAE0] text-[#090D12] font-bold rounded cursor-pointer hover:bg-[#00D8EE] transition-colors"
                           >
                             Tạo Phụ đề tự động
                           </button>
@@ -7907,9 +7907,9 @@ export default function App() {
                                       : c
                                   )
                                 );
-                                showToast(`Đã áp dụng kiểu chữ "${preset.name}" cho toàn bộ phụ đề!`);
+                                /* toast removed */
                               }}
-                              className="p-2 rounded bg-[#22222A] border border-[#30303C] hover:border-[#00E5CC] text-left cursor-pointer"
+                              className="p-2 rounded bg-[#22222A] border border-[#30303C] hover:border-[#00CAE0] text-left cursor-pointer"
                             >
                               <div
                                 style={{ color: preset.color }}
@@ -7934,7 +7934,7 @@ export default function App() {
                           <button
                             type="button"
                             onClick={handleSelectAllCurrentResources}
-                            className="text-[10px] text-[#00E5CC] hover:underline cursor-pointer"
+                            className="text-[10px] text-[#00CAE0] hover:underline cursor-pointer"
                           >
                             Chọn tất cả
                           </button>
@@ -7959,8 +7959,8 @@ export default function App() {
                                 }}
                                 className={`p-2 rounded border flex items-center justify-between gap-2 cursor-pointer ${
                                   isSubSelected
-                                    ? 'bg-[#00E5CC]/15 border-[#00E5CC] text-white'
-                                    : 'bg-[#22222A] border-[#30303C] text-[#D4D4D8] hover:border-[#00E5CC]/50'
+                                    ? 'bg-[#00CAE0]/15 border-[#00CAE0] text-white'
+                                    : 'bg-[#22222A] border-[#30303C] text-[#D4D4D8] hover:border-[#00CAE0]/50'
                                 }`}
                               >
                                 <div className="min-w-0">
@@ -7977,7 +7977,7 @@ export default function App() {
                                     e.stopPropagation();
                                     handleSpeakSubtitleTts(sub.subtitleText || sub.name);
                                   }}
-                                  className="px-2 py-0.5 text-[10px] bg-[#2D2D38] hover:bg-[#00E5CC] hover:text-black rounded cursor-pointer shrink-0"
+                                  className="px-2 py-0.5 text-[10px] bg-[#2D2D38] hover:bg-[#00CAE0] hover:text-black rounded cursor-pointer shrink-0"
                                 >
                                   🔊 TTS
                                 </button>
@@ -8004,7 +8004,7 @@ export default function App() {
                         <button
                           type="button"
                           onClick={handleSelectAllCurrentResources}
-                          className="text-[10px] text-[#00E5CC] hover:underline cursor-pointer shrink-0"
+                          className="text-[10px] text-[#00CAE0] hover:underline cursor-pointer shrink-0"
                         >
                           Chọn tất cả
                         </button>
@@ -8053,8 +8053,8 @@ export default function App() {
                               }}
                               className={`p-2.5 rounded border text-left transition-all cursor-grab active:cursor-grabbing ${
                                 isLutSelected
-                                  ? 'bg-[#00E5CC]/15 border-2 border-[#00E5CC] text-[#00E5CC] font-semibold'
-                                  : 'bg-[#22222A] border-[#30303C] text-[#D4D4D8] hover:border-[#00E5CC]/50'
+                                  ? 'bg-[#00CAE0]/15 border-2 border-[#00CAE0] text-[#00CAE0] font-semibold'
+                                  : 'bg-[#22222A] border-[#30303C] text-[#D4D4D8] hover:border-[#00CAE0]/50'
                               }`}
                             >
                               <div
@@ -8096,7 +8096,7 @@ export default function App() {
                               lutName: 'None',
                             })
                           }
-                          className="text-[10px] text-[#00E5CC] hover:underline cursor-pointer"
+                          className="text-[10px] text-[#00CAE0] hover:underline cursor-pointer"
                         >
                           Đặt lại
                         </button>
@@ -8123,9 +8123,9 @@ export default function App() {
                             playheadSec
                           )
                         }
-                        className="p-2 bg-[#1D2D35] border border-[#00E5CC]/50 rounded flex items-center justify-between cursor-grab active:cursor-grabbing"
+                        className="p-2 bg-[#1D2D35] border border-[#00CAE0]/50 rounded flex items-center justify-between cursor-grab active:cursor-grabbing"
                       >
-                        <span className="font-semibold text-[#00E5CC]">
+                        <span className="font-semibold text-[#00CAE0]">
                           + Kéo thả Lớp Điều Chỉnh (Adjustment Layer) vào Timeline
                         </span>
                         <span className="text-[10px] font-mono text-white">5.0s</span>
@@ -8158,12 +8158,12 @@ export default function App() {
                                   vignette: cube.v,
                                   lutName: cube.name,
                                 });
-                                showToast(`Đã nạp 3D LUT "${cube.name}" vào Lớp Điều Chỉnh!`);
+                                /* toast removed */
                               }}
                               className={`p-2 rounded border text-left cursor-pointer ${
                                 globalAdjustments.lutName === cube.name
-                                  ? 'bg-[#00E5CC]/15 border-[#00E5CC] text-[#00E5CC] font-semibold'
-                                  : 'bg-[#22222A] border-[#30303C] text-[#D4D4D8] hover:border-[#00E5CC]'
+                                  ? 'bg-[#00CAE0]/15 border-[#00CAE0] text-[#00CAE0] font-semibold'
+                                  : 'bg-[#22222A] border-[#30303C] text-[#D4D4D8] hover:border-[#00CAE0]'
                               }`}
                             >
                               <div className="text-[11px] leading-snug line-clamp-2 font-medium">
@@ -8200,14 +8200,14 @@ export default function App() {
                                   warmth: hslPreset.w,
                                   vignette: hslPreset.v,
                                 }));
-                                showToast(`Đã áp dụng chuẩn màu HSL: ${hslPreset.name}`);
+                                /* toast removed */
                               }}
-                              className="p-2 rounded border bg-[#22222A] border-[#30303C] text-[#D4D4D8] hover:border-[#00E5CC] text-left cursor-pointer"
+                              className="p-2 rounded border bg-[#22222A] border-[#30303C] text-[#D4D4D8] hover:border-[#00CAE0] text-left cursor-pointer"
                             >
                               <div className="text-[11px] leading-snug line-clamp-2 font-medium text-white">
                                 🌈 {hslPreset.name}
                               </div>
-                              <div className="text-[9.5px] text-[#00E5CC] mt-0.5">
+                              <div className="text-[9.5px] text-[#00CAE0] mt-0.5">
                                 Nhấp để áp dụng chuẩn màu
                               </div>
                             </button>
@@ -8242,7 +8242,7 @@ export default function App() {
                                 [slider.key]: Number(e.target.value),
                               }));
                             }}
-                            className="flex-1 min-w-0 accent-[#00E5CC]"
+                            className="flex-1 min-w-0 accent-[#00CAE0]"
                           />
                           <NumericBoxWithSteppers
                             value={globalAdjustments[slider.key]}
@@ -8274,7 +8274,7 @@ export default function App() {
                         width: `${Math.abs(resourceMarqueeBox.currX - resourceMarqueeBox.startX)}px`,
                         height: `${Math.abs(resourceMarqueeBox.currY - resourceMarqueeBox.startY)}px`,
                       }}
-                      className="absolute pointer-events-none z-50 border border-[#00E5CC] bg-[#00E5CC]/15 rounded-xs shadow-[0_0_8px_rgba(0,229,204,0.35)]"
+                      className="absolute pointer-events-none z-50 border border-[#00CAE0] bg-[#00CAE0]/15 rounded-xs shadow-sm"
                     />
                   )}
 
@@ -8285,7 +8285,7 @@ export default function App() {
                         left: `${resourceTimelineDragGhost.x + 12}px`,
                         top: `${resourceTimelineDragGhost.y + 12}px`,
                       }}
-                      className="fixed pointer-events-none z-50 px-2.5 py-1 rounded bg-[#00E5CC] text-[#071013] font-bold text-xs shadow-lg border border-white/40"
+                      className="fixed pointer-events-none z-50 px-2.5 py-1 rounded bg-[#00CAE0] text-[#071013] font-bold text-xs shadow-lg border border-white/40"
                     >
                       ⤓ {resourceTimelineDragGhost.label}
                     </div>
@@ -8357,7 +8357,7 @@ export default function App() {
                 onPreviewQualityChange={setPreviewQuality}
                 onJumpToTimecode={(sec) => {
                   setPlayheadSec(sec);
-                  showToast(`Đã nhảy Playhead tới mốc ${sec.toFixed(2)}s`);
+                  /* toast removed */
                 }}
                 onSelectClipFromCanvas={(clipId) => {
                   setSelectedClipId(clipId);
@@ -8544,7 +8544,7 @@ export default function App() {
                   <div className={`flex items-center justify-between px-3 h-8 border-b ${
                     themeMode === 'light' ? 'border-[#E2E8F0] bg-[#F8FAFC]' : 'border-[#2B2B30] bg-[#141418]'
                   }`}>
-                    <span className="font-semibold text-[#00E5CC]">Chi tiết</span>
+                    <span className="font-semibold text-[#00CAE0]">Chi tiết</span>
                     {currentClip && (
                       <button
                         type="button"
@@ -8578,13 +8578,13 @@ export default function App() {
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                       <span className={themeMode === 'light' ? 'text-[#64748B]' : 'text-[#71717A]'}>Proxy (Chống giật):</span>
-                      <span className="col-span-2 font-mono text-[#00E5CC]">
+                      <span className="col-span-2 font-mono text-[#00CAE0]">
                         {proxyEnabled ? 'Đã bật (540P H.264)' : 'Đã tắt'}
                       </span>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                       <span className={themeMode === 'light' ? 'text-[#64748B]' : 'text-[#71717A]'}>Số clip Timeline:</span>
-                      <span className="col-span-2 font-mono text-[#00E5CC]">
+                      <span className="col-span-2 font-mono text-[#00CAE0]">
                         {videoClipsCount} video · {clips.filter((c) => c.trackIndex === 1).length}{' '}
                         audio · {clips.filter((c) => c.trackIndex === 2).length} text
                       </span>
@@ -8605,7 +8605,7 @@ export default function App() {
                             setProjectColorSpace((cs) =>
                               cs === 'Rec.709 SDR' ? 'Rec.2020 HDR' : 'Rec.709 SDR'
                             );
-                            showToast('Đã cập nhật cấu hình Proxy & Không gian màu dự án!');
+                            /* toast removed */
                           }}
                           className={`flex-1 py-1.5 px-3 rounded font-medium cursor-pointer border ${
                             themeMode === 'light'
@@ -8637,7 +8637,7 @@ export default function App() {
                   <div className={`flex items-center justify-between px-3 h-8 border-b shrink-0 ${
                     themeMode === 'light' ? 'bg-[#F8FAFC] border-[#E2E8F0]' : 'bg-[#141418] border-[#2B2B30]'
                   }`}>
-                    <span className="font-semibold text-[#00E5CC]">Văn bản (Text Inspector)</span>
+                    <span className="font-semibold text-[#00CAE0]">Văn bản (Text Inspector)</span>
                     <span className={`text-[10px] font-mono truncate max-w-28 ${
                       themeMode === 'light' ? 'text-[#64748B]' : 'text-[#9CA3AF]'
                     }`}>
@@ -8664,7 +8664,7 @@ export default function App() {
                           textSubTab === st.id
                             ? themeMode === 'light'
                               ? 'bg-white text-[#0F766E] font-semibold shadow-xs border border-[#5EEAD4]'
-                              : 'bg-[#26262F] text-[#00E5CC] font-semibold'
+                              : 'bg-[#26262F] text-[#00CAE0] font-semibold'
                             : themeMode === 'light'
                             ? 'text-[#64748B] hover:text-[#0F172A]'
                             : 'text-[#8E8E93] hover:text-white'
@@ -8693,7 +8693,7 @@ export default function App() {
                                 )
                               );
                             }}
-                            className="w-full px-2.5 py-1.5 bg-[#121216] border border-[#343440] focus:border-[#00E5CC] rounded text-white resize-none"
+                            className="w-full px-2.5 py-1.5 bg-[#121216] border border-[#343440] focus:border-[#00CAE0] rounded text-white resize-none"
                           />
                         </div>
 
@@ -8723,7 +8723,7 @@ export default function App() {
                             onChange={(e) =>
                               updateSelectedClipProp('fontSize', Number(e.target.value))
                             }
-                            className="flex-1 min-w-0 accent-[#00E5CC] h-1"
+                            className="flex-1 min-w-0 accent-[#00CAE0] h-1"
                           />
                           <NumericBoxWithSteppers
                             value={currentClip.fontSize ?? 28}
@@ -8771,7 +8771,7 @@ export default function App() {
                             onChange={(e) =>
                               updateSelectedClipProp('textCurveDeg', Number(e.target.value))
                             }
-                            className="flex-1 min-w-0 accent-[#00E5CC] h-1"
+                            className="flex-1 min-w-0 accent-[#00CAE0] h-1"
                           />
                           <NumericBoxWithSteppers
                             value={currentClip.textCurveDeg ?? 0}
@@ -8828,9 +8828,9 @@ export default function App() {
                                   : c
                               )
                             );
-                            showToast('Đã đồng bộ kiểu chữ cho toàn bộ phụ đề trên Timeline!');
+                            /* toast removed */
                           }}
-                          className="w-full py-1.5 px-2 bg-[#00E5CC]/15 hover:bg-[#00E5CC] hover:text-black text-[#00E5CC] border border-[#00E5CC]/40 font-semibold rounded transition-colors cursor-pointer"
+                          className="w-full py-1.5 px-2 bg-[#00CAE0]/15 hover:bg-[#00CAE0] hover:text-black text-[#00CAE0] border border-[#00CAE0]/40 font-semibold rounded transition-colors cursor-pointer"
                         >
                           Áp dụng cho tất cả phụ đề (Apply to All)
                         </button>
@@ -8844,7 +8844,7 @@ export default function App() {
                           {[
                             { label: 'Không nền', bg: '' },
                             { label: 'Hộp Đen Mờ', bg: 'rgba(0,0,0,0.65)' },
-                            { label: 'Bong bóng Cyan', bg: '#00E5CC' },
+                            { label: 'Bong bóng Cyan', bg: '#00CAE0' },
                             { label: 'Bong bóng Đỏ Viral', bg: '#EF4444' },
                             { label: 'Nhãn Vàng Cinema', bg: '#F59E0B' },
                             { label: 'Tím Cyberpunk', bg: '#7C3AED' },
@@ -8855,7 +8855,7 @@ export default function App() {
                               onClick={() => updateSelectedClipProp('textBgColor', b.bg)}
                               className={`p-2 rounded border text-left cursor-pointer ${
                                 (currentClip.textBgColor || '') === b.bg
-                                  ? 'bg-[#00E5CC]/15 border-[#00E5CC] text-[#00E5CC] font-semibold'
+                                  ? 'bg-[#00CAE0]/15 border-[#00CAE0] text-[#00CAE0] font-semibold'
                                   : 'bg-[#222228] border-[#30303A] text-[#D4D4D8]'
                               }`}
                             >
@@ -8873,7 +8873,7 @@ export default function App() {
                           {[
                             { label: 'Trắng Viền Đen', color: '#FFFFFF', stroke: '#000000', shadow: '#000000' },
                             { label: 'Vàng Điện Ảnh', color: '#FACC15', stroke: '#000000', shadow: '#78350F' },
-                            { label: 'Neon Cyan Glow', color: '#00E5CC', stroke: '#042F2E', shadow: '#00E5CC' },
+                            { label: 'Neon Cyan Glow', color: '#00CAE0', stroke: '#042F2E', shadow: '#00CAE0' },
                             { label: 'Hồng Cyberpunk', color: '#F472B6', stroke: '#500724', shadow: '#EC4899' },
                           ].map((preset) => (
                             <button
@@ -8893,7 +8893,7 @@ export default function App() {
                                   )
                                 );
                               }}
-                              className="p-2 rounded border bg-[#222228] border-[#30303A] hover:border-[#00E5CC] text-left cursor-pointer"
+                              className="p-2 rounded border bg-[#222228] border-[#30303A] hover:border-[#00CAE0] text-left cursor-pointer"
                             >
                               <span style={{ color: preset.color }} className="font-bold">
                                 {preset.label}
@@ -8928,7 +8928,7 @@ export default function App() {
                                 }}
                                 className={`p-1.5 rounded border text-center cursor-pointer ${
                                   (currentClip.animIn || currentClip.animationIn || 'none') === anim.id
-                                    ? 'bg-[#00E5CC]/15 border-[#00E5CC] text-[#00E5CC] font-semibold'
+                                    ? 'bg-[#00CAE0]/15 border-[#00CAE0] text-[#00CAE0] font-semibold'
                                     : 'bg-[#222228] border-[#30303A] text-[#D4D4D8]'
                                 }`}
                               >
@@ -8948,7 +8948,7 @@ export default function App() {
                           onClick={() =>
                             handleSpeakSubtitleTts(currentClip.subtitleText || currentClip.name)
                           }
-                          className="w-full py-2 px-3 bg-[#00E5CC] text-[#090D12] font-bold rounded cursor-pointer"
+                          className="w-full py-2 px-3 bg-[#00CAE0] text-[#090D12] font-bold rounded cursor-pointer"
                         >
                           🔊 Đọc Phụ đề (Text-to-Speech)
                         </button>
@@ -8978,8 +8978,8 @@ export default function App() {
                         className={`px-1.5 py-1 text-[10.5px] font-medium whitespace-nowrap transition-colors cursor-pointer ${
                           inspectorTab === t.id
                             ? themeMode === 'light'
-                              ? 'text-[#0F766E] border-b-2 border-[#00D2C4] font-semibold'
-                              : 'text-[#00E5CC] border-b-2 border-[#00E5CC]'
+                              ? 'text-[#0F766E] border-b-2 border-[#00B8CE] font-semibold'
+                              : 'text-[#00CAE0] border-b-2 border-[#00CAE0]'
                             : themeMode === 'light'
                             ? 'text-[#64748B] hover:text-[#0F172A]'
                             : 'text-[#9CA3AF] hover:text-white'
@@ -9033,12 +9033,12 @@ export default function App() {
                                 data-testid="sticker-inspector-editor"
                                 className={`p-2.5 rounded space-y-2 border ${
                                   themeMode === 'light'
-                                    ? 'bg-[#F8FAFC] border-[#00D2C4]/50'
-                                    : 'bg-[#121921] border-[#00E5CC]/45'
+                                    ? 'bg-[#F8FAFC] border-[#00B8CE]/50'
+                                    : 'bg-[#121921] border-[#00CAE0]/45'
                                 }`}
                               >
                                 <div className="flex items-center justify-between">
-                                  <span className="font-semibold text-[#00E5CC] flex items-center gap-1.5">
+                                  <span className="font-semibold text-[#00CAE0] flex items-center gap-1.5">
                                     {extractFlagIsoCode(currentClip.stickerEmoji) ? (
                                       <img
                                         src={getFlagGraphicDataUrl(extractFlagIsoCode(currentClip.stickerEmoji)!)}
@@ -9050,7 +9050,7 @@ export default function App() {
                                         {currentClip.stickerEmoji}
                                       </span>
                                     )}
-                                    <span className={themeMode === 'light' ? 'text-[#0F172A]' : 'text-[#00E5CC]'}>
+                                    <span className={themeMode === 'light' ? 'text-[#0F172A]' : 'text-[#00CAE0]'}>
                                       Chỉnh sửa Nhãn dán &amp; Biểu tượng
                                     </span>
                                   </span>
@@ -9093,7 +9093,7 @@ export default function App() {
                                     className={`w-full px-2 py-1 text-[11px] rounded border ${
                                       themeMode === 'light'
                                         ? 'bg-white border-[#CBD5E1] text-[#0F172A] placeholder-[#94A3B8]'
-                                        : 'bg-[#1D242E] border-[#324152] focus:border-[#00E5CC] text-white placeholder-[#71717A]'
+                                        : 'bg-[#1D242E] border-[#324152] focus:border-[#00CAE0] text-white placeholder-[#71717A]'
                                     }`}
                                   />
                                 </div>
@@ -9115,7 +9115,7 @@ export default function App() {
                                     className={`w-full px-2 py-1 text-[11px] rounded border ${
                                       themeMode === 'light'
                                         ? 'bg-white border-[#CBD5E1] text-[#0F172A] placeholder-[#94A3B8]'
-                                        : 'bg-[#1D242E] border-[#324152] focus:border-[#00E5CC] text-white placeholder-[#71717A]'
+                                        : 'bg-[#1D242E] border-[#324152] focus:border-[#00CAE0] text-white placeholder-[#71717A]'
                                     }`}
                                   />
                                 </div>
@@ -9180,7 +9180,7 @@ export default function App() {
                                       );
                                       updateSelectedClipProp('scale', nextScale);
                                     }}
-                                    className="py-1 px-1.5 bg-[#222B38] hover:bg-[#2D3A4B] text-[#00E5CC] rounded text-[10px] font-semibold cursor-pointer"
+                                    className="py-1 px-1.5 bg-[#222B38] hover:bg-[#2D3A4B] text-[#00CAE0] rounded text-[10px] font-semibold cursor-pointer"
                                     title="Phóng to nhãn dán (+20%)"
                                   >
                                     + Phóng to
@@ -9205,7 +9205,7 @@ export default function App() {
                                     }
                                     className={`py-1 px-1.5 rounded text-[10px] font-semibold cursor-pointer ${
                                       currentClip.flipH
-                                        ? 'bg-[#00E5CC] text-[#071013]'
+                                        ? 'bg-[#00CAE0] text-[#071013]'
                                         : 'bg-[#222B38] hover:bg-[#2D3A4B] text-white'
                                     }`}
                                     title="Phản chiếu / Lật ngang (Flip Horizontal)"
@@ -9220,7 +9220,7 @@ export default function App() {
                                     }
                                     className={`py-1 px-1.5 rounded text-[10px] font-semibold cursor-pointer ${
                                       currentClip.flipV
-                                        ? 'bg-[#00E5CC] text-[#071013]'
+                                        ? 'bg-[#00CAE0] text-[#071013]'
                                         : 'bg-[#222B38] hover:bg-[#2D3A4B] text-white'
                                     }`}
                                     title="Phản chiếu / Lật dọc (Flip Vertical)"
@@ -9268,8 +9268,8 @@ export default function App() {
                                   onClick={() => handleToggleKeyframe('Biến đổi (Transform)')}
                                   className={`cursor-pointer ${
                                     (currentClip.keyframes?.length || 0) > 0
-                                      ? 'text-[#00E5CC]'
-                                      : 'hover:text-[#00E5CC]'
+                                      ? 'text-[#00CAE0]'
+                                      : 'hover:text-[#00CAE0]'
                                   }`}
                                 >
                                   <Diamond className="w-3.5 h-3.5 fill-current" />
@@ -9303,7 +9303,7 @@ export default function App() {
                                       )
                                     );
                                   }}
-                                  className="flex-1 min-w-0 accent-[#00E5CC] h-1"
+                                  className="flex-1 min-w-0 accent-[#00CAE0] h-1"
                                 />
                                 <NumericBoxWithSteppers
                                   value={currentClip.scale ?? 100}
@@ -9333,7 +9333,7 @@ export default function App() {
                                   type="button"
                                   title="Keyframe Tỷ lệ (Scale)"
                                   onClick={() => handleToggleKeyframe('Tỷ lệ (Scale)')}
-                                  className="text-[#71717A] hover:text-[#00E5CC] cursor-pointer shrink-0"
+                                  className="text-[#71717A] hover:text-[#00CAE0] cursor-pointer shrink-0"
                                 >
                                   <Diamond className="w-3 h-3" />
                                 </button>
@@ -9351,7 +9351,7 @@ export default function App() {
                                     onChange={(e) =>
                                       updateSelectedClipProp('scaleX', Number(e.target.value))
                                     }
-                                    className="flex-1 min-w-0 accent-[#00E5CC] h-1"
+                                    className="flex-1 min-w-0 accent-[#00CAE0] h-1"
                                   />
                                   <NumericBoxWithSteppers
                                     value={currentClip.scaleX ?? currentClip.scale ?? 100}
@@ -9375,7 +9375,7 @@ export default function App() {
                                     onChange={(e) =>
                                       updateSelectedClipProp('scaleY', Number(e.target.value))
                                     }
-                                    className="flex-1 min-w-0 accent-[#00E5CC] h-1"
+                                    className="flex-1 min-w-0 accent-[#00CAE0] h-1"
                                   />
                                   <NumericBoxWithSteppers
                                     value={currentClip.scaleY ?? currentClip.scale ?? 100}
@@ -9413,7 +9413,7 @@ export default function App() {
                                 }}
                                 className={`w-8 h-4 rounded-full relative transition-colors cursor-pointer ${
                                   (currentClip.uniformScale ?? true)
-                                    ? 'bg-[#00E5CC]'
+                                    ? 'bg-[#00CAE0]'
                                     : 'bg-[#3A3A44]'
                                 }`}
                               >
@@ -9456,7 +9456,7 @@ export default function App() {
                                 type="button"
                                 title="Keyframe Vị trí (Position)"
                                 onClick={() => handleToggleKeyframe('Vị trí (X, Y)')}
-                                className="text-[#71717A] hover:text-[#00E5CC] cursor-pointer"
+                                className="text-[#71717A] hover:text-[#00CAE0] cursor-pointer"
                               >
                                 <Diamond className="w-3 h-3" />
                               </button>
@@ -9485,7 +9485,7 @@ export default function App() {
                                     )
                                   }
                                   title="Xoay nhanh +90°"
-                                  className="px-2 py-0.5 rounded bg-[#24242C] border border-[#383844] hover:border-[#00E5CC] flex items-center gap-1 text-[10px] text-[#00E5CC] cursor-pointer"
+                                  className="px-2 py-0.5 rounded bg-[#24242C] border border-[#383844] hover:border-[#00CAE0] flex items-center gap-1 text-[10px] text-[#00CAE0] cursor-pointer"
                                 >
                                   <RotateCw className="w-3 h-3" />
                                   <span>+90°</span>
@@ -9495,7 +9495,7 @@ export default function App() {
                                 type="button"
                                 title="Keyframe Xoay (Rotation)"
                                 onClick={() => handleToggleKeyframe('Góc xoay')}
-                                className="text-[#71717A] hover:text-[#00E5CC] cursor-pointer"
+                                className="text-[#71717A] hover:text-[#00CAE0] cursor-pointer"
                               >
                                 <Diamond className="w-3 h-3" />
                               </button>
@@ -9560,7 +9560,7 @@ export default function App() {
                                 title="Lật ngang (Mirror)"
                                 className={`p-1 rounded cursor-pointer ${
                                   currentClip.flipH
-                                    ? 'text-[#00E5CC] bg-[#00E5CC]/10'
+                                    ? 'text-[#00CAE0] bg-[#00CAE0]/10'
                                     : 'text-[#A1A1AA] hover:text-white'
                                 }`}
                               >
@@ -9574,7 +9574,7 @@ export default function App() {
                                 title="Lật dọc"
                                 className={`p-1 rounded cursor-pointer ${
                                   currentClip.flipV
-                                    ? 'text-[#00E5CC] bg-[#00E5CC]/10'
+                                    ? 'text-[#00CAE0] bg-[#00CAE0]/10'
                                     : 'text-[#A1A1AA] hover:text-white'
                                 }`}
                               >
@@ -9635,7 +9635,7 @@ export default function App() {
                                     }
                                     updateSelectedClipProp('opacity', val);
                                   }}
-                                  className="flex-1 min-w-0 accent-[#00E5CC] h-1"
+                                  className="flex-1 min-w-0 accent-[#00CAE0] h-1"
                                 />
                                 <NumericBoxWithSteppers
                                   value={
@@ -9662,25 +9662,25 @@ export default function App() {
                                   type="button"
                                   title="Keyframe Độ hòa trộn"
                                   onClick={() => handleToggleKeyframe('Hòa trộn')}
-                                  className="text-[#71717A] hover:text-[#00E5CC] cursor-pointer shrink-0"
+                                  className="text-[#71717A] hover:text-[#00CAE0] cursor-pointer shrink-0"
                                 >
                                   <Diamond className="w-3 h-3" />
                                 </button>
                               </div>
 
-                              {/* Độ mờ đục (Opacity) tiêu chuẩn */}
+                              {/* Độ hiển thị (Opacity) tiêu chuẩn */}
                               <div className="flex items-center justify-between gap-1.5">
-                                <span className="text-[#A1A1AA] w-20 shrink-0 text-[11px]">Độ mờ đục</span>
+                                <span className="text-[#A1A1AA] w-20 shrink-0 text-[11px]">Độ hiển thị</span>
                                 <input
                                   type="range"
-                                  aria-label="Độ mờ đục Opacity"
+                                  aria-label="Độ hiển thị Opacity"
                                   min={0}
                                   max={100}
                                   value={currentClip.opacity ?? 100}
                                   onChange={(e) =>
                                     updateSelectedClipProp('opacity', Number(e.target.value))
                                   }
-                                  className="flex-1 min-w-0 accent-[#00E5CC] h-1"
+                                  className="flex-1 min-w-0 accent-[#00CAE0] h-1"
                                 />
                                 <NumericBoxWithSteppers
                                   value={currentClip.opacity ?? 100}
@@ -9689,14 +9689,14 @@ export default function App() {
                                   step={1}
                                   unit="%"
                                   widthClass="w-16"
-                                  ariaLabel="Số Độ mờ đục Opacity"
+                                  ariaLabel="Số Độ hiển thị Opacity"
                                   onChange={(val) => updateSelectedClipProp('opacity', val)}
                                 />
                                 <button
                                   type="button"
-                                  title="Keyframe Độ mờ đục (Opacity)"
-                                  onClick={() => handleToggleKeyframe('Độ mờ đục (Opacity)')}
-                                  className="text-[#71717A] hover:text-[#00E5CC] cursor-pointer shrink-0"
+                                  title="Keyframe Độ hiển thị (Opacity)"
+                                  onClick={() => handleToggleKeyframe('Độ hiển thị (Opacity)')}
+                                  className="text-[#71717A] hover:text-[#00CAE0] cursor-pointer shrink-0"
                                 >
                                   <Diamond className="w-3 h-3" />
                                 </button>
@@ -9758,7 +9758,7 @@ export default function App() {
                                         )
                                       );
                                     }}
-                                    className="accent-[#00E5CC]"
+                                    className="accent-[#00CAE0]"
                                   />
                                 </label>
                                 {(currentClip.relightEnabled ||
@@ -9827,7 +9827,7 @@ export default function App() {
                                       )
                                     );
                                   }}
-                                  className="flex-1 min-w-0 accent-[#00E5CC] h-1"
+                                  className="flex-1 min-w-0 accent-[#00CAE0] h-1"
                                 />
                                 <NumericBoxWithSteppers
                                   value={
@@ -9870,7 +9870,7 @@ export default function App() {
                                 onChange={(e) =>
                                   updateSelectedClipProp('removeBg', e.target.checked)
                                 }
-                                className="accent-[#00E5CC]"
+                                className="accent-[#00CAE0]"
                               />
                             </label>
                             {currentClip.removeBg && (
@@ -9900,7 +9900,7 @@ export default function App() {
                                 onChange={(e) =>
                                   updateSelectedClipProp('autoCutout', e.target.checked)
                                 }
-                                className="accent-[#00E5CC]"
+                                className="accent-[#00CAE0]"
                               />
                             </label>
 
@@ -9912,7 +9912,7 @@ export default function App() {
                                 onChange={(e) =>
                                   updateSelectedClipProp('blurBg', e.target.checked)
                                 }
-                                className="accent-[#00E5CC]"
+                                className="accent-[#00CAE0]"
                               />
                             </label>
                           </div>
@@ -9938,7 +9938,7 @@ export default function App() {
                                   onClick={() => updateSelectedClipProp('maskType', m.id)}
                                   className={`p-2 rounded border text-center cursor-pointer ${
                                     (currentClip.maskType || 'none') === m.id
-                                      ? 'bg-[#00E5CC]/15 border-[#00E5CC] text-[#00E5CC] font-semibold'
+                                      ? 'bg-[#00CAE0]/15 border-[#00CAE0] text-[#00CAE0] font-semibold'
                                       : 'bg-[#222228] border-[#30303A] text-[#D4D4D8]'
                                   }`}
                                 >
@@ -9956,7 +9956,7 @@ export default function App() {
                                   onChange={(e) =>
                                     updateSelectedClipProp('maskInvert', e.target.checked)
                                   }
-                                  className="accent-[#00E5CC]"
+                                  className="accent-[#00CAE0]"
                                 />
                               </label>
                             )}
@@ -9987,7 +9987,7 @@ export default function App() {
                                   onChange={(e) =>
                                     updateSelectedClipProp(rt.key, Number(e.target.value))
                                   }
-                                  className="flex-1 min-w-0 accent-[#00E5CC] h-1"
+                                  className="flex-1 min-w-0 accent-[#00CAE0] h-1"
                                 />
                                 <NumericBoxWithSteppers
                                   value={(currentClip[rt.key] as number) ?? 0}
@@ -10020,7 +10020,7 @@ export default function App() {
                             onChange={(e) =>
                               updateSelectedClipProp('volume', Number(e.target.value))
                             }
-                            className="flex-1 min-w-0 accent-[#00E5CC] h-1"
+                            className="flex-1 min-w-0 accent-[#00CAE0] h-1"
                           />
                           <NumericBoxWithSteppers
                             value={currentClip.volume}
@@ -10036,7 +10036,7 @@ export default function App() {
                             type="button"
                             title="Keyframe Âm lượng (Volume)"
                             onClick={() => handleToggleKeyframe('Âm lượng')}
-                            className="text-[#71717A] hover:text-[#00E5CC] cursor-pointer shrink-0"
+                            className="text-[#71717A] hover:text-[#00CAE0] cursor-pointer shrink-0"
                           >
                             <Diamond className="w-3 h-3" />
                           </button>
@@ -10053,7 +10053,7 @@ export default function App() {
                             onChange={(e) =>
                               updateSelectedClipProp('fadeIn', Number(e.target.value))
                             }
-                            className="flex-1 min-w-0 accent-[#00E5CC] h-1"
+                            className="flex-1 min-w-0 accent-[#00CAE0] h-1"
                           />
                           <NumericBoxWithSteppers
                             value={currentClip.fadeIn ?? 0}
@@ -10078,7 +10078,7 @@ export default function App() {
                             onChange={(e) =>
                               updateSelectedClipProp('fadeOut', Number(e.target.value))
                             }
-                            className="flex-1 min-w-0 accent-[#00E5CC] h-1"
+                            className="flex-1 min-w-0 accent-[#00CAE0] h-1"
                           />
                           <NumericBoxWithSteppers
                             value={currentClip.fadeOut ?? 0}
@@ -10100,7 +10100,7 @@ export default function App() {
                             onChange={(e) =>
                               updateSelectedClipProp('loudnessNormalize', e.target.checked)
                             }
-                            className="accent-[#00E5CC]"
+                            className="accent-[#00CAE0]"
                           />
                         </label>
 
@@ -10112,7 +10112,7 @@ export default function App() {
                             onChange={(e) =>
                               updateSelectedClipProp('noiseReduction', e.target.checked)
                             }
-                            className="accent-[#00E5CC]"
+                            className="accent-[#00CAE0]"
                           />
                         </label>
 
@@ -10124,7 +10124,7 @@ export default function App() {
                             onChange={(e) =>
                               updateSelectedClipProp('audioDucking', e.target.checked)
                             }
-                            className="accent-[#00E5CC]"
+                            className="accent-[#00CAE0]"
                           />
                         </label>
 
@@ -10217,7 +10217,7 @@ export default function App() {
                                 onChange={(e) =>
                                   updateSelectedClipProp('speed', Number(e.target.value))
                                 }
-                                className="flex-1 min-w-0 accent-[#00E5CC] h-1"
+                                className="flex-1 min-w-0 accent-[#00CAE0] h-1"
                               />
                               <NumericBoxWithSteppers
                                 value={currentClip.speed}
@@ -10239,7 +10239,7 @@ export default function App() {
                                   onClick={() => updateSelectedClipProp('speed', spd)}
                                   className={`py-1 rounded font-mono text-[11px] cursor-pointer ${
                                     Math.abs(currentClip.speed - spd) < 0.02
-                                      ? 'bg-[#00E5CC] text-[#090D12] font-bold'
+                                      ? 'bg-[#00CAE0] text-[#090D12] font-bold'
                                       : 'bg-[#222228] text-[#D4D4D8]'
                                   }`}
                                 >
@@ -10256,7 +10256,7 @@ export default function App() {
                                 onChange={(e) =>
                                   updateSelectedClipProp('keepPitch', e.target.checked)
                                 }
-                                className="accent-[#00E5CC]"
+                                className="accent-[#00CAE0]"
                               />
                             </label>
 
@@ -10306,11 +10306,11 @@ export default function App() {
                                   type="button"
                                   onClick={() => {
                                     updateSelectedClipProp('speedCurve', preset.id);
-                                    showToast(`Đã áp dụng đường cong tốc độ: ${preset.label}`);
+                                    /* toast removed */
                                   }}
                                   className={`p-2 rounded border text-left cursor-pointer ${
                                     (currentClip.speedCurve || 'none') === preset.id
-                                      ? 'bg-[#00E5CC]/15 border-[#00E5CC] text-[#00E5CC] font-semibold'
+                                      ? 'bg-[#00CAE0]/15 border-[#00CAE0] text-[#00CAE0] font-semibold'
                                       : 'bg-[#222228] border-[#30303A] text-[#D4D4D8]'
                                   }`}
                                 >
@@ -10352,12 +10352,12 @@ export default function App() {
                                       : c
                                   )
                                 );
-                                showToast(`Đã gán hiệu ứng động: ${anim.label}`);
+                                /* toast removed */
                               }}
                               className={`p-2 rounded border text-left cursor-pointer ${
                                 (currentClip.animIn || currentClip.animationIn || 'none') ===
                                 anim.id
-                                  ? 'bg-[#00E5CC]/15 border-[#00E5CC] text-[#00E5CC] font-semibold'
+                                  ? 'bg-[#00CAE0]/15 border-[#00CAE0] text-[#00CAE0] font-semibold'
                                   : 'bg-[#222228] border-[#30303A] text-[#D4D4D8]'
                               }`}
                             >
@@ -10422,7 +10422,7 @@ export default function App() {
                                 onChange={(e) =>
                                   updateSelectedClipProp(adj.key, Number(e.target.value))
                                 }
-                                className="flex-1 min-w-0 accent-[#00E5CC] h-1"
+                                className="flex-1 min-w-0 accent-[#00CAE0] h-1"
                               />
                               <NumericBoxWithSteppers
                                 value={(currentClip[adj.key] as number) ?? 0}
@@ -10464,7 +10464,7 @@ export default function App() {
                                 />
                               ))}
                             </div>
-                            <div className="text-[10px] text-[#00E5CC] font-mono">
+                            <div className="text-[10px] text-[#00CAE0] font-mono">
                               Đang chỉnh kênh màu: {activeHslColor.toUpperCase()}
                             </div>
                             <div className="flex items-center justify-between gap-1.5">
@@ -10477,7 +10477,7 @@ export default function App() {
                                 onChange={(e) =>
                                   updateSelectedClipProp('hslHue', Number(e.target.value))
                                 }
-                                className="flex-1 min-w-0 accent-[#00E5CC] h-1"
+                                className="flex-1 min-w-0 accent-[#00CAE0] h-1"
                               />
                               <NumericBoxWithSteppers
                                 value={currentClip.hslHue ?? 0}
@@ -10499,7 +10499,7 @@ export default function App() {
                                 onChange={(e) =>
                                   updateSelectedClipProp('hslSat', Number(e.target.value))
                                 }
-                                className="flex-1 min-w-0 accent-[#00E5CC] h-1"
+                                className="flex-1 min-w-0 accent-[#00CAE0] h-1"
                               />
                               <NumericBoxWithSteppers
                                 value={currentClip.hslSat ?? 0}
@@ -10521,7 +10521,7 @@ export default function App() {
                                 onChange={(e) =>
                                   updateSelectedClipProp('hslBri', Number(e.target.value))
                                 }
-                                className="flex-1 min-w-0 accent-[#00E5CC] h-1"
+                                className="flex-1 min-w-0 accent-[#00CAE0] h-1"
                               />
                               <NumericBoxWithSteppers
                                 value={currentClip.hslBri ?? 0}
@@ -10538,7 +10538,7 @@ export default function App() {
 
                         {(adjustSubTab === 'curves' || adjustSubTab === 'wheel') && (
                           <div className="p-2.5 bg-[#121216] border border-[#2B2B34] rounded space-y-2 text-[11px]">
-                            <div className="text-[#00E5CC] font-semibold">
+                            <div className="text-[#00CAE0] font-semibold">
                               {adjustSubTab === 'curves'
                                 ? 'Đường cong RGB (Luma / R / G / B Curves)'
                                 : 'Bánh xe màu Điện ảnh (Shadows / Midtones / Highlights)'}
@@ -10553,7 +10553,7 @@ export default function App() {
                                 onChange={(e) =>
                                   updateSelectedClipProp('contrast', Number(e.target.value))
                                 }
-                                className="flex-1 min-w-0 accent-[#00E5CC]"
+                                className="flex-1 min-w-0 accent-[#00CAE0]"
                               />
                               <NumericBoxWithSteppers
                                 value={currentClip.contrast ?? 0}
@@ -10612,7 +10612,7 @@ export default function App() {
                 type="button"
                 onClick={() => setIsPlaying((p) => !p)}
                 title={isPlaying ? 'Tạm dừng (Play/Pause)' : 'Phát (Play/Pause)'}
-                className="p-1.5 px-2.5 rounded-full bg-[#00E5CC] text-[#071013] font-bold flex items-center gap-1 cursor-pointer shadow-xs active:scale-95 transition-transform"
+                className="p-1.5 px-2.5 rounded-full bg-[#00CAE0] text-[#071013] font-bold flex items-center gap-1 cursor-pointer shadow-xs active:scale-95 transition-transform"
               >
                 {isPlaying ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
               </button>
@@ -10634,7 +10634,7 @@ export default function App() {
                     : 'bg-[#1F2028] hover:bg-[#2A2B36] text-[#D1D5DB] border-[#2D303B]'
                 }`}
               >
-                <Scissors className="w-3 h-3 text-[#00E5CC]" />
+                <Scissors className="w-3 h-3 text-[#00CAE0]" />
                 <span>{language === 'en' ? 'Split' : 'Tách'}</span>
               </button>
 
@@ -10657,7 +10657,7 @@ export default function App() {
                   type="button"
                   onClick={() => {
                     updateSelectedClipProp('flipH', !currentClip.flipH);
-                    showToast('Đã lật ngang khung hình!');
+                    /* toast removed */
                   }}
                   title="Lật ngang (Mirror)"
                   className={`p-1.5 rounded border cursor-pointer transition-all ${
@@ -10666,7 +10666,7 @@ export default function App() {
                       : 'bg-[#1F2028] hover:bg-[#2A2B36] text-[#D1D5DB] border-[#2D303B]'
                   }`}
                 >
-                  <FlipHorizontal2 className="w-3.5 h-3.5 text-[#00E5CC]" />
+                  <FlipHorizontal2 className="w-3.5 h-3.5 text-[#00CAE0]" />
                 </button>
               ) : (
                 <button
@@ -10679,7 +10679,7 @@ export default function App() {
                       : 'bg-[#1F2028] hover:bg-[#2A2B36] text-[#D1D5DB] border-[#2D303B]'
                   }`}
                 >
-                  <Type className="w-3 h-3 text-[#00E5CC]" />
+                  <Type className="w-3 h-3 text-[#00CAE0]" />
                   <span>+ Chữ</span>
                 </button>
               )}
@@ -10756,11 +10756,11 @@ export default function App() {
               }}
               onSplitAtPlayhead={() => {
                 commitClips((prev) => splitClipAtPlayhead(prev, playheadSec, selectedClipId));
-                showToast('Đã tách đôi clip tại Playhead!');
+                /* toast removed */
               }}
               onSplitAtExactTime={(clipId, timeSec) => {
                 commitClips((prev) => splitClipAtPlayhead(prev, timeSec, clipId));
-                showToast(`Đã dùng Dao cạo (Phím B) cắt clip tại ${timeSec.toFixed(2)}s!`);
+                /* toast removed */
               }}
               onDeleteSelected={() => {
                 handleDeleteMediaCardsAndClips();
@@ -10842,7 +10842,7 @@ export default function App() {
               }
               onFreezeFrame={() => {
                 commitClips((prev) => freezeFrameAtPlayhead(prev, playheadSec));
-                showToast('Đã đóng băng khung hình 3.0s tại Playhead!');
+                /* toast removed */
               }}
               onReverseSelected={() => {
                 if (!currentClip) return;
@@ -10906,11 +10906,11 @@ export default function App() {
               }}
               onCloseGapAtTime={(trackIndex, timeSec) => {
                 commitClips((prev) => closeGapAtTimeOnTrack(prev, trackIndex, timeSec));
-                showToast(`Đã lấp đầy khoảng trống tại ${timeSec.toFixed(2)}s trên tầng #${trackIndex}!`);
+                /* toast removed */
               }}
               onCloseAllGapsOnTrack={(trackIndex) => {
                 commitClips((prev) => closeAllGapsOnTrack(prev, trackIndex));
-                showToast(`Đã lấp đầy mọi khoảng trống trên tầng #${trackIndex}!`);
+                /* toast removed */
               }}
               onCopySelectedClips={handleCopySelectedClips}
               onCutSelectedClips={handleCutSelectedClips}
@@ -10926,7 +10926,7 @@ export default function App() {
                       : c
                   )
                 );
-                showToast('AI đã tự động nội suy và kéo dài thời lượng clip thêm +2.0s!');
+                /* toast removed */
               }}
               onSyncVideoAudio={(clipId) => {
                 const target = clips.find((c) => c.id === clipId);
@@ -10936,7 +10936,7 @@ export default function App() {
                     c.trackIndex === 1 ? { ...c, startTime: target.startTime } : c
                   )
                 );
-                showToast('Đã đồng bộ khớp sóng âm thanh với clip video!');
+                /* toast removed */
               }}
               onExportSelectedClip={(clipId) => {
                 setSelectedClipId(clipId);
@@ -10946,7 +10946,7 @@ export default function App() {
               onReplaceClipMedia={(clipId) => {
                 setSelectedClipId(clipId);
                 mediaInputRef.current?.click();
-                showToast('Chọn tệp mới từ máy tính để thay thế cho clip này!');
+                /* toast removed */
               }}
               onQuickAiAction={(action, clipId) => {
                 const targetId = clipId || selectedClipId || clips[0]?.id;
@@ -10965,7 +10965,7 @@ export default function App() {
                         : c
                     )
                   );
-                  showToast('Đã bật Khử tiếng ồn AI & Làm rõ giọng nói!');
+                  /* toast removed */
                 } else if (action === 'auto_cutout') {
                   commitClips((prev) =>
                     prev.map((c) =>
@@ -10975,7 +10975,7 @@ export default function App() {
                   setInspectorMode('clip');
                   setInspectorTab('video');
                   setVideoSubTab('cutout');
-                  showToast('Đã bật Tách nền người tự động AI (Auto Cutout)!');
+                  /* toast removed */
                 } else if (action === 'retouch' || action === 'enhance') {
                   commitClips((prev) =>
                     prev.map((c) =>
@@ -10987,7 +10987,7 @@ export default function App() {
                   setInspectorMode('clip');
                   setInspectorTab('video');
                   setVideoSubTab('enhance');
-                  showToast('Đã bật Làm đẹp & Mịn da mặt AI (Retouch / Face Enhance)!');
+                  /* toast removed */
                 } else if (action === 'voice_clean') {
                   handleRemoveDeadAirSilence();
                 } else if (action === 'hd_upscale') {
@@ -10999,7 +10999,7 @@ export default function App() {
                     )
                   );
                   setPreviewQuality('full');
-                  showToast('Đã nâng cấp chất lượng siêu phân giải HD 1080p cho clip!');
+                  /* toast removed */
                 } else if (action === 'prerender') {
                   showToast('Đã kết xuất trước (Pre-render) toàn bộ Timeline mượt 60 FPS!');
                 } else if (action === 'transcript') {
@@ -11008,20 +11008,20 @@ export default function App() {
                 } else if (action === 'ai_edit') {
                   setIsMatrixModalOpen(true);
                 } else if (action === 'multicam') {
-                  showToast('Đã đồng bộ Multi-Cam cho các góc máy trên Timeline!');
+                  /* toast removed */
                 } else if (action === 'save_preset') {
                   handleSaveSubProject(`Preset_${currentClip?.name || 'Custom'}`);
                 } else if (action === 'open_location') {
                   setTopLeftCategory('media');
                   setSidebarFolder('all');
-                  showToast(`Đường dẫn tệp: ${currentClip?.filePath || 'C:/Media/'}`);
+                  /* toast removed */
                 } else if (action === 'edit_effects') {
                   setTopLeftCategory('effects');
                 } else if (action === 'speed_ramp') {
                   setInspectorMode('clip');
                   setInspectorTab('speed');
                   setSpeedSubTab('curve');
-                  showToast('Đã mở bảng Đường cong tốc độ (Speed Curve Ramp)!');
+                  /* toast removed */
                 }
               }}
               onCaptureCover={handleCaptureCover}
@@ -11057,14 +11057,14 @@ export default function App() {
                   id: `mk-${Date.now()}`,
                   timeSec: Number(playheadSec.toFixed(2)),
                   label: `Dấu mốc ${markers.length + 1}`,
-                  color: '#00E5CC',
+                  color: '#00CAE0',
                 };
                 setMarkers((prev) => [...prev, newMarker]);
-                showToast(`Đã thả dấu mốc (Marker) tại ${playheadSec.toFixed(2)}s!`);
+                /* toast removed */
               }}
               onCycleMarkerColor={(markerId) => {
                 const palette: TimelineMarker['color'][] = [
-                  '#00E5CC',
+                  '#00CAE0',
                   '#EF4444',
                   '#F59E0B',
                   '#10B981',
@@ -11085,7 +11085,7 @@ export default function App() {
                     prev.map((c) => (c.trackIndex === 1 ? { ...c, beatMarkers: [] } : c))
                   );
                   setMarkers((prev) => prev.filter((m) => !m.id.startsWith('beat-')));
-                  showToast('Đã xóa toàn bộ dấu chấm nhịp (Beat Markers)!');
+                  /* toast removed */
                   return;
                 }
                 const aud = clips.find((c) => c.trackIndex === 1);
@@ -11121,7 +11121,7 @@ export default function App() {
                 const c = clips.find((item) => item.id === clipId);
                 if (!c) return;
                 setClipboardAttrs(copyClipAttributes(c));
-                showToast(`Đã sao chép thuộc tính của "${c.name}" (Ctrl+Shift+C)!`);
+                /* toast removed */
               }}
               onPasteAttributes={(clipId) => {
                 if (!clipboardAttrs) return;
@@ -11130,7 +11130,7 @@ export default function App() {
                     c.id === clipId ? pasteClipAttributes(c, clipboardAttrs) : c
                   )
                 );
-                showToast('Đã dán thuộc tính (Màu, Tỷ lệ, Hiệu ứng) vào clip đích!');
+                /* toast removed */
               }}
               onDuplicateClip={(clipId) => {
                 const target = clips.find((c) => c.id === clipId);
@@ -11144,7 +11144,7 @@ export default function App() {
                 commitClips((prev) =>
                   packTrackClipsContiguously([...prev, copy], target.trackIndex)
                 );
-                showToast(`Đã nhân bản clip "${target.name}"!`);
+                /* toast removed */
               }}
               onCreateCompoundClip={(clipId) => {
                 const targetIds = new Set(
@@ -11201,7 +11201,7 @@ export default function App() {
                     return { ...c, keyframes: existing };
                   })
                 );
-                showToast(`Đã áp dụng đồ thị nội suy Keyframe: ${easing.toUpperCase()}!`);
+                /* toast removed */
               }}
               onOpenSceneSplitModal={() => setIsSceneCutModalOpen(true)}
               markInSec={markInSec}
@@ -11210,18 +11210,18 @@ export default function App() {
               onSetMarkIn={() => {
                 const pt = Number(playheadSec.toFixed(2));
                 setMarkInSec(pt);
-                showToast(`TDO CUT: Đã đặt Điểm vào [In] tại ${pt}s (Phím I)`);
+                /* toast removed */
               }}
               onSetMarkOut={() => {
                 const pt = Number(playheadSec.toFixed(2));
                 setMarkOutSec(pt);
-                showToast(`TDO CUT: Đã đặt Điểm ra [Out] tại ${pt}s (Phím O)`);
+                /* toast removed */
               }}
               onClearMarkInOut={() => {
                 setMarkInSec(null);
                 setMarkOutSec(null);
                 setLoopRangeEnabled(false);
-                showToast('Đã xóa vùng đánh dấu In / Out!');
+                /* toast removed */
               }}
               onToggleLoopRange={() => {
                 setLoopRangeEnabled((l) => !l);
@@ -11263,8 +11263,8 @@ export default function App() {
                   }}
                   className={`flex flex-col items-center justify-center py-1 px-2 rounded-lg transition-all cursor-pointer min-w-[52px] ${
                     isActive
-                      ? 'text-[#00E5CC] bg-[#00E5CC]/15 font-bold'
-                      : 'hover:text-[#00E5CC]'
+                      ? 'text-[#00CAE0] bg-[#00CAE0]/15 font-bold'
+                      : 'hover:text-[#00CAE0]'
                   }`}
                 >
                   <TabIcon className="w-4 h-4 mb-0.5" />
@@ -11277,7 +11277,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setIsExportModalOpen(true)}
-              className="flex flex-col items-center justify-center py-1 px-2.5 rounded-lg bg-[#00E5CC] hover:bg-[#00F5DC] active:bg-[#00D2C4] text-[#071013] font-bold shadow-xs cursor-pointer active:scale-95 transition-transform"
+              className="flex flex-col items-center justify-center py-1 px-2.5 rounded-lg bg-[#00CAE0] hover:bg-[#00D8EE] active:bg-[#00B8CE] text-[#071013] font-bold shadow-xs cursor-pointer active:scale-95 transition-transform"
             >
               <Upload className="w-4 h-4 mb-0.5" />
               <span className="text-[10px] leading-tight">{language === 'en' ? 'Export' : 'Xuất'}</span>
@@ -11301,11 +11301,11 @@ export default function App() {
                 {/* Drawer Header */}
                 <div className="flex items-center justify-between px-4 py-2.5 border-b border-inherit shrink-0">
                   <div className="flex items-center gap-2 font-bold text-sm">
-                    {mobileBottomTab === 'media' && <Film className="w-4 h-4 text-[#00E5CC]" />}
-                    {mobileBottomTab === 'text' && <Type className="w-4 h-4 text-[#00E5CC]" />}
-                    {mobileBottomTab === 'stickers' && <Smile className="w-4 h-4 text-[#00E5CC]" />}
-                    {mobileBottomTab === 'effects' && <Sparkles className="w-4 h-4 text-[#00E5CC]" />}
-                    {mobileBottomTab === 'transitions' && <ArrowRightLeft className="w-4 h-4 text-[#00E5CC]" />}
+                    {mobileBottomTab === 'media' && <Film className="w-4 h-4 text-[#00CAE0]" />}
+                    {mobileBottomTab === 'text' && <Type className="w-4 h-4 text-[#00CAE0]" />}
+                    {mobileBottomTab === 'stickers' && <Smile className="w-4 h-4 text-[#00CAE0]" />}
+                    {mobileBottomTab === 'effects' && <Sparkles className="w-4 h-4 text-[#00CAE0]" />}
+                    {mobileBottomTab === 'transitions' && <ArrowRightLeft className="w-4 h-4 text-[#00CAE0]" />}
                     <span>
                       {mobileBottomTab === 'media' && (language === 'en' ? 'Media Library' : 'Thư viện Phương tiện')}
                       {mobileBottomTab === 'text' && (language === 'en' ? 'Add Text & Subtitles' : 'Thêm Văn bản & Phụ đề')}
@@ -11334,7 +11334,7 @@ export default function App() {
                           mediaInputRef.current?.click();
                           setMobileBottomTab(null);
                         }}
-                        className="w-full py-2.5 px-3 bg-[#00E5CC] hover:bg-[#00F5DC] active:bg-[#00D2C4] text-[#071013] font-bold rounded-lg flex items-center justify-center gap-2 text-xs cursor-pointer shadow-xs active:scale-98 transition-transform"
+                        className="w-full py-2.5 px-3 bg-[#00CAE0] hover:bg-[#00D8EE] active:bg-[#00B8CE] text-[#071013] font-bold rounded-lg flex items-center justify-center gap-2 text-xs cursor-pointer shadow-xs active:scale-98 transition-transform"
                       >
                         <Upload className="w-4 h-4" />
                         <span>{language === 'en' ? 'Upload Media from Device' : 'Tải lên Tệp từ Thiết bị / Điện thoại'}</span>
@@ -11357,7 +11357,7 @@ export default function App() {
                                 handlePushCardToTimeline(card);
                                 setMobileBottomTab(null);
                               }}
-                              className={`p-2.5 rounded-lg border hover:border-[#00E5CC] cursor-pointer flex flex-col gap-1 active:scale-98 transition-all ${
+                              className={`p-2.5 rounded-lg border hover:border-[#00CAE0] cursor-pointer flex flex-col gap-1 active:scale-98 transition-all ${
                                 themeMode === 'light'
                                   ? 'bg-[#F8FAFC] hover:bg-[#F1F5F9] border-[#CBD5E1]'
                                   : 'bg-[#14151A] hover:bg-[#1E2028] border-[#2D303B]'
@@ -11366,7 +11366,7 @@ export default function App() {
                               <div className={`h-16 rounded flex items-center justify-center text-xs ${
                                 themeMode === 'light' ? 'bg-[#EDF2F7] text-[#64748B]' : 'bg-[#22242C] text-[#A1A1AA]'
                               }`}>
-                                <Video className="w-6 h-6 text-[#00E5CC]" />
+                                <Video className="w-6 h-6 text-[#00CAE0]" />
                               </div>
                               <span className={`text-xs font-semibold truncate ${
                                 themeMode === 'light' ? 'text-[#0F172A]' : 'text-white'
@@ -11411,10 +11411,10 @@ export default function App() {
                             },
                           ]);
                           setSelectedClipId(newId);
-                          showToast('Đã thêm chữ vào Timeline!');
+                          /* toast removed */
                           setMobileBottomTab(null);
                         }}
-                        className="w-full py-2.5 px-3 bg-[#00E5CC] hover:bg-[#00F5DC] active:bg-[#00D2C4] text-[#071013] font-bold rounded-lg flex items-center justify-center gap-2 text-xs cursor-pointer shadow-xs active:scale-98 transition-transform"
+                        className="w-full py-2.5 px-3 bg-[#00CAE0] hover:bg-[#00D8EE] active:bg-[#00B8CE] text-[#071013] font-bold rounded-lg flex items-center justify-center gap-2 text-xs cursor-pointer shadow-xs active:scale-98 transition-transform"
                       >
                         <Plus className="w-4 h-4" />
                         <span>{language === 'en' ? '+ Add Default Text' : '+ Thêm Văn bản Mặc định'}</span>
@@ -11431,7 +11431,7 @@ export default function App() {
                           { label: 'Chữ Neon Cyberpunk', text: 'CYBERPUNK 2077', size: 34, col: '#22D3EE' },
                           { label: 'Chữ 3D Kim loại', text: 'SUPER SALE 50%', size: 34, col: '#FDE047' },
                           { label: 'Thông báo Đỏ', text: '🔴 HOT TRENDING', size: 28, col: '#EF4444' },
-                          { label: 'Hashtag Xanh', text: '#TDO_CUT #VIRAL', size: 28, col: '#00E5CC' },
+                          { label: 'Hashtag Xanh', text: '#TDO_CUT #VIRAL', size: 28, col: '#00CAE0' },
                         ].map((tpl, i) => (
                           <button
                             key={i}
@@ -11460,10 +11460,10 @@ export default function App() {
                                 },
                               ]);
                               setSelectedClipId(newId);
-                              showToast(`Đã thêm: ${tpl.label}!`);
+                              /* toast removed */
                               setMobileBottomTab(null);
                             }}
-                            className={`p-3 rounded-lg border hover:border-[#00E5CC] text-left cursor-pointer flex flex-col gap-1 active:scale-98 transition-all ${
+                            className={`p-3 rounded-lg border hover:border-[#00CAE0] text-left cursor-pointer flex flex-col gap-1 active:scale-98 transition-all ${
                               themeMode === 'light'
                                 ? 'bg-[#F8FAFC] hover:bg-[#F1F5F9] border-[#CBD5E1]'
                                 : 'bg-[#14151A] hover:bg-[#1E2028] border-[#2D303B]'
@@ -11507,7 +11507,7 @@ export default function App() {
                             onClick={() => setSubCategoryFilter(cat.id)}
                             className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap cursor-pointer transition-all ${
                               subCategoryFilter === cat.id
-                                ? 'bg-[#00E5CC] text-black font-bold'
+                                ? 'bg-[#00CAE0] text-black font-bold'
                                 : themeMode === 'light'
                                 ? 'bg-[#F1F5F9] text-[#475569] hover:text-[#0F172A]'
                                 : 'bg-[#22242C] text-[#D1D5DB] hover:text-white'
@@ -11535,10 +11535,10 @@ export default function App() {
                               type="button"
                               onClick={() => {
                                 handlePushResourceIdsToTimeline([stk.uid], 3, playheadSec);
-                                showToast(`Đã thêm nhãn dán ${stk.label}!`);
+                                /* toast removed */
                                 setMobileBottomTab(null);
                               }}
-                              className={`p-2 rounded-lg border hover:border-[#00E5CC] flex flex-col items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer ${
+                              className={`p-2 rounded-lg border hover:border-[#00CAE0] flex flex-col items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer ${
                                 themeMode === 'light'
                                   ? 'bg-[#F8FAFC] hover:bg-[#F1F5F9] border-[#CBD5E1]'
                                   : 'bg-[#14151A] hover:bg-[#1E2028] border-[#2D303B]'
@@ -11567,16 +11567,16 @@ export default function App() {
                             type="button"
                             onClick={() => {
                               handlePushResourceIdsToTimeline([fx.uid], 0, playheadSec);
-                              showToast(`Đã áp dụng: ${fx.label}!`);
+                              /* toast removed */
                               setMobileBottomTab(null);
                             }}
-                            className={`p-2.5 rounded-lg border hover:border-[#00E5CC] flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer text-center ${
+                            className={`p-2.5 rounded-lg border hover:border-[#00CAE0] flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer text-center ${
                               themeMode === 'light'
                                 ? 'bg-[#F8FAFC] hover:bg-[#F1F5F9] border-[#CBD5E1]'
                                 : 'bg-[#14151A] hover:bg-[#1E2028] border-[#2D303B]'
                             }`}
                           >
-                            <Sparkles className="w-5 h-5 text-[#00E5CC]" />
+                            <Sparkles className="w-5 h-5 text-[#00CAE0]" />
                             <span className={`text-xs font-semibold truncate w-full ${
                               themeMode === 'light' ? 'text-[#0F172A]' : 'text-white'
                             }`}>{fx.label}</span>
@@ -11609,16 +11609,16 @@ export default function App() {
                             type="button"
                             onClick={() => {
                               handlePushResourceIdsToTimeline([`trans-${tr.id}`], 0, playheadSec);
-                              showToast(`Đã thêm chuyển cảnh: ${tr.name}!`);
+                              /* toast removed */
                               setMobileBottomTab(null);
                             }}
-                            className={`p-3 rounded-lg border hover:border-[#00E5CC] flex items-center gap-2 active:scale-95 transition-all cursor-pointer text-left ${
+                            className={`p-3 rounded-lg border hover:border-[#00CAE0] flex items-center gap-2 active:scale-95 transition-all cursor-pointer text-left ${
                               themeMode === 'light'
                                 ? 'bg-[#F8FAFC] hover:bg-[#F1F5F9] border-[#CBD5E1]'
                                 : 'bg-[#14151A] hover:bg-[#1E2028] border-[#2D303B]'
                             }`}
                           >
-                            <ArrowRightLeft className="w-4 h-4 text-[#00E5CC] shrink-0" />
+                            <ArrowRightLeft className="w-4 h-4 text-[#00CAE0] shrink-0" />
                             <span className={`text-xs font-semibold truncate ${
                               themeMode === 'light' ? 'text-[#0F172A]' : 'text-white'
                             }`}>{tr.name}</span>
@@ -11701,7 +11701,7 @@ export default function App() {
         defaultImageDuration={defaultImageDuration}
         onChangeDefaultImageDuration={(sec) => {
           setDefaultImageDuration(sec);
-          showToast(`Đã cập nhật thời lượng ảnh tĩnh mặc định: ${sec.toFixed(1)}s!`);
+          /* toast removed */
         }}
         language={language}
         onChangeLanguage={(lang) => {

@@ -1472,7 +1472,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
   const [coverTextOverlay, setCoverTextOverlay] = useState(
     isEn ? 'Enter text' : 'Nhập văn bản'
   );
-  const [coverTemplateColor, setCoverTemplateColor] = useState('#00E5CC');
+  const [coverTemplateColor, setCoverTemplateColor] = useState('#00CAE0');
   const [localCapturedCoverUrl, setLocalCapturedCoverUrl] = useState<string | null>(null);
   const [mediaSizeMap, setMediaSizeMap] = useState<Record<string, number>>({});
 
@@ -3784,7 +3784,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           {/* Mobile Header */}
           <div className="flex items-center justify-between px-4 py-3.5 bg-[#202028] border-b border-[#2C2C36] shrink-0">
             <div className="flex items-center gap-2 font-bold text-sm text-white">
-              <Film className="w-4 h-4 text-[#00E5CC]" />
+              <Film className="w-4 h-4 text-[#00CAE0]" />
               <span>{isEn ? 'Export Video' : 'Xuất video'}</span>
             </div>
             <button
@@ -3815,7 +3815,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                 }
                 className="w-14 h-18 rounded-lg border border-[#3A3A48] shrink-0 overflow-hidden relative flex items-end justify-center shadow-md"
               >
-                <span className="absolute top-1 left-1 px-1 py-0.2 text-[8px] font-mono bg-black/70 text-[#00E5CC] rounded">
+                <span className="absolute top-1 left-1 px-1 py-0.2 text-[8px] font-mono bg-black/70 text-[#00CAE0] rounded">
                   {aspectRatio === 'original' ? 'Gốc' : aspectRatio}
                 </span>
                 {coverTextOverlay && (
@@ -3833,10 +3833,10 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                   value={title}
                   placeholder={isEn ? 'Enter project name' : 'Nhập tên dự án'}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-2 py-1 bg-[#141418] border border-[#32323C] rounded text-white text-xs font-semibold focus:border-[#00E5CC] outline-none"
+                  className="w-full px-2 py-1 bg-[#141418] border border-[#32323C] rounded text-white text-xs font-semibold focus:border-[#00CAE0] outline-none"
                 />
                 <div className="text-[11px] text-[#A1A1AA] flex items-center gap-1.5">
-                  <span data-testid="export-quality-spec" className="text-[#00E5CC] font-mono font-bold">
+                  <span data-testid="export-quality-spec" className="text-[#00CAE0] font-mono font-bold">
                     {targetExportW}×{targetExportH}
                   </span>
                   <span>•</span>
@@ -3846,7 +3846,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                 </div>
                 <div className="text-[10px] text-[#9CA3AF]">
                   {isEn ? 'Est. size:' : 'Dung lượng ước tính:'}{' '}
-                  <span data-testid="export-estimated-size" className="text-[#00E5CC] font-mono font-bold">
+                  <span data-testid="export-estimated-size" className="text-[#00CAE0] font-mono font-bold">
                     ~{estimatedSizeMb} MB
                   </span>
                 </div>
@@ -3868,7 +3868,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                       onClick={() => setResolution(r)}
                       className={`py-2 text-xs font-bold rounded-lg transition-all border ${
                         active
-                          ? 'bg-[#00E5CC] text-black border-[#00E5CC] shadow-md shadow-[#00E5CC]/20'
+                          ? 'bg-[#00CAE0] text-black border-[#00CAE0] shadow-md shadow-[#00CAE0]/20'
                           : 'bg-[#202028] text-[#D4D4D8] border-[#2C2C36] hover:bg-[#282834]'
                       }`}
                     >
@@ -3894,7 +3894,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                       onClick={() => setFps(f)}
                       className={`py-2 text-xs font-bold rounded-lg transition-all border ${
                         active
-                          ? 'bg-[#00E5CC] text-black border-[#00E5CC] shadow-md shadow-[#00E5CC]/20'
+                          ? 'bg-[#00CAE0] text-black border-[#00CAE0] shadow-md shadow-[#00CAE0]/20'
                           : 'bg-[#202028] text-[#D4D4D8] border-[#2C2C36] hover:bg-[#282834]'
                       }`}
                     >
@@ -3923,7 +3923,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                       onClick={() => setBitrateMode(b.id as 'recommended' | 'higher')}
                       className={`py-2 text-xs font-bold rounded-lg transition-all border ${
                         active
-                          ? 'bg-[#00E5CC] text-black border-[#00E5CC] shadow-md shadow-[#00E5CC]/20'
+                          ? 'bg-[#00CAE0] text-black border-[#00CAE0] shadow-md shadow-[#00CAE0]/20'
                           : 'bg-[#202028] text-[#D4D4D8] border-[#2C2C36] hover:bg-[#282834]'
                       }`}
                     >
@@ -3949,7 +3949,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                       onClick={() => setFormat(fmt)}
                       className={`py-2 text-xs font-bold rounded-lg transition-all border ${
                         active
-                          ? 'bg-[#00E5CC] text-black border-[#00E5CC] shadow-md shadow-[#00E5CC]/20'
+                          ? 'bg-[#00CAE0] text-black border-[#00CAE0] shadow-md shadow-[#00CAE0]/20'
                           : 'bg-[#202028] text-[#D4D4D8] border-[#2C2C36] hover:bg-[#282834]'
                       }`}
                     >
@@ -3962,9 +3962,9 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
 
             {/* Live Progress Bar when Rendering */}
             {isRendering && (
-              <div className="p-3 bg-[#202028] border border-[#00E5CC]/50 rounded-xl space-y-2">
+              <div className="p-3 bg-[#202028] border border-[#00CAE0]/50 rounded-xl space-y-2">
                 <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2 font-bold text-[#00E5CC]">
+                  <div className="flex items-center gap-2 font-bold text-[#00CAE0]">
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     <span>{isEn ? 'Exporting video...' : 'Đang xuất video...'}</span>
                   </div>
@@ -3972,7 +3972,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                 </div>
                 <div className="w-full h-2.5 bg-[#141418] rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-[#00E5CC] to-[#38BDF8] transition-all duration-150"
+                    className="h-full bg-gradient-to-r from-[#00CAE0] to-[#38BDF8] transition-all duration-150"
                     style={{ width: `${progress}%` }}
                   />
                 </div>
@@ -3986,8 +3986,8 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
 
             {/* Exported Video Done Box */}
             {exportedFiles.length > 0 && !isRendering && (
-              <div className="p-3 bg-[#1A2624] border border-[#00E5CC] rounded-xl space-y-2.5">
-                <div className="flex items-center gap-2 text-xs font-bold text-[#00E5CC]">
+              <div className="p-3 bg-[#1A2624] border border-[#00CAE0] rounded-xl space-y-2.5">
+                <div className="flex items-center gap-2 text-xs font-bold text-[#00CAE0]">
                   <CheckCircle2 className="w-4 h-4 shrink-0" />
                   <span>{isEn ? 'Video exported successfully!' : 'Đã xuất video thành công!'}</span>
                 </div>
@@ -4000,7 +4000,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                 <a
                   href={exportedFiles[0].url}
                   download={exportedFiles[0].name}
-                  className="w-full py-2.5 bg-[#00E5CC] hover:bg-[#00c4ae] active:scale-[0.98] text-black font-extrabold text-xs rounded-lg flex items-center justify-center gap-1.5 transition"
+                  className="w-full py-2.5 bg-[#00CAE0] hover:bg-[#00c4ae] active:scale-[0.98] text-black font-extrabold text-xs rounded-lg flex items-center justify-center gap-1.5 transition"
                 >
                   <Download className="w-4 h-4" />
                   <span>{isEn ? 'Download Video to Phone' : 'Lưu video vào điện thoại'}</span>
@@ -4024,7 +4024,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               <button
                 type="button"
                 onClick={handleStartRealVideoExport}
-                className="w-full py-3 bg-[#00E5CC] hover:bg-[#00c4ae] active:scale-[0.98] text-black font-extrabold text-sm rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-[#00E5CC]/25 transition cursor-pointer"
+                className="w-full py-3 bg-[#00CAE0] hover:bg-[#00c4ae] active:scale-[0.98] text-black font-extrabold text-sm rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-[#00CAE0]/25 transition cursor-pointer"
               >
                 <Download className="w-4 h-4" />
                 <span>{isEn ? 'Export Video Now' : 'Xuất video ngay'}</span>
@@ -4047,7 +4047,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
         {/* Modal Header */}
         <div className="flex items-center justify-between px-5 py-3 bg-[#25252C] border-b border-[#32323C] shrink-0">
           <div className="flex items-center gap-2 font-semibold text-sm text-white">
-            <Film className="w-4 h-4 text-[#00E5CC]" />
+            <Film className="w-4 h-4 text-[#00CAE0]" />
             <span>
               {isEn
                 ? 'Export Video'
@@ -4076,7 +4076,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                 <button
                   type="button"
                   onClick={handleCaptureCoverFrame}
-                  className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold bg-[#25252E] hover:bg-[#32323E] text-[#00E5CC] border border-[#383846] rounded cursor-pointer"
+                  className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold bg-[#25252E] hover:bg-[#32323E] text-[#00CAE0] border border-[#383846] rounded cursor-pointer"
                 >
                   <ImageIcon className="w-3 h-3" />
                   <span>{isEn ? 'Capture current frame' : 'Chụp khung hình hiện tại'}</span>
@@ -4099,7 +4099,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                 }
                 className="relative aspect-video rounded-lg border border-[#32323E] overflow-hidden flex flex-col items-center justify-end p-3 shadow-inner"
               >
-                <span className="absolute top-2 left-2 px-1.5 py-0.5 text-[9px] font-bold bg-black/70 text-[#00E5CC] rounded">
+                <span className="absolute top-2 left-2 px-1.5 py-0.5 text-[9px] font-bold bg-black/70 text-[#00CAE0] rounded">
                   {isEn ? 'Edit cover' : 'Sửa ảnh bìa (Edit cover)'}
                 </span>
                 <span className="absolute top-2 right-2 px-1.5 py-0.5 font-mono text-[9px] bg-black/70 text-white rounded">
@@ -4150,7 +4150,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                 </span>
                 <span
                   data-testid="export-quality-spec"
-                  className="font-mono font-bold text-[#00E5CC] whitespace-nowrap"
+                  className="font-mono font-bold text-[#00CAE0] whitespace-nowrap"
                 >
                   {realisticEstimate.qualityLabel}
                 </span>
@@ -4169,7 +4169,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                 </span>
                 <span
                   data-testid="export-estimated-size"
-                  className="font-mono font-semibold text-[#00E5CC]"
+                  className="font-mono font-semibold text-[#00CAE0]"
                 >
                   ~{estimatedSizeMb} MB
                 </span>
@@ -4224,7 +4224,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                   type="checkbox"
                   checked={exportVideoChecked}
                   onChange={(e) => setExportVideoChecked(e.target.checked)}
-                  className="accent-[#00E5CC]"
+                  className="accent-[#00CAE0]"
                 />
                 <span>{isEn ? 'Video Export' : 'Xuất Video (Video Export)'}</span>
               </label>
@@ -4359,7 +4359,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                             setFormat('mov');
                           } else setCodec('h264');
                         }}
-                        className="px-2 py-1 bg-[#141418] border border-[#00E5CC]/45 rounded text-[#00E5CC] font-mono text-[11px]"
+                        className="px-2 py-1 bg-[#141418] border border-[#00CAE0]/45 rounded text-[#00CAE0] font-mono text-[11px]"
                       >
                         <option value="hevc_nvenc">hevc_nvenc (NVIDIA H.265 10-bit)</option>
                         <option value="prores">prores (Apple ProRes 422 HQ / 4444)</option>
@@ -4405,7 +4405,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                         max={50}
                         value={batchVariantCount}
                         onChange={(e) => setBatchVariantCount(Math.max(1, Number(e.target.value)))}
-                        className="w-16 px-2 py-1 bg-[#141418] border border-[#32323C] rounded text-[#00E5CC] font-mono"
+                        className="w-16 px-2 py-1 bg-[#141418] border border-[#32323C] rounded text-[#00CAE0] font-mono"
                       />
                       <span className="text-[11px] text-[#9CA3AF]">
                         {batchVariantCount === 1
@@ -4430,9 +4430,9 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                     type="checkbox"
                     checked={exportAudioChecked}
                     onChange={(e) => setExportAudioChecked(e.target.checked)}
-                    className="accent-[#00E5CC]"
+                    className="accent-[#00CAE0]"
                   />
-                  <Music className="w-3.5 h-3.5 text-[#00E5CC]" />
+                  <Music className="w-3.5 h-3.5 text-[#00CAE0]" />
                   <span>{isEn ? 'Export Audio' : 'Xuất Âm thanh rời (Audio)'}</span>
                 </label>
                 {exportAudioChecked && (
@@ -4458,7 +4458,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                       type="checkbox"
                       checked={exportCaptionChecked}
                       onChange={(e) => setExportCaptionChecked(e.target.checked)}
-                      className="accent-[#00E5CC]"
+                      className="accent-[#00CAE0]"
                     />
                     <FileText className="w-3.5 h-3.5 text-[#F59E0B]" />
                     <span>{isEn ? 'Export Captions' : 'Xuất Phụ đề (Captions)'}</span>
@@ -4466,7 +4466,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                   <button
                     type="button"
                     onClick={handleExportSrtDirect}
-                    className="px-2 py-0.5 text-[10px] font-semibold bg-[#25252E] hover:bg-[#323240] text-[#00E5CC] rounded cursor-pointer"
+                    className="px-2 py-0.5 text-[10px] font-semibold bg-[#25252E] hover:bg-[#323240] text-[#00CAE0] rounded cursor-pointer"
                   >
                     {isEn ? 'Download .SRT' : 'Tải .SRT ngay'}
                   </button>
@@ -4508,7 +4508,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             {(isRendering || progress > 0) && (
               <div className="p-2.5 bg-[#141418] border border-[#2B2B34] rounded space-y-2">
                 <div className="flex items-center justify-between gap-2 text-xs">
-                  <span className="text-[#00E5CC] font-medium truncate">
+                  <span className="text-[#00CAE0] font-medium truncate">
                     {isRendering
                       ? isEn
                         ? `Exporting Full HD (${exportSpec.width}×${exportSpec.height} @ ${exportSpec.fps}fps)...`
@@ -4535,7 +4535,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                 </div>
                 <div className="w-full h-2 bg-[#1E1E26] rounded overflow-hidden">
                   <div
-                    className="h-full bg-[#00E5CC] transition-all duration-150"
+                    className="h-full bg-[#00CAE0] transition-all duration-150"
                     style={{ width: `${progress}%` }}
                   />
                 </div>
@@ -4545,9 +4545,9 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             {/* Exported Files List & Seekable Video Player with Timecode */}
             {exportedFiles.length > 0 && (
               <div className="space-y-2">
-                <div className="p-2 bg-[#141418] border border-[#00E5CC]/50 rounded-lg space-y-2">
+                <div className="p-2 bg-[#141418] border border-[#00CAE0]/50 rounded-lg space-y-2">
                   <div className="flex items-center justify-between text-[11px]">
-                    <span className="font-semibold text-[#00E5CC]">
+                    <span className="font-semibold text-[#00CAE0]">
                       {isEn
                         ? '🎬 Export Preview (Embedded Timecode & Exact Duration):'
                         : '🎬 Xem trước tệp xuất (Đã nhúng Timecode & Thời lượng chuẩn):'}
@@ -4568,16 +4568,16 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                   {exportedFiles.map((item, idx) => (
                     <div
                       key={idx}
-                      className="p-2 bg-[#141418] border border-[#00E5CC]/40 rounded flex items-center justify-between gap-3"
+                      className="p-2 bg-[#141418] border border-[#00CAE0]/40 rounded flex items-center justify-between gap-3"
                     >
                       <div className="flex items-center gap-2 min-w-0">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-[#00E5CC] shrink-0" />
+                        <CheckCircle2 className="w-3.5 h-3.5 text-[#00CAE0] shrink-0" />
                         <span className="truncate text-white font-mono text-[11px]">{item.name}</span>
                       </div>
                       <a
                         href={item.url}
                         download={item.name}
-                        className="px-2.5 py-1 bg-[#00E5CC] text-[#090D12] font-semibold rounded whitespace-nowrap shrink-0"
+                        className="px-2.5 py-1 bg-[#00CAE0] text-[#090D12] font-semibold rounded whitespace-nowrap shrink-0"
                       >
                         {isEn ? 'Download' : 'Tải lại'}
                       </a>
@@ -4607,7 +4607,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               type="button"
               disabled={isRendering}
               onClick={handleStartRealVideoExport}
-              className="flex items-center gap-1.5 px-5 py-1.5 font-bold bg-[#00E5CC] hover:bg-[#00F5DC] disabled:opacity-50 text-[#090D12] rounded transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-5 py-1.5 font-bold bg-[#00CAE0] hover:bg-[#00D8EE] disabled:opacity-50 text-[#090D12] rounded transition-colors cursor-pointer"
             >
               {isRendering ? (
                 <>
@@ -4674,7 +4674,7 @@ export const MatrixBatchGeneratorModal: React.FC<MatrixBatchGeneratorModalProps>
       <div className="w-full max-w-[540px] bg-[#1E1E24] border border-[#32323C] rounded-lg shadow-2xl overflow-hidden text-xs text-[#E4E4E7]">
         <div className="flex items-center justify-between px-4 py-3 bg-[#25252C] border-b border-[#32323C]">
           <div className="flex items-center gap-2 font-semibold text-sm text-white">
-            <Sparkles className="w-4 h-4 text-[#00E5CC]" />
+            <Sparkles className="w-4 h-4 text-[#00CAE0]" />
             <span>Chế độ Sản Xuất Hàng Loạt (Matrix Batch Generator)</span>
           </div>
           <button
@@ -4725,7 +4725,7 @@ export const MatrixBatchGeneratorModal: React.FC<MatrixBatchGeneratorModalProps>
                 max={7200}
                 value={targetDurationSec}
                 onChange={(e) => setTargetDurationSec(Math.max(5, Number(e.target.value)))}
-                className="w-28 px-2.5 py-1.5 bg-[#141418] border border-[#32323C] rounded text-[#00E5CC] font-mono"
+                className="w-28 px-2.5 py-1.5 bg-[#141418] border border-[#32323C] rounded text-[#00CAE0] font-mono"
               />
               {[30, 60, 90, 180].map((preset) => (
                 <button
@@ -4734,7 +4734,7 @@ export const MatrixBatchGeneratorModal: React.FC<MatrixBatchGeneratorModalProps>
                   onClick={() => setTargetDurationSec(preset)}
                   className={`px-2.5 py-1 rounded border text-[11px] font-mono cursor-pointer ${
                     targetDurationSec === preset
-                      ? 'bg-[#00E5CC] text-black border-[#00E5CC] font-bold'
+                      ? 'bg-[#00CAE0] text-black border-[#00CAE0] font-bold'
                       : 'bg-[#141418] text-[#D4D4D8] border-[#32323C] hover:text-white'
                   }`}
                 >
@@ -4751,7 +4751,7 @@ export const MatrixBatchGeneratorModal: React.FC<MatrixBatchGeneratorModalProps>
                 type="checkbox"
                 checked={enableSubClipSlicing}
                 onChange={(e) => setEnableSubClipSlicing(e.target.checked)}
-                className="accent-[#00E5CC]"
+                className="accent-[#00CAE0]"
               />
               <span>Cắt nhỏ cảnh dài (Sub-clip Slicing — lấy ngẫu nhiên đoạn giữa)</span>
             </label>
@@ -4797,7 +4797,7 @@ export const MatrixBatchGeneratorModal: React.FC<MatrixBatchGeneratorModalProps>
                 max={50}
                 value={variantCount}
                 onChange={(e) => setVariantCount(Math.max(1, Number(e.target.value)))}
-                className="w-24 px-2.5 py-1.5 bg-[#141418] border border-[#32323C] rounded text-[#00E5CC] font-mono"
+                className="w-24 px-2.5 py-1.5 bg-[#141418] border border-[#32323C] rounded text-[#00CAE0] font-mono"
               />
               {[3, 5, 10, 20].map((n) => (
                 <button
@@ -4806,7 +4806,7 @@ export const MatrixBatchGeneratorModal: React.FC<MatrixBatchGeneratorModalProps>
                   onClick={() => setVariantCount(n)}
                   className={`px-2.5 py-1 rounded border text-[11px] font-mono cursor-pointer ${
                     variantCount === n
-                      ? 'bg-[#00E5CC] text-black border-[#00E5CC] font-bold'
+                      ? 'bg-[#00CAE0] text-black border-[#00CAE0] font-bold'
                       : 'bg-[#141418] text-[#D4D4D8] border-[#32323C] hover:text-white'
                   }`}
                 >
@@ -4839,7 +4839,7 @@ export const MatrixBatchGeneratorModal: React.FC<MatrixBatchGeneratorModalProps>
               });
               onClose();
             }}
-            className="flex items-center gap-1.5 px-4 py-1.5 font-semibold bg-[#00E5CC] hover:bg-[#00F5DC] text-[#090D12] rounded cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-1.5 font-semibold bg-[#00CAE0] hover:bg-[#00D8EE] text-[#090D12] rounded cursor-pointer"
           >
             <Layers className="w-3.5 h-3.5" />
             <span>Chạy trộn &amp; Đưa vào danh sách xuất hàng loạt</span>
@@ -4890,7 +4890,7 @@ export const AiSceneCutModal: React.FC<AiSceneCutModalProps> = ({
       <div className="w-full max-w-[480px] bg-[#1E1E24] border border-[#32323C] rounded-lg shadow-2xl overflow-hidden text-xs text-[#E4E4E7]">
         <div className="flex items-center justify-between px-4 py-3 bg-[#25252C] border-b border-[#32323C]">
           <div className="flex items-center gap-2 font-semibold text-sm text-white">
-            <Scissors className="w-4 h-4 text-[#00E5CC]" />
+            <Scissors className="w-4 h-4 text-[#00CAE0]" />
             <span>Công cụ Cắt Clip Tự Động bằng AI</span>
           </div>
           <button
@@ -4909,11 +4909,11 @@ export const AiSceneCutModal: React.FC<AiSceneCutModalProps> = ({
               onClick={() => setMode('auto_scene')}
               className={`p-2.5 rounded border text-left transition-colors cursor-pointer ${
                 mode === 'auto_scene'
-                  ? 'bg-[#00E5CC]/15 border-[#00E5CC] text-white'
+                  ? 'bg-[#00CAE0]/15 border-[#00CAE0] text-white'
                   : 'bg-[#141418] border-[#2E2E38] text-[#A1A1AA]'
               }`}
             >
-              <div className="font-semibold text-xs text-[#00E5CC] mb-0.5">
+              <div className="font-semibold text-xs text-[#00CAE0] mb-0.5">
                 Chế độ 1: Tự động phát hiện chuyển cảnh
               </div>
               <div className="text-[10px] text-[#9CA3AF]">
@@ -4926,11 +4926,11 @@ export const AiSceneCutModal: React.FC<AiSceneCutModalProps> = ({
               onClick={() => setMode('fixed_interval')}
               className={`p-2.5 rounded border text-left transition-colors cursor-pointer ${
                 mode === 'fixed_interval'
-                  ? 'bg-[#00E5CC]/15 border-[#00E5CC] text-white'
+                  ? 'bg-[#00CAE0]/15 border-[#00CAE0] text-white'
                   : 'bg-[#141418] border-[#2E2E38] text-[#A1A1AA]'
               }`}
             >
-              <div className="font-semibold text-xs text-[#00E5CC] mb-0.5">
+              <div className="font-semibold text-xs text-[#00CAE0] mb-0.5">
                 Chế độ 2: Chia nhỏ theo khoảng giây
               </div>
               <div className="text-[10px] text-[#9CA3AF]">
@@ -4943,7 +4943,7 @@ export const AiSceneCutModal: React.FC<AiSceneCutModalProps> = ({
             <div className="p-3 bg-[#141418] border border-[#2B2B34] rounded space-y-2">
               <div className="flex justify-between">
                 <span className="text-[#A1A1AA]">Ngưỡng nhạy phát hiện chuyển cảnh:</span>
-                <span className="font-mono text-[#00E5CC]">{sensitivity}%</span>
+                <span className="font-mono text-[#00CAE0]">{sensitivity}%</span>
               </div>
               <input
                 type="range"
@@ -4951,7 +4951,7 @@ export const AiSceneCutModal: React.FC<AiSceneCutModalProps> = ({
                 max={80}
                 value={sensitivity}
                 onChange={(e) => setSensitivity(Number(e.target.value))}
-                className="w-full accent-[#00E5CC]"
+                className="w-full accent-[#00CAE0]"
               />
             </div>
           ) : (
@@ -4961,7 +4961,7 @@ export const AiSceneCutModal: React.FC<AiSceneCutModalProps> = ({
                   type="checkbox"
                   checked={randomRange}
                   onChange={(e) => setRandomRange(e.target.checked)}
-                  className="accent-[#00E5CC]"
+                  className="accent-[#00CAE0]"
                 />
                 <span>Cắt độ dài ngẫu nhiên (Min giây → Max giây)</span>
               </label>
@@ -5032,7 +5032,7 @@ export const AiSceneCutModal: React.FC<AiSceneCutModalProps> = ({
               });
               onClose();
             }}
-            className="flex items-center gap-1.5 px-4 py-1.5 font-semibold bg-[#00E5CC] hover:bg-[#00F5DC] text-[#090D12] rounded cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-1.5 font-semibold bg-[#00CAE0] hover:bg-[#00D8EE] text-[#090D12] rounded cursor-pointer"
           >
             <Scissors className="w-3.5 h-3.5" />
             <span>Tách cảnh &amp; Đẩy xuống Timeline</span>

@@ -194,7 +194,7 @@ class Mp4DemuxVideoDecoder {
   private decoder: VideoDecoder | null = null;
   private config: VideoDecoderConfig | null = null;
   private samples: Mp4SampleInfo[] = [];
-  private currentFrame: VideoFrame | null = null;
+  private decodedFrames: VideoFrame[] = [];
   private nextFeedDtsIdx: number = 0;
   private ready: boolean = false;
   public readonly width: number;
@@ -371,17 +371,19 @@ class Mp4DemuxVideoDecoder {
         // Ignore
       }
     }
+    for (const f of this.decodedFrames) {
+      try {
+        f.close();
+      } catch {
+        // Ignore
+      }
+    }
+    this.decodedFrames = [];
     this.nextFeedDtsIdx = 0;
     this.decoder = new VideoDecoder({
       output: (frame) => {
-        if (this.currentFrame) {
-          try {
-            this.currentFrame.close();
-          } catch {
-            // Ignore
-          }
-        }
-        this.currentFrame = frame;
+        this.decodedFrames.push(frame);
+        this.decodedFrames.sort((a, b) => a.timestamp - b.timestamp);
       },
       error: (e) => {
         console.warn('VideoDecoder runtime error:', e);
@@ -409,23 +411,23 @@ class Mp4DemuxVideoDecoder {
       if (this.samples[i].timeSec > targetSec + 0.5) break;
     }
 
-    // If currentFrame already matches target presentation time, clone and return
-    if (this.currentFrame && Math.abs(this.currentFrame.timestamp - targetUs) < 15_000) {
-      try {
-        return this.currentFrame.clone();
-      } catch {
-        return null;
+    // Check if we need to reset decoder (seeking backward before buffered frames)
+    const earliestDecodedUs =
+      this.decodedFrames.length > 0 ? this.decodedFrames[0].timestamp : Infinity;
+
+    if (targetUs < earliestDecodedUs - 80_000 && this.nextFeedDtsIdx > 0) {
+      let keyIdx = targetSampleIdx;
+      while (keyIdx > 0 && !this.samples[keyIdx].is_sync) {
+        keyIdx--;
       }
-    }
-
-    // Find preceding keyframe in DTS order
-    let keyIdx = targetSampleIdx;
-    while (keyIdx > 0 && !this.samples[keyIdx].is_sync) {
-      keyIdx--;
-    }
-
-    // Check if we need to reset decoder (seeking backward or jumping past a keyframe)
-    if (this.nextFeedDtsIdx <= keyIdx || this.nextFeedDtsIdx > targetSampleIdx + 1) {
+      for (const f of this.decodedFrames) {
+        try {
+          f.close();
+        } catch {
+          // Ignore
+        }
+      }
+      this.decodedFrames = [];
       try {
         this.decoder.reset();
         this.decoder.configure(this.config!);
@@ -436,8 +438,26 @@ class Mp4DemuxVideoDecoder {
     }
 
     try {
-      // Feed DTS chunks sequentially until targetSampleIdx is fed
-      while (this.nextFeedDtsIdx <= targetSampleIdx && this.nextFeedDtsIdx < this.samples.length) {
+      // Feed DTS chunks sequentially until targetUs is reached in decodedFrames
+      while (this.nextFeedDtsIdx < this.samples.length) {
+        const latestDecodedUs =
+          this.decodedFrames.length > 0
+            ? this.decodedFrames[this.decodedFrames.length - 1].timestamp
+            : -1;
+
+        if (latestDecodedUs >= targetUs) {
+          break;
+        }
+
+        // If next sample is a keyframe and we have already fed past targetSampleIdx,
+        // we reached the end of the current GOP. Stop feeding into next GOP.
+        if (
+          this.nextFeedDtsIdx > targetSampleIdx &&
+          this.samples[this.nextFeedDtsIdx].is_sync
+        ) {
+          break;
+        }
+
         const s = this.samples[this.nextFeedDtsIdx++];
         const chunk = new EncodedVideoChunk({
           type: s.is_sync ? 'key' : 'delta',
@@ -446,43 +466,124 @@ class Mp4DemuxVideoDecoder {
           data: s.data,
         });
         this.decoder.decode(chunk);
+
+        if (
+          this.decodedFrames.length > 0 &&
+          this.decodedFrames[this.decodedFrames.length - 1].timestamp >= targetUs
+        ) {
+          break;
+        }
       }
 
       // If decoder queue is processing, wait a micro-interval for output without calling flush()
-      if (!this.currentFrame || this.currentFrame.timestamp < targetUs - 35_000) {
+      if (
+        this.decodedFrames.length === 0 ||
+        this.decodedFrames[this.decodedFrames.length - 1].timestamp < targetUs
+      ) {
         let waitCount = 0;
         while (
-          waitCount++ < 15 &&
-          (!this.currentFrame || this.currentFrame.timestamp < targetUs - 35_000) &&
-          this.decoder.decodeQueueSize > 0
+          waitCount++ < 20 &&
+          this.decoder.decodeQueueSize > 0 &&
+          (this.decodedFrames.length === 0 ||
+            this.decodedFrames[this.decodedFrames.length - 1].timestamp < targetUs)
         ) {
           await new Promise<void>((r) => setTimeout(r, 4));
         }
       }
 
-      if (this.currentFrame) {
+      // If we reached the end of the clip/samples and still haven't reached targetUs,
+      // flush remaining frames at the end of the clip
+      if (
+        this.nextFeedDtsIdx >= this.samples.length &&
+        (this.decodedFrames.length === 0 ||
+          this.decodedFrames[this.decodedFrames.length - 1].timestamp < targetUs)
+      ) {
         try {
-          return this.currentFrame.clone();
+          await this.decoder.flush();
         } catch {
-          return null;
+          // Ignore
         }
       }
-      return null;
+
+      if (this.decodedFrames.length === 0) return null;
+
+      // Find the decoded frame whose timestamp is closest to targetUs
+      let bestFrame: VideoFrame | null = null;
+      let bestIdx = -1;
+      let bestDiff = Infinity;
+      for (let i = 0; i < this.decodedFrames.length; i++) {
+        const diff = Math.abs(this.decodedFrames[i].timestamp - targetUs);
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          bestIdx = i;
+          bestFrame = this.decodedFrames[i];
+        }
+      }
+
+      if (!bestFrame) return null;
+
+      let resultFrame: VideoFrame | null = null;
+      try {
+        resultFrame = bestFrame.clone();
+      } catch {
+        return null;
+      }
+
+      // Prune old frames strictly older than targetUs to save mobile RAM.
+      // Keep bestFrame and all subsequent frames.
+      const retained: VideoFrame[] = [];
+      for (let i = 0; i < this.decodedFrames.length; i++) {
+        const f = this.decodedFrames[i];
+        if (i < bestIdx && f.timestamp < targetUs - 35_000) {
+          try {
+            f.close();
+          } catch {
+            // Ignore
+          }
+        } else {
+          retained.push(f);
+        }
+      }
+      this.decodedFrames = retained;
+
+      return resultFrame;
     } catch {
       return null;
     }
   }
 
-  close() {
-    this.ready = false;
-    if (this.currentFrame) {
+  reset() {
+    for (const f of this.decodedFrames) {
       try {
-        this.currentFrame.close();
+        f.close();
       } catch {
         // Ignore
       }
-      this.currentFrame = null;
     }
+    this.decodedFrames = [];
+    this.nextFeedDtsIdx = 0;
+    if (this.decoder && this.config) {
+      try {
+        if (this.decoder.state !== 'closed') {
+          this.decoder.reset();
+          this.decoder.configure(this.config);
+        }
+      } catch {
+        // Ignore
+      }
+    }
+  }
+
+  close() {
+    this.ready = false;
+    for (const f of this.decodedFrames) {
+      try {
+        f.close();
+      } catch {
+        // Ignore
+      }
+    }
+    this.decodedFrames = [];
     if (this.decoder) {
       try {
         if (this.decoder.state !== 'closed') this.decoder.close();
@@ -715,13 +816,25 @@ async function mixProjectAudioOffline(
   }
 }
 
+interface SupportedAudioEncoderConfig {
+  encoderCodec: string; // 'mp4a.40.2' or 'opus'
+  muxerCodec: 'aac' | 'opus';
+  sampleRate: number; // 48000 or 44100
+  bitrate: number; // 192000
+}
+
 /**
- * Detects whether AAC audio encoding is supported at 48000Hz or 44100Hz.
+ * Detects whether AudioEncoder is supported with AAC (mp4a.40.2) or Opus.
+ * Tests mp4a.40.2 at 48000Hz, then 44100Hz (muxer codec: 'aac').
+ * If neither is supported, tests opus at 48000Hz (muxer codec: 'opus')
+ * to ensure 100% WebCodecs support on Android Chrome.
  */
-async function detectSupportedAudioEncoderSampleRate(): Promise<number | null> {
+async function detectSupportedAudioEncoderConfig(): Promise<SupportedAudioEncoderConfig | null> {
   if (typeof AudioEncoder === 'undefined' || typeof AudioData === 'undefined') {
     return null;
   }
+
+  // 1. Try AAC (mp4a.40.2) at 48000Hz, then 44100Hz
   for (const sRate of [48000, 44100]) {
     try {
       const res = await AudioEncoder.isConfigSupported({
@@ -731,35 +844,65 @@ async function detectSupportedAudioEncoderSampleRate(): Promise<number | null> {
         bitrate: 192_000,
       });
       if (res && res.supported) {
-        return sRate;
+        return {
+          encoderCodec: 'mp4a.40.2',
+          muxerCodec: 'aac',
+          sampleRate: sRate,
+          bitrate: 192_000,
+        };
       }
     } catch {
       // Ignore
     }
   }
+
+  // 2. Fallback to Opus (opus) at 48000Hz (Universal on Android Chrome)
+  try {
+    const res = await AudioEncoder.isConfigSupported({
+      codec: 'opus',
+      numberOfChannels: 2,
+      sampleRate: 48000,
+      bitrate: 192_000,
+    });
+    if (res && res.supported) {
+      return {
+        encoderCodec: 'opus',
+        muxerCodec: 'opus',
+        sampleRate: 48000,
+        bitrate: 192_000,
+      };
+    }
+  } catch {
+    // Ignore
+  }
+
   return null;
 }
 
 /**
- * Encode an AudioBuffer into AAC AudioData chunks and add them to mp4-muxer.
+ * Encode an AudioBuffer into AAC or Opus AudioData chunks and add them to mp4-muxer.
  * Guarantees audioEncoder.close() runs in try/finally to avoid orphaned encoders.
  */
 async function encodeAudioBufferToMuxer(
   audioBuffer: AudioBuffer,
   muxer: Muxer<ArrayBufferTarget>,
   abortSignal: React.MutableRefObject<boolean>,
-  activeAudioEncoderRef?: React.MutableRefObject<AudioEncoder | null>
+  activeAudioEncoderRef?: React.MutableRefObject<AudioEncoder | null>,
+  supportedConfig?: SupportedAudioEncoderConfig | null
 ): Promise<boolean> {
   if (typeof AudioEncoder === 'undefined' || typeof AudioData === 'undefined') {
     return false;
   }
 
-  const sampleRate = audioBuffer.sampleRate;
+  const sampleRate = supportedConfig?.sampleRate ?? audioBuffer.sampleRate;
+  const codec = supportedConfig?.encoderCodec ?? 'mp4a.40.2';
+  const bitrate = supportedConfig?.bitrate ?? 192_000;
+
   const audioConfig: AudioEncoderConfig = {
-    codec: 'mp4a.40.2',
+    codec,
     numberOfChannels: 2,
     sampleRate,
-    bitrate: 192_000,
+    bitrate,
   };
 
   try {
@@ -793,7 +936,8 @@ async function encodeAudioBufferToMuxer(
   try {
     audioEncoder.configure(audioConfig);
 
-    const CHUNK_SIZE = 1024;
+    // AAC standard packet size is 1024 frames; Opus standard 20ms packet size at 48kHz is 960 frames
+    const CHUNK_SIZE = codec === 'opus' ? 960 : 1024;
     const totalSamples = audioBuffer.length;
     const left = audioBuffer.getChannelData(0);
     const right = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1) : left;
@@ -802,7 +946,7 @@ async function encodeAudioBufferToMuxer(
       if (abortSignal.current || encoderError) break;
 
       const availableFrames = Math.min(CHUNK_SIZE, totalSamples - offset);
-      // Pad to exact 1024-frame AAC packet boundary
+      // Pad to exact packet boundary (1024 for AAC, 960 for Opus)
       const planar = new Float32Array(CHUNK_SIZE * 2);
       planar.set(left.subarray(offset, offset + availableFrames), 0);
       planar.set(right.subarray(offset, offset + availableFrames), CHUNK_SIZE);
@@ -2797,13 +2941,13 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
         activeV1Clips.some((c) => !c.muted && ((c.volume ?? 100) > 0)) ||
         activeAudioClips.length > 0;
 
-      // Detect supported AAC sample rate (48000Hz or 44100Hz)
-      const detectedAudioSampleRate = await detectSupportedAudioEncoderSampleRate();
+      // Detect supported AudioEncoder config: AAC (48000Hz, 44100Hz) or Opus (48000Hz)
+      const supportedAudioConfig = await detectSupportedAudioEncoderConfig();
 
-      // If project has audio but AAC AudioEncoder is not supported, do not produce a silent MP4.
-      // Fall through to MediaRecorder branch which captures audio via Web Audio stream.
-      if (hasTimelineAudio && detectedAudioSampleRate === null) {
-        console.warn('[WebCodecs] AAC AudioEncoder not supported on this device; falling back to MediaRecorder to preserve audio.');
+      // If project has audio but neither AAC nor Opus is supported by AudioEncoder,
+      // fall through to MediaRecorder branch which captures audio via Web Audio stream.
+      if (hasTimelineAudio && supportedAudioConfig === null) {
+        console.warn('[WebCodecs] Neither AAC nor Opus AudioEncoder supported on this device; falling back to MediaRecorder to preserve audio.');
         chosenVideoConfig = null;
       }
 
@@ -2827,7 +2971,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
 
           // Mix all project audio tracks and video clip audio via OfflineAudioContext (48kHz or 44.1kHz stereo)
           const allAudioClips = [...activeV1Clips, ...activeAudioClips];
-          const audioSampleRate = detectedAudioSampleRate || 48000;
+          const audioSampleRate = supportedAudioConfig?.sampleRate || 48000;
           const renderedAudioBuffer = hasTimelineAudio
             ? await mixProjectAudioOffline(
                 allAudioClips,
@@ -2849,9 +2993,9 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               frameRate: targetFps,
             },
             audio:
-              detectedAudioSampleRate !== null && renderedAudioBuffer
+              supportedAudioConfig !== null && renderedAudioBuffer
                 ? {
-                    codec: 'aac',
+                    codec: supportedAudioConfig.muxerCodec,
                     numberOfChannels: 2,
                     sampleRate: renderedAudioBuffer.sampleRate,
                   }
@@ -2861,12 +3005,13 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           });
 
           // Encode audio into muxer via AudioEncoder
-          if (detectedAudioSampleRate !== null && renderedAudioBuffer) {
+          if (supportedAudioConfig !== null && renderedAudioBuffer) {
             await encodeAudioBufferToMuxer(
               renderedAudioBuffer,
               muxer,
               abortExportRef,
-              activeAudioEncoderRef
+              activeAudioEncoderRef,
+              supportedAudioConfig
             );
           }
 
@@ -2978,7 +3123,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             // Draw composite frame onto exportCanvas
             drawCompositeExportFrame(t, frameIdx);
 
-            // Clean up temporary ImageBitmaps immediately after drawing to free GPU memory
+            // Clean up temporary ImageBitmaps and VideoFrames immediately after drawing to free GPU memory
             if (activeClip) {
               const entry = preloadedVideos.get(activeClip.id);
               if (entry) {
@@ -2986,7 +3131,10 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                   try { entry.activeBitmap.close(); } catch {}
                   entry.activeBitmap = null;
                 }
-                entry.activeFrame = null;
+                if (entry.activeFrame) {
+                  try { entry.activeFrame.close(); } catch {}
+                  entry.activeFrame = null;
+                }
               }
             }
             if (prevClip) {
@@ -2996,7 +3144,10 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                   try { prevEntry.activeBitmap.close(); } catch {}
                   prevEntry.activeBitmap = null;
                 }
-                prevEntry.activeFrame = null;
+                if (prevEntry.activeFrame) {
+                  try { prevEntry.activeFrame.close(); } catch {}
+                  prevEntry.activeFrame = null;
+                }
               }
             }
 
@@ -3122,7 +3273,13 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                 entry.activeBitmap.close();
                 entry.activeBitmap = null;
               }
-              entry.activeFrame = null;
+              if (entry.activeFrame) {
+                try { entry.activeFrame.close(); } catch {}
+                entry.activeFrame = null;
+              }
+              if (entry.mp4Decoder) {
+                entry.mp4Decoder.reset();
+              }
               entry.el.pause();
               entry.el.currentTime = 0;
             } catch {

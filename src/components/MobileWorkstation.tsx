@@ -3758,21 +3758,135 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                 {textEditTab === 'font' && (
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-[#94A3B8] block">Chọn phông chữ</label>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
                       {[
-                        { id: 'Plus Jakarta Sans', label: 'Jakarta Sans (Mặc định)' },
-                        { id: 'Montserrat', label: 'Montserrat (Hiện đại)' },
-                        { id: 'Be Vietnam Pro', label: 'Be Vietnam Pro (Chuẩn Việt)' },
-                        { id: 'Playfair Display', label: 'Playfair (Cổ điển)' },
-                        { id: 'Caveat', label: 'Caveat (Viết tay)' },
-                        { id: 'Impact', label: 'Impact (Đậm nét)' },
-                        { id: 'Oswald', label: 'Oswald (Thon cao)' },
-                        { id: 'Roboto', label: 'Roboto (Google)' },
+                        { id: 'Plus Jakarta Sans', label: 'Plus Jakarta Sans' },
+                        { id: 'Be Vietnam Pro', label: 'Be Vietnam Pro' },
+                        { id: 'Montserrat', label: 'Montserrat' },
+                        { id: 'Roboto', label: 'Roboto' },
+                        { id: 'Open Sans', label: 'Open Sans' },
+                        { id: 'Inter', label: 'Inter' },
+                        { id: 'Poppins', label: 'Poppins' },
+                        { id: 'Lato', label: 'Lato' },
+                        { id: 'Nunito', label: 'Nunito' },
+                        { id: 'Raleway', label: 'Raleway' },
+                        { id: 'Ubuntu', label: 'Ubuntu' },
+                        { id: 'Rubik', label: 'Rubik' },
+                        { id: 'Work Sans', label: 'Work Sans' },
+                        { id: 'DM Sans', label: 'DM Sans' },
+                        { id: 'Manrope', label: 'Manrope' },
+                        { id: 'Outfit', label: 'Outfit' },
+                        { id: 'Space Grotesk', label: 'Space Grotesk' },
+                        { id: 'Sora', label: 'Sora' },
+                        { id: 'Lexend', label: 'Lexend' },
+                        { id: 'Quicksand', label: 'Quicksand' },
+                        { id: 'Mulish', label: 'Mulish' },
+                        { id: 'Barlow', label: 'Barlow' },
+                        { id: 'Cabin', label: 'Cabin' },
+                        { id: 'Karla', label: 'Karla' },
+                        { id: 'Jost', label: 'Jost' },
+                        { id: 'Figtree', label: 'Figtree' },
+                        { id: 'Urbanist', label: 'Urbanist' },
+                        { id: 'Oswald', label: 'Oswald' },
+                        { id: 'Bebas Neue', label: 'Bebas Neue' },
+                        { id: 'Anton', label: 'Anton' },
+                        { id: 'Teko', label: 'Teko' },
+                        { id: 'Barlow Condensed', label: 'Barlow Condensed' },
+                        { id: 'Roboto Condensed', label: 'Roboto Condensed' },
+                        { id: 'Fjalla One', label: 'Fjalla One' },
+                        { id: 'Righteous', label: 'Righteous' },
+                        { id: 'Black Ops One', label: 'Black Ops One' },
+                        { id: 'Bangers', label: 'Bangers' },
+                        { id: 'Russo One', label: 'Russo One' },
+                        { id: 'Chakra Petch', label: 'Chakra Petch' },
+                        { id: 'Orbitron', label: 'Orbitron' },
+                        { id: 'Audiowide', label: 'Audiowide' },
+                        { id: 'Press Start 2P', label: 'Press Start 2P' },
+                        { id: 'Silkscreen', label: 'Silkscreen' },
+                        { id: 'Playfair Display', label: 'Playfair Display' },
+                        { id: 'Merriweather', label: 'Merriweather' },
+                        { id: 'Lora', label: 'Lora' },
+                        { id: 'PT Serif', label: 'PT Serif' },
+                        { id: 'Libre Baskerville', label: 'Libre Baskerville' },
+                        { id: 'Crimson Text', label: 'Crimson Text' },
+                        { id: 'EB Garamond', label: 'EB Garamond' },
+                        { id: 'Cormorant Garamond', label: 'Cormorant Garamond' },
+                        { id: 'Bodoni Moda', label: 'Bodoni Moda' },
+                        { id: 'Cinzel', label: 'Cinzel' },
+                        { id: 'Abril Fatface', label: 'Abril Fatface' },
+                        { id: 'DM Serif Display', label: 'DM Serif Display' },
+                        { id: 'Bitter', label: 'Bitter' },
+                        { id: 'Arvo', label: 'Arvo' },
+                        { id: 'Rokkitt', label: 'Rokkitt' },
+                        { id: 'Caveat', label: 'Caveat' },
+                        { id: 'Dancing Script', label: 'Dancing Script' },
+                        { id: 'Pacifico', label: 'Pacifico' },
+                        { id: 'Satisfy', label: 'Satisfy' },
+                        { id: 'Great Vibes', label: 'Great Vibes' },
+                        { id: 'Sacramento', label: 'Sacramento' },
+                        { id: 'Allura', label: 'Allura' },
+                        { id: 'Alex Brush', label: 'Alex Brush' },
+                        { id: 'Kalam', label: 'Kalam' },
+                        { id: 'Patrick Hand', label: 'Patrick Hand' },
+                        { id: 'Indie Flower', label: 'Indie Flower' },
+                        { id: 'Shadows Into Light', label: 'Shadows Into Light' },
+                        { id: 'Amatic SC', label: 'Amatic SC' },
+                        { id: 'Permanent Marker', label: 'Permanent Marker' },
+                        { id: 'Rock Salt', label: 'Rock Salt' },
+                        { id: 'Architects Daughter', label: 'Architects Daughter' },
+                        { id: 'Gloria Hallelujah', label: 'Gloria Hallelujah' },
+                        { id: 'Homemade Apple', label: 'Homemade Apple' },
+                        { id: 'Yellowtail', label: 'Yellowtail' },
+                        { id: 'Lobster', label: 'Lobster' },
+                        { id: 'Lobster Two', label: 'Lobster Two' },
+                        { id: 'Courgette', label: 'Courgette' },
+                        { id: 'Kaushan Script', label: 'Kaushan Script' },
+                        { id: 'Cookie', label: 'Cookie' },
+                        { id: 'Marck Script', label: 'Marck Script' },
+                        { id: 'Bad Script', label: 'Bad Script' },
+                        { id: 'Handlee', label: 'Handlee' },
+                        { id: 'Nothing You Could Do', label: 'Nothing You Could Do' },
+                        { id: 'Covered By Your Grace', label: 'Covered By Your Grace' },
+                        { id: 'JetBrains Mono', label: 'JetBrains Mono' },
+                        { id: 'Fira Code', label: 'Fira Code' },
+                        { id: 'Source Code Pro', label: 'Source Code Pro' },
+                        { id: 'Roboto Mono', label: 'Roboto Mono' },
+                        { id: 'Space Mono', label: 'Space Mono' },
+                        { id: 'IBM Plex Mono', label: 'IBM Plex Mono' },
+                        { id: 'Inconsolata', label: 'Inconsolata' },
+                        { id: 'Courier Prime', label: 'Courier Prime' },
+                        { id: 'Comfortaa', label: 'Comfortaa' },
+                        { id: 'Fredoka', label: 'Fredoka' },
+                        { id: 'Baloo 2', label: 'Baloo 2' },
+                        { id: 'Signika', label: 'Signika' },
+                        { id: 'Varela Round', label: 'Varela Round' },
+                        { id: 'Josefin Sans', label: 'Josefin Sans' },
+                        { id: 'Archivo Black', label: 'Archivo Black' },
+                        { id: 'Syne', label: 'Syne' },
+                        { id: 'Unbounded', label: 'Unbounded' },
+                        { id: 'Bricolage Grotesque', label: 'Bricolage Grotesque' },
+                        { id: 'Impact', label: 'Impact' },
+                        { id: 'Georgia', label: 'Georgia' },
+                        { id: 'Times New Roman', label: 'Times New Roman' },
+                        { id: 'Arial Black', label: 'Arial Black' },
+                        { id: 'Verdana', label: 'Verdana' }
                       ].map((f) => (
                         <button
                           key={f.id}
                           type="button"
-                          onClick={() => onUpdateClipProp('fontFamily', f.id, targetTextClip.id)}
+                          onClick={() => {
+                            if (typeof document !== 'undefined' && !['Impact', 'Georgia', 'Times New Roman', 'Arial Black', 'Verdana'].includes(f.id)) {
+                              const lid = 'gf-' + f.id.replace(/\s+/g, '-').toLowerCase();
+                              if (!document.getElementById(lid)) {
+                                const link = document.createElement('link');
+                                link.id = lid;
+                                link.rel = 'stylesheet';
+                                link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(f.id)}:wght@400;700;800&display=swap`;
+                                document.head.appendChild(link);
+                              }
+                            }
+                            onUpdateClipProp('fontFamily', f.id, targetTextClip.id);
+                          }}
                           style={{ fontFamily: f.id }}
                           className={`p-3 rounded-xl border text-left text-xs font-bold transition-all cursor-pointer ${
                             currentFontFamily === f.id

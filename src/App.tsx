@@ -135,6 +135,7 @@ import {
 import {
   extractTimelineAudio16kHzMono,
   transcribeAudioWithWhisper,
+  WHISPER_243_LANGUAGES,
 } from './utils/whisperAutoCaptions';
 import {
   VideoPreviewCanvas,
@@ -1297,7 +1298,7 @@ export default function App() {
   // AI Captions & Prompt State
   const [bilingualSubtitles, setBilingualSubtitles] = useState<boolean>(true);
   const [removeFillerWords, setRemoveFillerWords] = useState<boolean>(true);
-  const [captionLanguage, setCaptionLanguage] = useState<'auto' | 'vi' | 'en'>('auto');
+  const [captionLanguage, setCaptionLanguage] = useState<string>('auto');
   const [isGeneratingCaptions, setIsGeneratingCaptions] = useState<boolean>(false);
   const [captionProgressText, setCaptionProgressText] = useState<string>('');
   const [captionProgressPct, setCaptionProgressPct] = useState<number>(0);
@@ -2687,8 +2688,11 @@ export default function App() {
     for (let i = 0; i < sortedFiles.length; i++) {
       const file = sortedFiles[i];
       const objectUrl = URL.createObjectURL(file);
+      const isAudioInput = e.target === audioInputRef.current;
       const isAudio =
-        file.type.startsWith('audio/') || /\.(mp3|wav|m4a|aac|flac)$/i.test(file.name);
+        isAudioInput ||
+        file.type.startsWith('audio/') ||
+        /\.(mp3|wav|m4a|aac|flac|ogg|opus|wma|amr|3gp|3gpp)$/i.test(file.name);
       const isImage =
         !isAudio &&
         (file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(file.name));
@@ -5950,9 +5954,6 @@ export default function App() {
                         : topLeftCategory === 'captions'
                         ? [
                             { id: 'all', label: 'Phụ đề tự động' },
-                            { id: 'bilingual', label: 'Song ngữ Việt-Anh' },
-                            { id: 'lyrics', label: 'Lời bài hát (Lyrics)' },
-                            { id: 'filler', label: 'Lọc từ thừa (Ờ, À)' },
                           ]
                         : topLeftCategory === 'filters'
                         ? [
@@ -7755,12 +7756,14 @@ export default function App() {
                           <span className="text-[#A1A1AA]">Ngôn ngữ giọng nói:</span>
                           <select
                             value={captionLanguage}
-                            onChange={(e) => setCaptionLanguage(e.target.value as 'auto' | 'vi' | 'en')}
-                            className="px-2 py-1 bg-[#141418] border border-[#32323C] rounded text-white text-[11px] outline-none"
+                            onChange={(e) => setCaptionLanguage(e.target.value)}
+                            className="max-w-[165px] px-2 py-1 bg-[#141418] border border-[#32323C] rounded text-white text-[11px] outline-none"
                           >
-                            <option value="auto">Tự động (Auto)</option>
-                            <option value="vi">Tiếng Việt</option>
-                            <option value="en">English</option>
+                            {WHISPER_243_LANGUAGES.map((lang) => (
+                              <option key={lang.code} value={lang.code}>
+                                {lang.label}
+                              </option>
+                            ))}
                           </select>
                         </div>
                         <label className="flex items-center gap-2 text-[11px] text-[#D4D4D8] cursor-pointer">

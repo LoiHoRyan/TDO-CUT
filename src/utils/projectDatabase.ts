@@ -33,7 +33,8 @@ export interface DbStatusResponse {
 }
 
 const DB_NAME = 'tdo_cut_studio_db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
+const MEDIA_STORE_NAME = 'media_blobs';
 const STORE_NAME = 'projects';
 const FALLBACK_KEY = 'tdo_cut_projects_backup_v1';
 
@@ -58,6 +59,9 @@ async function getDB(): Promise<IDBDatabase> {
         const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
         store.createIndex('updatedAt', 'updatedAt', { unique: false });
         store.createIndex('isDeletedInTrash', 'isDeletedInTrash', { unique: false });
+      }
+      if (!db.objectStoreNames.contains(MEDIA_STORE_NAME)) {
+        db.createObjectStore(MEDIA_STORE_NAME, { keyPath: 'key' });
       }
     };
 
@@ -228,18 +232,99 @@ export async function getProjectById(id: string): Promise<StoredProject | null> 
 /**
  * Save or update a project (Saves to PostgreSQL permanently & updates local cache)
  */
+
+const savedMediaUrlKeys = new Map<string, string>();
+const restoredBlobUrlCache = new Map<string, string>();
+
+export async function persistProjectMediaBlobs(clips: TimelineClip[]): Promise<TimelineClip[]> {
+  if (typeof window === 'undefined' || !window.indexedDB) return clips;
+  try {
+    const db = await getDB();
+    const updated: TimelineClip[] = [];
+    for (const c of clips) {
+      const anyClip = c as TimelineClip & { mediaStorageKey?: string };
+      if (anyClip.mediaUrl && anyClip.mediaUrl.startsWith('blob:')) {
+        const key = anyClip.mediaStorageKey || `media_${anyClip.id}`;
+        if (savedMediaUrlKeys.get(key) !== anyClip.mediaUrl) {
+          try {
+            const resp = await fetch(anyClip.mediaUrl);
+            const blob = await resp.blob();
+            await new Promise<void>((resolve) => {
+              const tx = db.transaction(MEDIA_STORE_NAME, 'readwrite');
+              tx.objectStore(MEDIA_STORE_NAME).put({ key, blob });
+              tx.oncomplete = () => resolve();
+              tx.onerror = () => resolve();
+            });
+            savedMediaUrlKeys.set(key, anyClip.mediaUrl);
+            restoredBlobUrlCache.set(key, anyClip.mediaUrl);
+          } catch {
+            // Ignore blob fetch error
+          }
+        }
+        updated.push({ ...c, mediaStorageKey: key } as TimelineClip);
+      } else {
+        updated.push(c);
+      }
+    }
+    return updated;
+  } catch {
+    return clips;
+  }
+}
+
+export async function restoreProjectMediaBlobs(clips: TimelineClip[]): Promise<TimelineClip[]> {
+  if (typeof window === 'undefined' || !window.indexedDB) return clips;
+  try {
+    const db = await getDB();
+    const restored: TimelineClip[] = [];
+    for (const c of clips) {
+      const anyClip = c as TimelineClip & { mediaStorageKey?: string };
+      if (anyClip.mediaStorageKey) {
+        let freshUrl = restoredBlobUrlCache.get(anyClip.mediaStorageKey);
+        if (!freshUrl) {
+          try {
+            const record = await new Promise<{ key: string; blob: Blob } | undefined>((resolve) => {
+              const tx = db.transaction(MEDIA_STORE_NAME, 'readonly');
+              const req = tx.objectStore(MEDIA_STORE_NAME).get(anyClip.mediaStorageKey!);
+              req.onsuccess = () => resolve(req.result);
+              req.onerror = () => resolve(undefined);
+            });
+            if (record?.blob) {
+              freshUrl = URL.createObjectURL(record.blob);
+              restoredBlobUrlCache.set(anyClip.mediaStorageKey, freshUrl);
+              savedMediaUrlKeys.set(anyClip.mediaStorageKey, freshUrl);
+            }
+          } catch {
+            // Ignore restore error
+          }
+        }
+        if (freshUrl) {
+          restored.push({ ...c, mediaUrl: freshUrl });
+          continue;
+        }
+      }
+      restored.push(c);
+    }
+    return restored;
+  } catch {
+    return clips;
+  }
+}
+
 export async function saveProject(project: StoredProject): Promise<void> {
   project.updatedAt = new Date().toISOString();
+  const persistedClips = await persistProjectMediaBlobs(project.clips);
+  const projectToSave: StoredProject = { ...project, clips: persistedClips };
 
   // 1. Always update local cache immediately for zero latency
-  await saveToIndexedDb(project);
+  await saveToIndexedDb(projectToSave);
 
   // 2. Persist to PostgreSQL Database
   try {
     await fetch('/api/projects', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(project),
+      body: JSON.stringify(projectToSave),
     });
   } catch (err) {
     console.warn('[PostgreSQL Save Warning]: Could not persist to PostgreSQL directly:', err);

@@ -133,6 +133,10 @@ import {
   resolveDefaultProjectTitle,
 } from './utils/timelineEngine';
 import {
+  extractTimelineAudio16kHzMono,
+  transcribeAudioWithWhisper,
+} from './utils/whisperAutoCaptions';
+import {
   VideoPreviewCanvas,
   AspectRatioOption,
   PreviewQualityOption,
@@ -163,6 +167,7 @@ import {
   setProjectTrashStatus,
   duplicateProject as duplicateDbProject,
   ensureInitialProjects,
+  restoreProjectMediaBlobs,
   StoredProject,
 } from './utils/projectDatabase';
 
@@ -1174,7 +1179,9 @@ export default function App() {
           if (!projectName || projectName === '1') {
             setProjectName(resolvedName);
             setAspectRatio((activeProj.aspectRatio as AspectRatioOption) || '16:9');
-            setClips(activeProj.clips.map((c) => ({ ...c })));
+            restoreProjectMediaBlobs(activeProj.clips.map((c) => ({ ...c }))).then((restored) => {
+              setClips(restored);
+            });
           }
         } else {
           setActiveProjectId('');
@@ -1290,6 +1297,10 @@ export default function App() {
   // AI Captions & Prompt State
   const [bilingualSubtitles, setBilingualSubtitles] = useState<boolean>(true);
   const [removeFillerWords, setRemoveFillerWords] = useState<boolean>(true);
+  const [captionLanguage, setCaptionLanguage] = useState<'auto' | 'vi' | 'en'>('auto');
+  const [isGeneratingCaptions, setIsGeneratingCaptions] = useState<boolean>(false);
+  const [captionProgressText, setCaptionProgressText] = useState<string>('');
+  const [captionProgressPct, setCaptionProgressPct] = useState<number>(0);
   const [aiFilterPrompt, setAiFilterPrompt] = useState<string>(
     'Giữ lại các cảnh chuyển động nhanh, kịch tính và tự động tạo phụ đề song ngữ Việt - Anh'
   );
@@ -1304,6 +1315,25 @@ export default function App() {
       setStatusToast((prev) => (prev === msg ? null : prev));
     }, 3200);
   };
+
+  // Auto-assign a persistent project ID as soon as the user starts editing
+  useEffect(() => {
+    if (!activeProjectId && clips.length > 0) {
+      const newId = `proj-${Date.now()}`;
+      const resolved = projectName.trim() || 'Dự án 1';
+      setActiveProjectId(newId);
+      setSubProjects((prev) => [
+        {
+          id: newId,
+          name: resolved,
+          createdAt: new Date().toISOString(),
+          aspectRatio,
+          clips,
+        },
+        ...prev,
+      ]);
+    }
+  }, [activeProjectId, clips.length]);
 
   // Persist project changes to IndexedDB permanently
   useEffect(() => {
@@ -3279,12 +3309,14 @@ export default function App() {
     e.target.value = '';
   };
 
-  // Auto-Generate Subtitles ("Phụ đề tự động AI" — supports all 4 modes: all, bilingual, lyrics, filler)
-  const handleGenerateAutoCaptions = (
+  // Real Browser-Side Auto Captions via OfflineAudioContext (16kHz mono) + @huggingface/transformers (Whisper WebGPU/WASM)
+  const handleGenerateAutoCaptions = async (
     modeOverride?: 'all' | 'bilingual' | 'lyrics' | 'filler',
-    bilingualOverride?: boolean,
+    _bilingualOverride?: boolean,
     fillerOverride?: boolean
   ) => {
+    if (isGeneratingCaptions) return;
+
     const activeMode =
       modeOverride ||
       (topLeftCategory === 'captions' &&
@@ -3293,12 +3325,7 @@ export default function App() {
         subCategoryFilter === 'filler')
         ? (subCategoryFilter as 'bilingual' | 'lyrics' | 'filler')
         : 'all');
-    const useBilingual =
-      bilingualOverride !== undefined
-        ? bilingualOverride
-        : activeMode === 'bilingual'
-        ? true
-        : bilingualSubtitles;
+
     const useFillerFilter =
       fillerOverride !== undefined
         ? fillerOverride
@@ -3306,232 +3333,111 @@ export default function App() {
         ? true
         : removeFillerWords;
 
-    const sampleLines =
-      activeMode === 'lyrics'
-        ? [
-            {
-              text: useBilingual
-                ? '🎵 Đêm nay nhịp bass vang lên rực cháy | 🎵 Tonight the bass drops on fire'
-                : '🎵 Đêm nay nhịp bass vang lên rực cháy ♪',
-              dur: 4.0,
-              color: '#F472B6',
-              stroke: '#1E1B4B',
-            },
-            {
-              text: useBilingual
-                ? '🎶 Ánh đèn Neon dẫn lối đam mê | 🎶 Neon lights guide our passion'
-                : '🎶 Ánh đèn Neon dẫn lối đam mê ♪',
-              dur: 4.5,
-              color: '#38BDF8',
-              stroke: '#0F172A',
-            },
-            {
-              text: useBilingual
-                ? '🎤 Cùng hòa nhịp điệu 60 khung hình | 🎤 Riding the 60 FPS rhythm'
-                : '🎤 Cùng hòa nhịp điệu 60 khung hình ♪',
-              dur: 4.5,
-              color: '#FACC15',
-              stroke: '#000000',
-            },
-            {
-              text: useBilingual
-                ? '🔥 Tỏa sáng đỉnh cao cùng TDO CUT! | 🔥 Shine at the top with TDO CUT!'
-                : '🔥 Tỏa sáng đỉnh cao cùng TDO CUT! 🎶',
-              dur: 5.0,
-              color: '#34D399',
-              stroke: '#064E3B',
-            },
-          ]
-        : activeMode === 'filler'
-        ? [
-            {
-              text: useBilingual
-                ? '[Đã lọc ờ, à] Chào mừng đến với TDO CUT! | [Clean] Welcome to TDO CUT!'
-                : '[Đã lọc từ thừa] Chào mừng đến với TDO CUT Studio!',
-              dur: 4.0,
-              color: '#34D399',
-              stroke: '#000000',
-            },
-            {
-              text: useBilingual
-                ? '[Không khoảng lặng] Cắt ghép tự động 60 FPS | [No Silence] 60 FPS AI Cut'
-                : '[Không khoảng lặng] Cắt ghép tự động tốc độ cao 60 FPS',
-              dur: 4.5,
-              color: '#38BDF8',
-              stroke: '#000000',
-            },
-            {
-              text: useBilingual
-                ? '[Chuẩn nhịp] Xuất video nét căng 4K | [Beat Synced] Ultra-sharp 4K Export'
-                : '[Chuẩn nhịp] Xuất video hàng loạt chất lượng cao 4K',
-              dur: 4.5,
-              color: '#FACC15',
-              stroke: '#000000',
-            },
-            {
-              text: useBilingual
-                ? 'Đăng ký kênh & bật chuông ngay! | Subscribe & Hit the Bell!'
-                : 'Đăng ký kênh và bật chuông thông báo ngay!',
-              dur: 5.0,
-              color: '#FFFFFF',
-              stroke: '#000000',
-            },
-          ]
-        : useBilingual
-        ? [
-            {
-              text: 'Chào mừng đến với TDO CUT! | Welcome to TDO CUT!',
-              dur: 4.0,
-              color: '#FACC15',
-              stroke: '#000000',
-            },
-            {
-              text: 'Cắt ghép tự động tốc độ cao 60 FPS | High-speed 60 FPS AI Editing',
-              dur: 4.5,
-              color: '#FACC15',
-              stroke: '#000000',
-            },
-            {
-              text: 'Xuất video hàng loạt chống quét bản quyền | Anti-Detect Matrix Batch Render',
-              dur: 4.5,
-              color: '#FACC15',
-              stroke: '#000000',
-            },
-            {
-              text: 'Đăng ký kênh và bật chuông thông báo! | Subscribe & Hit the Bell!',
-              dur: 5.0,
-              color: '#FACC15',
-              stroke: '#000000',
-            },
-          ]
-        : [
-            {
-              text:
-                language === 'en'
-                  ? 'Welcome to TDO CUT Pro Studio!'
-                  : 'Chào mừng đến với TDO CUT Studio!',
-              dur: 4.0,
-              color: '#FFFFFF',
-              stroke: '#000000',
-            },
-            {
-              text:
-                language === 'en'
-                  ? 'High-speed 60 FPS Multi-Track Editing'
-                  : 'Cắt ghép tự động tốc độ cao 60 FPS',
-              dur: 4.5,
-              color: '#FFFFFF',
-              stroke: '#000000',
-            },
-            {
-              text:
-                language === 'en'
-                  ? 'Anti-Detect Matrix Batch Render Engine'
-                  : 'Xuất video hàng loạt chống quét bản quyền',
-              dur: 4.5,
-              color: '#FFFFFF',
-              stroke: '#000000',
-            },
-            {
-              text:
-                language === 'en'
-                  ? 'Subscribe & Hit the Notification Bell!'
-                  : 'Đăng ký kênh và bật chuông thông báo!',
-              dur: 5.0,
-              color: '#FFFFFF',
-              stroke: '#000000',
-            },
-          ];
+    const targetClips =
+      currentClip && (currentClip.trackIndex === 0 || currentClip.trackIndex === 1 || currentClip.trackIndex === 3)
+        ? [currentClip]
+        : clips;
 
-    // Synchronize subtitle clips with actual timeline audio duration & waveform
-    const audioTrackClips = clips.filter(
-      (c) =>
-        (c.trackIndex === 0 || c.trackIndex === 1 || c.trackIndex === 3) &&
-        !c.muted &&
-        (c.volume ?? 100) > 0
+    setIsGeneratingCaptions(true);
+    setCaptionProgressPct(5);
+    setCaptionProgressText(
+      language === 'en' ? 'Preparing audio...' : 'Đang chuẩn bị tách âm thanh...'
     );
 
-    let startSec = 0;
-    let totalSpanSec = 16.0;
+    try {
+      const { audio, startTimeOffset } = await extractTimelineAudio16kHzMono(
+        targetClips,
+        (pct, msg) => {
+          setCaptionProgressPct(pct);
+          setCaptionProgressText(msg);
+        }
+      );
 
-    if (currentClip && (currentClip.trackIndex === 0 || currentClip.trackIndex === 3)) {
-      // Focus auto-captions onto the selected video or audio clip
-      startSec = currentClip.startTime;
-      totalSpanSec = currentClip.duration;
-    } else if (audioTrackClips.length > 0) {
-      // Synchronize across the entire timeline's audio bounds
-      startSec = Math.min(...audioTrackClips.map((c) => c.startTime));
-      const endSec = Math.max(...audioTrackClips.map((c) => c.startTime + c.duration));
-      totalSpanSec = Math.max(3.0, endSec - startSec);
-    }
-
-    // Determine number of subtitle sentences needed based on duration (2.5s to 3.8s per subtitle line)
-    const targetCount = Math.max(1, Math.min(24, Math.round(totalSpanSec / 3.2)));
-    const actualDurPerLine = Number((totalSpanSec / targetCount).toFixed(2));
-
-    let cursor = startSec;
-    const generated: TimelineClip[] = [];
-
-    for (let idx = 0; idx < targetCount; idx++) {
-      const templateItem = sampleLines[idx % sampleLines.length];
-      const cleanedText = useFillerFilter
-        ? templateItem.text.replace(/\b(ờ|à|ừm|uh|um)\b/gi, '').trim()
-        : templateItem.text;
-
-      const dur =
-        idx === targetCount - 1
-          ? Number((startSec + totalSpanSec - cursor).toFixed(2))
-          : actualDurPerLine;
-
-      generated.push({
-        id: `auto-sub-${Date.now()}-${idx}`,
-        name: cleanedText,
-        filePath: '',
-        trackIndex: 2,
-        startTime: Number(cursor.toFixed(2)),
-        duration: Math.max(1.0, dur),
-        sourceIn: 0,
-        speed: 1.0,
-        volume: 100,
-        flipH: false,
-        cropRatio: 1.0,
-        subtitleText: cleanedText,
-        fontSize: activeMode === 'lyrics' ? 30 : 26,
-        textColor: templateItem.color,
-        textStrokeColor: templateItem.stroke,
-        colorHex: activeMode === 'lyrics' ? '#DB2777' : '#A45A49',
+      const segments = await transcribeAudioWithWhisper(audio, startTimeOffset, {
+        language: captionLanguage,
+        isMobile,
+        onProgress: (pct, msg) => {
+          setCaptionProgressPct(pct);
+          setCaptionProgressText(msg);
+        },
       });
 
-      cursor += dur;
-    }
+      if (!segments || segments.length === 0) {
+        showToast(
+          language === 'en'
+            ? 'No speech detected in the selected audio.'
+            : 'Không phát hiện thấy giọng nói rõ ràng trong video.'
+        );
+        return;
+      }
 
-    commitClips((prev) => [
-      ...prev.filter(
-        (c) =>
-          !(
-            c.trackIndex === 2 &&
-            !c.stickerEmoji &&
-            (!c.stickerType || c.stickerType === 'none')
-          )
-      ),
-      ...generated,
-    ]);
-    setSelectedClipId(generated[0].id);
-    setSelectedClipIds([generated[0].id]);
-    setPlayheadSec(0);
-    showToast(
-      language === 'en'
-        ? `Generated ${generated.length} AI Captions (${activeMode.toUpperCase()}) on Track TI!`
-        : `AI Faster-Whisper đã tạo ${generated.length} câu phụ đề (${
-            activeMode === 'lyrics'
-              ? 'Lời bài hát Karaoke AI'
-              : activeMode === 'filler'
-              ? 'Đã lọc từ thừa & khoảng lặng'
-              : useBilingual
-              ? 'Song ngữ Việt - Anh'
-              : 'Chuẩn Studio'
-          })!`
-    );
+      const generated: TimelineClip[] = segments
+        .map((seg, idx) => {
+          const cleanedText = useFillerFilter
+            ? seg.text.replace(/\b(ờ|à|ừm|uh|um)\b/gi, '').replace(/\s{2,}/g, ' ').trim()
+            : seg.text;
+          if (!cleanedText) return null;
+          return {
+            id: `auto-sub-${Date.now()}-${idx}`,
+            name: cleanedText,
+            filePath: '',
+            trackIndex: 2,
+            startTime: seg.startTime,
+            duration: seg.duration,
+            sourceIn: 0,
+            speed: 1.0,
+            volume: 100,
+            flipH: false,
+            cropRatio: 1.0,
+            subtitleText: cleanedText,
+            fontSize: activeMode === 'lyrics' ? 30 : 26,
+            textColor: '#FFFFFF',
+            textStrokeColor: '#000000',
+            colorHex: '#7A483B',
+          } as TimelineClip;
+        })
+        .filter((x): x is TimelineClip => x !== null);
+
+      if (generated.length === 0) {
+        showToast(
+          language === 'en'
+            ? 'No valid captions generated.'
+            : 'Không tạo được câu phụ đề hợp lệ từ giọng nói.'
+        );
+        return;
+      }
+
+      commitClips((prev) => [
+        ...prev.filter(
+          (c) =>
+            !(
+              c.trackIndex === 2 &&
+              !c.stickerEmoji &&
+              (!c.stickerType || c.stickerType === 'none')
+            )
+        ),
+        ...generated,
+      ]);
+      setSelectedClipId(generated[0].id);
+      setSelectedClipIds([generated[0].id]);
+      setPlayheadSec(generated[0].startTime);
+      showToast(
+        language === 'en'
+          ? `Generated ${generated.length} Whisper captions on Timeline!`
+          : `Đã nhận diện và tạo ${generated.length} câu phụ đề từ giọng nói!`
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast(
+        language === 'en'
+          ? `Auto-caption error: ${msg}`
+          : `Lỗi nhận diện phụ đề: ${msg}`
+      );
+    } finally {
+      setIsGeneratingCaptions(false);
+      setCaptionProgressPct(0);
+      setCaptionProgressText('');
+    }
   };
 
   // Text-to-Speech (TTS) via Web Speech API + Audio Sfx Marker
@@ -5257,9 +5163,10 @@ export default function App() {
                 : `Đã khởi tạo dự án mới "${newName}"!`
             );
           }}
-          onOpenProject={(sub) => {
+          onOpenProject={async (sub) => {
             setActiveProjectId(sub.id);
-            commitClips(sub.clips.map((c) => ({ ...c })));
+            const restored = await restoreProjectMediaBlobs(sub.clips.map((c) => ({ ...c })));
+            commitClips(restored);
             setProjectName(sub.name);
             setAspectRatio((sub.aspectRatio as AspectRatioOption) || '16:9');
             setActiveView('workstation');
@@ -5551,7 +5458,24 @@ export default function App() {
             const nextTheme: StudioThemeMode = themeMode === 'dark' ? 'light' : 'dark';
             setThemeMode(nextTheme);
           }}
-          onExitToHome={() => setActiveView('home')}
+          onExitToHome={() => {
+            const targetId = activeProjectId || (clips.length > 0 ? `proj-${Date.now()}` : '');
+            if (targetId) {
+              if (!activeProjectId) setActiveProjectId(targetId);
+              const dur = clips.reduce((acc, c) => Math.max(acc, c.startTime + c.duration), 0);
+              saveProject({
+                id: targetId,
+                name: projectName.trim() || 'Dự án 1',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                aspectRatio,
+                durationSec: dur,
+                clips,
+                version: 1,
+              }).catch(() => {});
+            }
+            setActiveView('home');
+          }}
           onOpenExport={() => setIsExportModalOpen(true)}
           onAddMedia={(targetType) => {
             if (targetType === 'video') videoInputRef.current?.click();
@@ -6051,17 +5975,10 @@ export default function App() {
                             if (topLeftCategory === 'text' && item.id === 'srt') {
                               srtInputRef.current?.click();
                             } else if (topLeftCategory === 'captions') {
-                              if (item.id === 'all') {
-                                handleGenerateAutoCaptions('all');
-                              } else if (item.id === 'bilingual') {
+                              if (item.id === 'bilingual') {
                                 setBilingualSubtitles(true);
-                                handleGenerateAutoCaptions('bilingual', true);
-                              } else if (item.id === 'lyrics') {
-                                handleGenerateAutoCaptions('lyrics');
                               } else if (item.id === 'filler') {
                                 setRemoveFillerWords(true);
-                                handleRemoveDeadAirSilence();
-                                handleGenerateAutoCaptions('filler', undefined, true);
                               }
                               return;
                             } else if (topLeftCategory === 'adjust' && item.id === 'hsl') {
@@ -7834,40 +7751,49 @@ export default function App() {
                               : 'Phụ đề tự động (Auto Captions)'}
                           </span>
                         </div>
-                        <label className="flex items-center gap-2 text-[11px] text-[#D4D4D8] cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={bilingualSubtitles}
-                            onChange={(e) => {
-                              const nextVal = e.target.checked;
-                              setBilingualSubtitles(nextVal);
-                              handleGenerateAutoCaptions(undefined, nextVal, removeFillerWords);
-                            }}
-                            className="accent-[#00CAE0]"
-                          />
-                          <span>Phụ đề song ngữ (Bilingual Subtitles Việt - Anh)</span>
-                        </label>
+                        <div className="flex items-center justify-between gap-2 text-[11px]">
+                          <span className="text-[#A1A1AA]">Ngôn ngữ giọng nói:</span>
+                          <select
+                            value={captionLanguage}
+                            onChange={(e) => setCaptionLanguage(e.target.value as 'auto' | 'vi' | 'en')}
+                            className="px-2 py-1 bg-[#141418] border border-[#32323C] rounded text-white text-[11px] outline-none"
+                          >
+                            <option value="auto">Tự động (Auto)</option>
+                            <option value="vi">Tiếng Việt</option>
+                            <option value="en">English</option>
+                          </select>
+                        </div>
                         <label className="flex items-center gap-2 text-[11px] text-[#D4D4D8] cursor-pointer">
                           <input
                             type="checkbox"
                             checked={removeFillerWords}
-                            onChange={(e) => {
-                              const nextVal = e.target.checked;
-                              setRemoveFillerWords(nextVal);
-                              if (nextVal) handleRemoveDeadAirSilence();
-                              handleGenerateAutoCaptions(undefined, bilingualSubtitles, nextVal);
-                            }}
+                            onChange={(e) => setRemoveFillerWords(e.target.checked)}
                             className="accent-[#00CAE0]"
                           />
-                          <span>Xóa từ thừa &amp; khoảng lặng (Identify filler words)</span>
+                          <span>Lọc từ thừa (ờ, à, ừm)</span>
                         </label>
+                        {isGeneratingCaptions && (
+                          <div className="p-2 bg-[#141418] border border-[#2C2C36] rounded space-y-1">
+                            <div className="flex items-center justify-between text-[10px] text-[#00CAE0]">
+                              <span className="truncate">{captionProgressText || 'Đang xử lý...'}</span>
+                              <span className="font-mono">{captionProgressPct}%</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-[#25252E] rounded overflow-hidden">
+                              <div
+                                className="h-full bg-[#00CAE0] transition-all duration-200"
+                                style={{ width: `${captionProgressPct}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
                         <div className="grid grid-cols-2 gap-1.5 pt-1">
                           <button
                             type="button"
+                            disabled={isGeneratingCaptions}
                             onClick={() => handleGenerateAutoCaptions()}
-                            className="py-1.5 px-2 bg-[#00CAE0] text-[#090D12] font-bold rounded cursor-pointer hover:bg-[#00D8EE] transition-colors"
+                            className="py-1.5 px-2 bg-[#00CAE0] disabled:opacity-50 text-[#090D12] font-bold rounded cursor-pointer hover:bg-[#00D8EE] transition-colors"
                           >
-                            Tạo Phụ đề tự động
+                            {isGeneratingCaptions ? `Đang nhận diện (${captionProgressPct}%)` : 'Tạo Phụ đề tự động'}
                           </button>
                           <button
                             type="button"

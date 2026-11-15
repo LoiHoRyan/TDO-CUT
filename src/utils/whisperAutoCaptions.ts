@@ -300,6 +300,10 @@ async function createWhisperPipeline(
 ) {
   const { pipeline, env } = await import('@huggingface/transformers');
   env.allowLocalModels = false;
+  if (env.backends?.onnx?.wasm) {
+    // Single-threaded WASM avoids SharedArrayBuffer / COOP-COEP errors on mobile & Vercel
+    env.backends.onnx.wasm.numThreads = 1;
+  }
 
   const progressCallback = (info: any) => {
     if (info?.status === 'progress' && typeof info.progress === 'number') {
@@ -308,8 +312,17 @@ async function createWhisperPipeline(
     }
   };
 
-  const hasWebGpu = !forceWasm && typeof navigator !== 'undefined' && 'gpu' in navigator;
-  if (hasWebGpu) {
+  let canWebGpu = false;
+  if (!forceWasm && typeof navigator !== 'undefined' && (navigator as any).gpu) {
+    try {
+      const adapter = await (navigator as any).gpu.requestAdapter();
+      canWebGpu = Boolean(adapter);
+    } catch {
+      canWebGpu = false;
+    }
+  }
+
+  if (canWebGpu) {
     try {
       return await pipeline('automatic-speech-recognition', modelId, {
         device: 'webgpu',
@@ -347,7 +360,7 @@ export async function transcribeAudioWithWhisper(
 
   if (!cachedPipelinePromise || cachedModelId !== targetModelId) {
     cachedModelId = targetModelId;
-    cachedPipelinePromise = createWhisperPipeline(targetModelId, false, onProgress).catch((err) => {
+    cachedPipelinePromise = createWhisperPipeline(targetModelId, isMobileDevice, onProgress).catch((err) => {
       cachedPipelinePromise = null;
       cachedModelId = null;
       throw err;
@@ -590,7 +603,7 @@ export async function synthesizeCaptionToAudioClip(
 
   // 1. Try serverless /api/tts endpoint (returns real MP3 across 100+ languages)
   try {
-    const resp = await fetch(`/api/tts?text=${encodeURIComponent(clean)}&lang=${encodeURIComponent(tl)}`);
+    const resp = await fetch(`/api/tts?text=${encodeURIComponent(clean)}&lang=${encodeURIComponent(tl)}&gender=${encodeURIComponent(preset.gender)}`);
     if (resp.ok && (resp.headers.get('content-type') || '').includes('audio')) {
       const b = await resp.blob();
       if (b.size > 200) audioBlob = b;

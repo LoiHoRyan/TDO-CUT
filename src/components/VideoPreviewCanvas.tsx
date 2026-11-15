@@ -721,6 +721,75 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
     }
   }, [playheadSec, isPlaying, activeAudioClip, activeSubtitleClip, audioTrackMuted, loadedAudioUrl]);
 
+  // Multi-Track Secondary Audio Pool: plays all simultaneous audio/TTS tracks (e.g. background music + Track 7 TTS) in sync
+  const extraAudioPoolRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  useEffect(() => {
+    const pool = extraAudioPoolRef.current;
+    const secondaryClips = activeClipsAtPlayhead.filter(
+      (c) =>
+        !c.disabled &&
+        Boolean(c.mediaUrl) &&
+        c.id !== activeAudioClip?.id &&
+        (c.trackIndex === 1 ||
+          (c.trackIndex >= 4 && !c.subtitleText && !c.stickerEmoji))
+    );
+    const activeIds = new Set(secondaryClips.map((c) => c.id));
+
+    pool.forEach((el, id) => {
+      if (!activeIds.has(id)) {
+        try {
+          el.pause();
+          el.removeAttribute('src');
+        } catch {
+          // Ignore
+        }
+        pool.delete(id);
+      }
+    });
+
+    secondaryClips.forEach((clip) => {
+      let el = pool.get(clip.id);
+      if (!el && clip.mediaUrl) {
+        el = new Audio(clip.mediaUrl);
+        el.preload = 'auto';
+        pool.set(clip.id, el);
+      }
+      if (!el) return;
+      const elapsed = Math.max(0, playheadSec - clip.startTime);
+      const targetTime = (clip.sourceIn || 0) + elapsed * (clip.speed || 1);
+      el.muted = Boolean(audioTrackMuted || clip.muted);
+      el.volume = Math.max(0, Math.min(1, (clip.volume ?? 100) / 100));
+      el.playbackRate = Math.max(0.25, Math.min(4.0, clip.speed || 1));
+      if (Math.abs(el.currentTime - targetTime) > 0.25) {
+        try {
+          el.currentTime = targetTime;
+        } catch {
+          // Ignore
+        }
+      }
+      if (isPlaying && el.paused) {
+        el.play().catch(() => {});
+      } else if (!isPlaying && !el.paused) {
+        el.pause();
+      }
+    });
+  }, [playheadSec, isPlaying, activeClipsAtPlayhead, activeAudioClip?.id, audioTrackMuted]);
+
+  useEffect(() => {
+    const pool = extraAudioPoolRef.current;
+    return () => {
+      pool.forEach((el) => {
+        try {
+          el.pause();
+          el.removeAttribute('src');
+        } catch {
+          // Ignore
+        }
+      });
+      pool.clear();
+    };
+  }, []);
+
   const primaryTrack0Clip =
     (allClips || []).find(
       (c) =>

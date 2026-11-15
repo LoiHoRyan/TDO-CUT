@@ -887,18 +887,14 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       const onWindowEnd = () => {
         window.removeEventListener('touchmove', onWindowTouchMove);
         window.removeEventListener('touchend', onWindowEnd);
-        window.removeEventListener('touchcancel', onWindowEnd);
         window.removeEventListener('pointermove', onWindowPointerMove);
         window.removeEventListener('pointerup', onWindowEnd);
-        window.removeEventListener('pointercancel', onWindowEnd);
         handleReorderEnd();
       };
       window.addEventListener('touchmove', onWindowTouchMove, { passive: false });
       window.addEventListener('touchend', onWindowEnd);
-      window.addEventListener('touchcancel', onWindowEnd);
       window.addEventListener('pointermove', onWindowPointerMove);
       window.addEventListener('pointerup', onWindowEnd);
-      window.addEventListener('pointercancel', onWindowEnd);
     }, 180);
   };
 
@@ -932,6 +928,23 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       const scrollEl = timelineScrollRef.current;
       if (!scrollEl) return;
       const rect = scrollEl.getBoundingClientRect();
+      // Edge auto-scroll when dragging near left/right edge of screen
+      const edgeZone = 56;
+      if (fx < rect.left + edgeZone) {
+        const prevLeft = scrollEl.scrollLeft;
+        scrollEl.scrollLeft = Math.max(0, prevLeft - 10);
+        if (scrollEl.scrollLeft !== prevLeft) {
+          reorderSlotStartXRef.current += prevLeft - scrollEl.scrollLeft;
+          requestAnimationFrame(() => handleReorderMove(latestFingerClientXRef.current));
+        }
+      } else if (fx > rect.right - edgeZone) {
+        const prevLeft = scrollEl.scrollLeft;
+        scrollEl.scrollLeft = Math.min(scrollEl.scrollWidth - scrollEl.clientWidth, prevLeft + 10);
+        if (scrollEl.scrollLeft !== prevLeft) {
+          reorderSlotStartXRef.current += prevLeft - scrollEl.scrollLeft;
+          requestAnimationFrame(() => handleReorderMove(latestFingerClientXRef.current));
+        }
+      }
       const cardStep = 56;
       const localX = fx - rect.left + scrollEl.scrollLeft - halfWidth - reorderGrabOffsetXRef.current + 24;
       const currentClips = reorderClipsRef.current;
@@ -2107,6 +2120,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
         {/* Touch-Scrollable Horizontal Timeline Strip */}
         <div
           ref={timelineScrollRef}
+          style={isReordering ? { touchAction: 'none', overflowX: 'hidden' } : undefined}
           onScroll={handleScroll}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
@@ -2221,13 +2235,10 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                         key={clip.id}
                         onTouchStart={() => setReorderDraggingClipId(clip.id)}
                         onTouchMove={(e) => handleReorderMove(e.touches[0].clientX)}
-                        onTouchEnd={handleReorderEnd}
-                        onTouchCancel={handleReorderEnd}
                         onMouseDown={() => setReorderDraggingClipId(clip.id)}
                         onMouseMove={(e) => {
                           if (e.buttons > 0) handleReorderMove(e.clientX);
                         }}
-                        onMouseUp={handleReorderEnd}
                         style={{
                           backgroundImage: clip.thumbnailUrl ? `url(${clip.thumbnailUrl})` : undefined,
                           backgroundSize: 'cover',

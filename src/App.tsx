@@ -8107,6 +8107,67 @@ export default function App() {
                             Nhập file .SRT
                           </button>
                         </div>
+                        <div className="pt-2 border-t border-[#2E2E3A] space-y-1.5">
+                          <div className="text-[11px] font-semibold text-white">
+                            Chuyển văn bản thành giọng nói (Dubbing)
+                          </div>
+                          <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                            <button
+                              type="button"
+                              onClick={() => setTtsSourceTrack('primary')}
+                              className={`py-1 px-2 rounded border font-semibold cursor-pointer ${
+                                ttsSourceTrack === 'primary'
+                                  ? 'bg-[#00CAE0]/20 border-[#00CAE0] text-[#00CAE0]'
+                                  : 'bg-[#141418] border-[#32323C] text-[#A1A1AA]'
+                              }`}
+                            >
+                              1. Phụ đề gốc
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setTtsSourceTrack('bilingual')}
+                              className={`py-1 px-2 rounded border font-semibold cursor-pointer ${
+                                ttsSourceTrack === 'bilingual'
+                                  ? 'bg-[#00CAE0]/20 border-[#00CAE0] text-[#00CAE0]'
+                                  : 'bg-[#141418] border-[#32323C] text-[#A1A1AA]'
+                              }`}
+                            >
+                              2. Phụ đề song ngữ
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                            <select
+                              value={ttsLang}
+                              onChange={(e) => setTtsLang(e.target.value)}
+                              className="px-1.5 py-1 bg-[#141418] border border-[#32323C] rounded text-white outline-none"
+                            >
+                              {WHISPER_243_LANGUAGES.filter((l) => l.code !== 'auto').map((l) => (
+                                <option key={`cap-tts-l-${l.code}`} value={l.code}>
+                                  {l.label}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              value={ttsPresetId}
+                              onChange={(e) => setTtsPresetId(e.target.value)}
+                              className="px-1.5 py-1 bg-[#141418] border border-[#32323C] rounded text-white outline-none"
+                            >
+                              {TTS_VOICE_PRESETS.map((p) => (
+                                <option key={`cap-vp-${p.id}`} value={p.id}>
+                                  {p.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={isGeneratingTts}
+                            onClick={handleRunBatchTts}
+                            className="w-full py-1.5 bg-[#00CAE0] disabled:opacity-50 hover:bg-[#00D8EE] text-[#090D12] font-bold rounded cursor-pointer"
+                          >
+                            {isGeneratingTts ? 'Đang tạo âm thanh...' : 'Tạo giọng nói lên Timeline'}
+                          </button>
+                        </div>
                       </div>
 
                       {/* Quick Caption Style Presets */}

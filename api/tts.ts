@@ -1,5 +1,34 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 
+const EDGE_NEURAL_VOICES: Record<string, { female: string; male: string }> = {
+  vi: { female: 'vi-VN-HoaiMyNeural', male: 'vi-VN-NamMinhNeural' },
+  en: { female: 'en-US-AriaNeural', male: 'en-US-GuyNeural' },
+  'en-gb': { female: 'en-GB-SoniaNeural', male: 'en-GB-RyanNeural' },
+  zh: { female: 'zh-CN-XiaoxiaoNeural', male: 'zh-CN-YunxiNeural' },
+  'zh-tw': { female: 'zh-TW-HsiaoChenNeural', male: 'zh-TW-YunJheNeural' },
+  ja: { female: 'ja-JP-NanamiNeural', male: 'ja-JP-KeitaNeural' },
+  ko: { female: 'ko-KR-SunHiNeural', male: 'ko-KR-InJoonNeural' },
+  th: { female: 'th-TH-PremwadeeNeural', male: 'th-TH-NiwatNeural' },
+  id: { female: 'id-ID-GadisNeural', male: 'id-ID-ArdiNeural' },
+  ms: { female: 'ms-MY-YasminNeural', male: 'ms-MY-OsmanNeural' },
+  fr: { female: 'fr-FR-DeniseNeural', male: 'fr-FR-HenriNeural' },
+  de: { female: 'de-DE-KatjaNeural', male: 'de-DE-ConradNeural' },
+  es: { female: 'es-ES-ElviraNeural', male: 'es-ES-AlvaroNeural' },
+  pt: { female: 'pt-BR-FranciscaNeural', male: 'pt-BR-AntonioNeural' },
+  ru: { female: 'ru-RU-SvetlanaNeural', male: 'ru-RU-DmitryNeural' },
+  hi: { female: 'hi-IN-SwaraNeural', male: 'hi-IN-MadhurNeural' },
+  ar: { female: 'ar-SA-ZariyahNeural', male: 'ar-SA-HamedNeural' },
+  it: { female: 'it-IT-ElsaNeural', male: 'it-IT-DiegoNeural' },
+  tr: { female: 'tr-TR-EmelNeural', male: 'tr-TR-AhmetNeural' },
+  nl: { female: 'nl-NL-ColetteNeural', male: 'nl-NL-MaartenNeural' },
+  pl: { female: 'pl-PL-ZofiaNeural', male: 'pl-PL-MarekNeural' },
+  uk: { female: 'uk-UA-PolinaNeural', male: 'uk-UA-OstapNeural' },
+  tl: { female: 'fil-PH-BlessicaNeural', male: 'fil-PH-AngeloNeural' },
+  km: { female: 'km-KH-SreymomNeural', male: 'km-KH-PisethNeural' },
+  lo: { female: 'lo-LA-KeomanyNeural', male: 'lo-LA-ChanthavongNeural' },
+  my: { female: 'my-MM-NilarNeural', male: 'my-MM-ThihaNeural' },
+};
+
 function splitTextIntoChunks(text: string, maxLen = 180): string[] {
   const clean = text.replace(/\s+/g, ' ').trim();
   if (clean.length <= maxLen) return clean ? [clean] : [];
@@ -22,6 +51,25 @@ function splitTextIntoChunks(text: string, maxLen = 180): string[] {
   return chunks;
 }
 
+async function synthesizeWithEdgeTts(text: string, voiceName: string): Promise<Buffer | null> {
+  try {
+    const { MsEdgeTTS, OUTPUT_FORMAT } = await import('msedge-tts');
+    const tts = new MsEdgeTTS();
+    await tts.setMetadata(voiceName, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+    const { audioStream } = tts.toStream(text);
+    const bufs: Buffer[] = [];
+    await new Promise<void>((resolve, reject) => {
+      audioStream.on('data', (chunk: Buffer) => bufs.push(Buffer.from(chunk)));
+      audioStream.on('end', () => resolve());
+      audioStream.on('error', (e: Error) => reject(e));
+    });
+    const out = Buffer.concat(bufs);
+    return out.length > 200 ? out : null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -36,6 +84,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const urlObj = new URL(req.url || '/', 'http://localhost');
     let text = (urlObj.searchParams.get('text') || '').trim();
     let langRaw = (urlObj.searchParams.get('lang') || 'vi').trim();
+    let gender = (urlObj.searchParams.get('gender') || 'female').trim().toLowerCase();
 
     if (req.method === 'POST' && !text) {
       const bodyChunks: Buffer[] = [];
@@ -46,19 +95,45 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         const parsed = JSON.parse(Buffer.concat(bodyChunks).toString('utf8'));
         if (typeof parsed.text === 'string') text = parsed.text.trim();
         if (typeof parsed.lang === 'string') langRaw = parsed.lang.trim();
+        if (typeof parsed.gender === 'string') gender = parsed.gender.trim().toLowerCase();
       } catch {
         // Ignore invalid JSON body
       }
     }
 
-    const tl = langRaw === 'auto' ? 'vi' : langRaw.split('-')[0].toLowerCase();
     if (!text) {
       res.statusCode = 400;
       res.end('Missing text');
       return;
     }
 
-    const textChunks = splitTextIntoChunks(text.slice(0, 3000), 180);
+    const rawLower = langRaw === 'auto' ? 'vi' : langRaw.toLowerCase();
+    const baseLang = rawLower.split('-')[0];
+    const voicePair = EDGE_NEURAL_VOICES[rawLower] || EDGE_NEURAL_VOICES[baseLang];
+
+    // 1. Try Microsoft Edge Neural TTS first (distinct Male/Female AI voices, unlimited length, free)
+    if (voicePair) {
+      const voiceName = gender === 'male' ? voicePair.male : voicePair.female;
+      const edgeBuf = await synthesizeWithEdgeTts(text, voiceName);
+      if (edgeBuf) {
+        res.setHeader('Content-Type', 'audio/mpeg');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.statusCode = 200;
+        res.end(edgeBuf);
+        return;
+      }
+    }
+
+    // 2. Fallback to chunked Google Translate TTS across all remaining 243 languages
+    const LANG_MAP: Record<string, string> = {
+      zh: 'zh-CN',
+      'zh-tw': 'zh-TW',
+      he: 'iw',
+      jw: 'jv',
+      fil: 'tl',
+    };
+    const tl = LANG_MAP[rawLower] || LANG_MAP[baseLang] || baseLang;
+    const textChunks = splitTextIntoChunks(text, 180);
     const audioBuffers: Buffer[] = [];
 
     for (const part of textChunks) {

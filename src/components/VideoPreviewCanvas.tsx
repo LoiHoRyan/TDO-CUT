@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { getCutoutFrameSync } from '../utils/backgroundCutout';
 import {
   Play,
   Pause,
@@ -1395,7 +1396,22 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
         ctx.drawImage(fallbackThumbImg, -drawW / 2, -drawH / 2, drawW, drawH);
       }
       if (drawableMediaSource && drawableMediaSource !== fallbackThumbImg) {
-        ctx.drawImage(drawableMediaSource, -drawW / 2, -drawH / 2, drawW, drawH);
+        let finalDrawSource: CanvasImageSource = drawableMediaSource;
+        if (activeVideoClip.autoCutout && !(drawableMediaSource instanceof HTMLCanvasElement)) {
+          const cutW = Math.min(640, Math.max(2, Math.round(drawW)));
+          const cutH = Math.max(2, Math.round((cutW / Math.max(1, drawW)) * drawH));
+          const cutCanvas = getCutoutFrameSync(
+            activeVideoClip.id,
+            Math.round(playheadSec * 20),
+            drawableMediaSource as HTMLVideoElement | HTMLImageElement | ImageBitmap,
+            cutW,
+            cutH
+          );
+          if (cutCanvas) {
+            finalDrawSource = cutCanvas;
+          }
+        }
+        ctx.drawImage(finalDrawSource, -drawW / 2, -drawH / 2, drawW, drawH);
       }
       if (drawableMediaSource || fallbackThumbImg) {
 
@@ -1474,13 +1490,7 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
           );
         }
 
-        if (activeVideoClip.autoCutout) {
-          ctx.strokeStyle = activeVideoClip.cutoutStrokeColor || '#00CAE0';
-          ctx.lineWidth = Math.max(2, 3 * dpiScale);
-          ctx.setLineDash([6 * dpiScale, 4 * dpiScale]);
-          ctx.strokeRect(-sceneW * 0.35, -sceneH * 0.35, sceneW * 0.7, sceneH * 0.7);
-          ctx.setLineDash([]);
-        }
+
       }
 
       ctx.restore();

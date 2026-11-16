@@ -1,4 +1,5 @@
 /**
+import { warmUpBackgroundSegmenter } from '../utils/backgroundCutout';
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -2125,7 +2126,6 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
         {/* Touch-Scrollable Horizontal Timeline Strip */}
         <div
           ref={timelineScrollRef}
-          style={isReordering ? { touchAction: 'none', overflowX: 'hidden' } : undefined}
           onScroll={handleScroll}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
@@ -2144,8 +2144,12 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
               }
             }
           }}
-          className="w-full h-full overflow-x-auto scrollbar-none relative py-1 flex flex-col justify-start touch-pan-x"
-          style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorX: 'contain' }}
+          className="w-full h-full overflow-x-auto overflow-y-auto scrollbar-none relative py-1 pb-16 flex flex-col justify-start touch-pan-x touch-pan-y"
+          style={{
+            WebkitOverflowScrolling: 'touch',
+            overscrollBehaviorX: 'contain',
+            ...(isReordering ? { touchAction: 'none', overflowX: 'hidden', overflowY: 'hidden' } : {}),
+          }}
         >
           {/* Scrollable Tracks Content Strip */}
           <div
@@ -3023,6 +3027,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                 <button
                   type="button"
                   onClick={() => {
+                    if (!currentClip.autoCutout) warmUpBackgroundSegmenter();
                     onUpdateClipProp('autoCutout', !currentClip.autoCutout);
                   }}
                   className={`flex flex-col items-center justify-center px-2.5 py-1 min-w-[50px] cursor-pointer active:scale-95 transition-transform ${

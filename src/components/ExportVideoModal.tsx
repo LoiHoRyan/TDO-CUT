@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { getCutoutFrameAsync } from '../utils/backgroundCutout';
 import {
   X,
   Download,
@@ -2356,6 +2357,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
         mp4Decoder?: Mp4DemuxVideoDecoder | null;
         activeFrame?: VideoFrame | null;
         activeBitmap?: ImageBitmap | null;
+      activeCutoutCanvas?: HTMLCanvasElement | null;
       }
     >();
     const preloadedAudios = new Map<
@@ -2860,7 +2862,8 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               expCtx.clip();
             }
 
-            expCtx.drawImage(drawable, -drawRawW / 2, -drawRawH / 2, drawRawW, drawRawH);
+            const drawSrc = (activeClip.autoCutout && entry?.activeCutoutCanvas) ? entry.activeCutoutCanvas : drawable;
+            expCtx.drawImage(drawSrc, -drawRawW / 2, -drawRawH / 2, drawRawW, drawRawH);
 
             if (isTransActive && (tType === 'white_flash' || tType === 'light_flash')) {
               const flashAlpha = Math.max(0, 1 - Math.abs(transProgress - 0.35) * 2.5);
@@ -3170,6 +3173,20 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               }
             }
 
+            // Apply AI Background Removal (autoCutout) if enabled on activeClip
+            if (activeClip?.autoCutout) {
+              const entry = preloadedVideos.get(activeClip.id);
+              if (entry) {
+                const srcForCut: CanvasImageSource | null =
+                  entry.activeFrame || entry.activeBitmap || entry.img || (entry.el.readyState >= 2 ? entry.el : null);
+                if (srcForCut) {
+                  const { w: cw, h: ch } = getDrawableDimensions(srcForCut);
+                  if (cw > 0 && ch > 0) {
+                    entry.activeCutoutCanvas = await getCutoutFrameAsync(srcForCut, Math.min(720, cw), Math.max(2, Math.round((Math.min(720, cw) / cw) * ch)));
+                  }
+                }
+              }
+            }
             // Draw composite frame onto exportCanvas
             drawCompositeExportFrame(t, frameIdx);
 
@@ -3185,6 +3202,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                   try { entry.activeFrame.close(); } catch {}
                   entry.activeFrame = null;
                 }
+                entry.activeCutoutCanvas = null;
               }
             }
             if (prevClip) {

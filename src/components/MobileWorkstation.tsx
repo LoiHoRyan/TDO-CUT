@@ -4515,6 +4515,75 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
       )}
 
       {/* DRAWER 8: FILTERS DRAWER */}
+      {/* DRAWER: EFFECTS (Hiệu ứng hình ảnh) */}
+      {activeDrawer === 'effects' && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-xs"
+            onClick={() => setActiveDrawer(null)}
+          />
+          <div className={`relative z-10 rounded-t-2xl border-t max-h-[65vh] flex flex-col ${
+            isLight ? 'bg-white border-[#CBD5E1] text-[#0F172A]' : 'bg-[#181920] border-[#2D303B] text-white'
+          }`}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-inherit shrink-0">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                <Sparkles className="w-4 h-4 text-[#00CAE0]" />
+                <span>{isEn ? 'Video Effects' : 'Hiệu ứng Video'}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveDrawer(null)}
+                className="px-3 py-1 rounded-full bg-[#00CAE0] text-black font-bold text-xs cursor-pointer"
+              >
+                {isEn ? 'Done' : 'Xong'}
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto grid grid-cols-3 gap-2.5">
+              {[
+                { id: 'none', label: 'Bình thường' },
+                { id: 'flash', label: 'Nháy sáng' },
+                { id: 'shake', label: 'Rung camera' },
+                { id: 'glitch', label: 'Glitch nhiễu' },
+                { id: 'vhs', label: 'Băng VHS' },
+                { id: 'zoom_pulse', label: 'Zoom nhịp' },
+                { id: 'blur_dream', label: 'Mờ ảo mộng' },
+                { id: 'rgb_split', label: 'Tách màu RGB' },
+                { id: 'neon_glow', label: 'Phát sáng Neon' },
+              ].map((fx) => {
+                const targetClip = currentClip || videoClips[0];
+                const isSelectedFx = (targetClip?.visualEffect || 'none') === fx.id;
+                return (
+                  <button
+                    key={fx.id}
+                    type="button"
+                    onClick={() => {
+                      if (targetClip) {
+                        onUpdateClipProp('visualEffect', fx.id, targetClip.id);
+                      } else {
+                        onDropResource(
+                          { kind: 'effect', name: fx.label, duration: 3, visualEffect: fx.id as any },
+                          3,
+                          playheadSec
+                        );
+                      }
+                    }}
+                    className={`p-3 rounded-xl border text-center text-xs font-semibold cursor-pointer transition-colors ${
+                      isSelectedFx
+                        ? 'border-[#00CAE0] bg-[#00CAE0]/20 text-[#00CAE0]'
+                        : isLight
+                        ? 'border-gray-200 bg-gray-50 text-gray-800'
+                        : 'border-white/10 bg-white/5 text-white hover:bg-white/10'
+                    }`}
+                  >
+                    {fx.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {activeDrawer === 'filters' && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end">
           <div

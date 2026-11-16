@@ -4961,6 +4961,14 @@ export default function App() {
                     await saveProject(newProj).catch(() => {});
                     setActiveProjectId(newId);
                     setProjectName(newName);
+                    setAspectRatio('16:9');
+                    setClips([]);
+                    setMediaCards([]);
+                    setHistoryPast([]);
+                    setHistoryFuture([]);
+                    setSelectedClipId(null);
+                    setSelectedClipIds([]);
+                    setPlayheadSec(0);
                     setSubProjects((prev) => [newProj, ...prev]);
                     setActiveView('workstation');
                     setIsTopMenuOpen(false);
@@ -5351,7 +5359,13 @@ export default function App() {
             setActiveProjectId(newId);
             setProjectName(newName);
             setAspectRatio('16:9');
-            commitClips([]);
+            setClips([]);
+            setMediaCards([]);
+            setHistoryPast([]);
+            setHistoryFuture([]);
+            setSelectedClipId(null);
+            setSelectedClipIds([]);
+            setPlayheadSec(0);
             setSubProjects((prev) => [newProj, ...prev]);
             setActiveView('workstation');
             showToast(
@@ -5363,7 +5377,13 @@ export default function App() {
           onOpenProject={async (sub) => {
             setActiveProjectId(sub.id);
             const restored = await restoreProjectMediaBlobs(sub.clips.map((c) => ({ ...c })));
-            commitClips(restored);
+            setClips(restored);
+            setMediaCards([]);
+            setHistoryPast([]);
+            setHistoryFuture([]);
+            setSelectedClipId(null);
+            setSelectedClipIds([]);
+            setPlayheadSec(0);
             setProjectName(sub.name);
             setAspectRatio((sub.aspectRatio as AspectRatioOption) || '16:9');
             setActiveView('workstation');

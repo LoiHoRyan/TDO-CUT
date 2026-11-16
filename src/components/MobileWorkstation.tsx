@@ -867,6 +867,11 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
 
       const idx = videoClips.findIndex((c) => c.id === clip.id);
       const scrollEl = timelineScrollRef.current;
+      if (scrollEl) {
+        const totalStripW = videoClips.length * 56;
+        const centerScroll = Math.max(0, Math.round(totalStripW / 2 - 28));
+        scrollEl.scrollLeft = Math.min(centerScroll, Math.max(0, idx * 56 - 24));
+      }
       const rect = scrollEl?.getBoundingClientRect();
       const cardLeftInViewport =
         (rect?.left || 0) + halfWidth - (scrollEl?.scrollLeft || 0) + Math.max(0, idx) * 56;
@@ -2248,7 +2253,7 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                           willChange: 'transform',
                           transition: isDraggingThis ? 'none' : 'transform 0.2s ease',
                           transform: isDraggingThis
-                            ? `translate3d(${reorderFingerOffsetX}px, -10px, 0) scale(1.12)`
+                            ? `translate3d(${reorderFingerOffsetX}px, 0px, 0) scale(1.18)`
                             : 'translate3d(0, 0, 0)',
                         }}
                         className={`w-12 h-12 aspect-square rounded-xl border-2 flex flex-col justify-between p-1 shrink-0 relative cursor-grab active:cursor-grabbing select-none ${

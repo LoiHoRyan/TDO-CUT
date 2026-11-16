@@ -2101,6 +2101,10 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
     overlayBoundsRef.current = null;
     const isRealPipOverlay =
       activeOverlayClip &&
+      activeOverlayClip.trackIndex !== 1 &&
+      activeOverlayClip.trackIndex !== 7 &&
+      !activeOverlayClip.id.startsWith('tts-aud-') &&
+      !/\.(mp3|wav|m4a|aac|ogg|opus)$/i.test(activeOverlayClip.filePath || activeOverlayClip.name || '') &&
       !overlayTrackHidden &&
       !activeOverlayClip.disabled &&
       activeOverlayClip.id !== activeVideoClip?.id &&

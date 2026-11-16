@@ -2563,8 +2563,11 @@ export default function App() {
 
   const activeOverlayClip = useMemo(
     () =>
-      clips.find(
-        (c) =>
+      clips.find((c) => {
+        const tKind = timelineTracks.find((t) => t.index === c.trackIndex)?.kind;
+        if (tKind === 'audio' || c.trackIndex === 7 || c.id.startsWith('tts-aud-')) return false;
+        if (/\.(mp3|wav|m4a|aac|ogg|opus)$/i.test(c.filePath || c.name || '')) return false;
+        return (
           !c.disabled &&
           c.trackIndex >= 3 &&
           !c.subtitleText &&
@@ -2579,8 +2582,9 @@ export default function App() {
           ) &&
           playheadSec >= c.startTime &&
           playheadSec < c.startTime + c.duration
-      ),
-    [clips, playheadSec]
+        );
+      }),
+    [clips, playheadSec, timelineTracks]
   );
 
   const activeSubtitleClip = useMemo(
@@ -2682,7 +2686,7 @@ export default function App() {
     if (!fileList || fileList.length === 0) return;
 
     const rawFiles = Array.from(fileList);
-    const sortedFiles = naturalSortByName(rawFiles);
+    const sortedFiles = isMobile ? rawFiles : naturalSortByName(rawFiles);
 
     const newMediaItems: MediaCardItem[] = [];
     const newTimelineClips: TimelineClip[] = [];

@@ -2212,7 +2212,7 @@ export default function App() {
   // Unified Core Deletion for Media Cards (Tệp phương tiện) & Timeline Clips
   const handleDeleteMediaCardsAndClips = (
     explicitIds?: string[],
-    removeCardWhenClipDeleted = true
+    removeCardWhenClipDeleted = false
   ) => {
     const combinedIds =
       explicitIds && explicitIds.length > 0
@@ -6531,9 +6531,9 @@ export default function App() {
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleDeleteMediaCardsAndClips([c.id], true);
+                                      handleDeleteMediaCardsAndClips([c.id], false);
                                     }}
-                                    title="Xóa clip này khỏi Timeline và Tệp phương tiện"
+                                    title="Xóa clip này khỏi Timeline"
                                     className="w-4 h-4 rounded-full bg-black/60 hover:bg-[#EF4444] text-[#FCA5A5] hover:text-white flex items-center justify-center text-[10px] cursor-pointer"
                                   >
                                     ×

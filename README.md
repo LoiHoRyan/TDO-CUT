@@ -6,7 +6,7 @@ A multi-layered video editing application featuring a 4-zone layout (Home Launch
 
 - **Multi-Track Timeline**: Supports multi-layer editing (Video, Audio, Text, Stickers, Effects) with intuitive drag-and-drop, auto-snapping, and ripple editing.
 - **Advanced Editing Toolkit**: Includes keyframe animation, speed curves, HSL color grading, image flipping, cropping, and background removal.
-- **Video Export & Project Synchronization**: Supports direct video rendering via an FFmpeg backend (`server.ts`) and exports project directory structures compatible with CapCut PC (`draft_content.json` & `draft_meta_info.json`).
+- **Video Export & Project Synchronization**: Supports direct video rendering via an FFmpeg backend (`server.ts`) and exports project directory structures (`draft_content.json` & `draft_meta_info.json`).
 - **PyQt6 & C++ Core**: Features a desktop-based architecture (source code available in `python_src/`).
 
 ## Installation and Project Setup

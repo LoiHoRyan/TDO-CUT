@@ -82,6 +82,15 @@ import {
   AspectRatioOption,
   PreviewQualityOption,
 } from './VideoPreviewCanvas';
+import { NyPreviewThumb } from './NyPreviewThumb';
+import {
+  VISUAL_EFFECT_CATALOG,
+  TRANSITION_CATALOG,
+  FILTER_CATALOG,
+  getVisualEffectPreview,
+  getTransitionPreview,
+  getFilterPreview,
+} from '../utils/visualCatalog';
 
 export interface MobileWorkstationProps {
   clips: TimelineClip[];
@@ -298,7 +307,8 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
 
   // Transition Target Clip ID (the clip that receives the transition at its start seam)
   const [targetTransitionClipId, setTargetTransitionClipId] = useState<string | null>(null);
-  const [transitionCategory, setTransitionCategory] = useState<'all' | 'hottrend' | 'overlay' | 'camera' | 'fade' | 'basic'>('hottrend');
+  const [transitionCategory, setTransitionCategory] = useState<'all' | 'camera' | 'mg' | 'glitch'>('all');
+  const [effectCategory, setEffectCategory] = useState<string>('all');
   const [transitionDuration, setTransitionDuration] = useState<number>(0.6);
 
   // Resolution Menu Dropdown
@@ -310,7 +320,14 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
   const [stickerSearch, setStickerSearch] = useState('');
 
   // Audio Drawer Category & Search & Active Playing SFX
-  const [audioCategory, setAudioCategory] = useState<'all' | 'tiktok' | 'bgm' | 'sfx'>('all');
+  const [audioCategory, setAudioCategory] = useState<'all' | 'tiktok' | 'meme' | 'youtube' | 'bgm' | 'sfx'>('all');
+
+  useEffect(() => {
+    setActiveDrawer(null);
+    setAudioCategory('all');
+    setEffectCategory('all');
+    setTransitionCategory('all');
+  }, [projectName]);
   const [audioSearch, setAudioSearch] = useState('');
   const [activePlayingAudioId, setActivePlayingAudioId] = useState<string | null>(null);
 
@@ -3274,11 +3291,10 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar px-4 pt-3 pb-2 border-b border-inherit shrink-0">
               {(
                 [
-                  { id: 'hottrend', label: 'Hottrend' },
-                  { id: 'overlay', label: 'Lớp phủ' },
-                  { id: 'camera', label: 'Chuyển động camera' },
-                  { id: 'fade', label: 'Mờ dần & Glitch' },
-                  { id: 'basic', label: 'Cơ bản' },
+                  { id: 'all', label: 'Tất cả' },
+                  { id: 'camera', label: 'Máy ảnh & Zoom' },
+                  { id: 'mg', label: 'Chuyển động MG' },
+                  { id: 'glitch', label: 'Glitch & Ánh sáng' },
                 ] as const
               ).map((cat) => (
                 <button
@@ -3300,26 +3316,28 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
 
             {/* Grid of Transition Cards */}
             <div className="flex-1 overflow-y-auto p-4 grid grid-cols-4 gap-2.5">
-              {MOBILE_TRANSITION_ITEMS.filter(
-                (tr) => transitionCategory === 'all' || tr.category === transitionCategory || tr.id === 'none'
+              {TRANSITION_CATALOG.filter(
+                (tr) => transitionCategory === 'all' || tr.cat === transitionCategory || tr.id === 'none'
               ).map((tr) => {
                 const isSelected = (transitionClip?.transitionType || 'none') === tr.id;
                 return (
                   <button
-                    key={tr.id}
+                    key={tr.uid}
                     type="button"
-                    onClick={() => handleSelectTransition(tr.id)}
-                    className={`flex flex-col items-center text-center group cursor-pointer active:scale-95 transition-transform`}
+                    onClick={() => handleSelectTransition(tr.id as TransitionType)}
+                    className="flex flex-col items-center text-center group cursor-pointer active:scale-95 transition-transform"
                   >
                     <div
-                      style={{ background: tr.swatch }}
-                      className={`w-full aspect-square rounded-xl flex items-center justify-center text-lg shadow-sm border-2 transition-all ${
+                      className={`relative w-full aspect-square rounded-xl overflow-hidden shadow-sm border-2 transition-all ${
                         isSelected
                           ? 'border-[#00CAE0] ring-4 ring-[#00CAE0]/40 scale-105'
-                          : 'border-transparent'
+                          : 'border-white/10'
                       }`}
                     >
-                      <span>{tr.icon}</span>
+                      <NyPreviewThumb spec={getTransitionPreview(tr.id)} />
+                      <span className="absolute bottom-1 right-1 px-1 py-0.2 rounded bg-black/70 text-[9px] text-white">
+                        {tr.icon}
+                      </span>
                     </div>
                     <span className="text-[9.5px] mt-1 font-medium truncate w-full leading-tight text-inherit">
                       {tr.label}
@@ -3566,7 +3584,9 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                 [
                   { id: 'all', label: 'Tất cả' },
                   { id: 'device', label: '📱 Bộ nhớ máy' },
-                  { id: 'tiktok', label: '🔥 Viral TikTok' },
+                  { id: 'tiktok', label: '🔥 Sound Hook & TikTok' },
+                  { id: 'meme', label: '😂 Meme & Tiếng cười' },
+                  { id: 'youtube', label: '▶️ YouTube / IG / FB' },
                   { id: 'bgm', label: '🎵 Nhạc nền BGM' },
                   { id: 'sfx', label: '⚡ Hiệu ứng SFX' },
                 ] as const
@@ -4543,23 +4563,38 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                 {isEn ? 'Done' : 'Xong'}
               </button>
             </div>
-            <div className="p-4 overflow-y-auto grid grid-cols-3 gap-2.5">
+            <div className="flex items-center gap-1.5 px-4 py-2 overflow-x-auto border-b border-inherit shrink-0">
               {[
-                { id: 'none', label: 'Bình thường' },
-                { id: 'flash', label: 'Nháy sáng' },
-                { id: 'shake', label: 'Rung camera' },
-                { id: 'glitch', label: 'Glitch nhiễu' },
-                { id: 'vhs', label: 'Băng VHS' },
-                { id: 'zoom_pulse', label: 'Zoom nhịp' },
-                { id: 'blur_dream', label: 'Mờ ảo mộng' },
-                { id: 'rgb_split', label: 'Tách màu RGB' },
-                { id: 'neon_glow', label: 'Phát sáng Neon' },
-              ].map((fx) => {
+                { id: 'all', label: 'Tất cả' },
+                { id: 'body', label: 'Cơ thể & Sci-Fi' },
+                { id: 'retro', label: 'Cổ điển & VHS' },
+                { id: 'glow', label: 'Ánh sáng & Thời tiết' },
+              ].map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setEffectCategory(cat.id)}
+                  className={`px-3 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap cursor-pointer ${
+                    effectCategory === cat.id
+                      ? 'bg-[#00CAE0] text-black'
+                      : isLight
+                      ? 'bg-gray-100 text-gray-700'
+                      : 'bg-white/10 text-[#94A3B8]'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+            <div className="p-4 overflow-y-auto grid grid-cols-4 gap-2.5">
+              {VISUAL_EFFECT_CATALOG.filter(
+                (fx) => effectCategory === 'all' || fx.id === 'none' || fx.cat === effectCategory
+              ).map((fx) => {
                 const targetClip = currentClip || videoClips[0];
                 const isSelectedFx = (targetClip?.visualEffect || 'none') === fx.id;
                 return (
                   <button
-                    key={fx.id}
+                    key={fx.uid}
                     type="button"
                     onClick={() => {
                       if (targetClip) {
@@ -4572,15 +4607,23 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                         );
                       }
                     }}
-                    className={`p-3 rounded-xl border text-center text-xs font-semibold cursor-pointer transition-colors ${
-                      isSelectedFx
-                        ? 'border-[#00CAE0] bg-[#00CAE0]/20 text-[#00CAE0]'
-                        : isLight
-                        ? 'border-gray-200 bg-gray-50 text-gray-800'
-                        : 'border-white/10 bg-white/5 text-white hover:bg-white/10'
-                    }`}
+                    className="flex flex-col items-center text-center cursor-pointer active:scale-95 transition-transform"
                   >
-                    {fx.label}
+                    <div
+                      className={`relative w-full aspect-square rounded-xl overflow-hidden border-2 transition-all ${
+                        isSelectedFx
+                          ? 'border-[#00CAE0] ring-2 ring-[#00CAE0]/40 scale-105'
+                          : 'border-white/10'
+                      }`}
+                    >
+                      <NyPreviewThumb spec={getVisualEffectPreview(fx.id)} />
+                      <span className="absolute bottom-1 left-1 px-1 py-0.2 rounded bg-black/70 text-[8px] font-semibold text-white">
+                        {fx.badge}
+                      </span>
+                    </div>
+                    <span className={`text-[9.5px] mt-1 font-medium truncate w-full leading-tight ${isSelectedFx ? 'text-[#00CAE0] font-bold' : 'text-inherit'}`}>
+                      {fx.label}
+                    </span>
                   </button>
                 );
               })}
@@ -4606,21 +4649,10 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="grid grid-cols-4 gap-2.5 pt-4">
-              {(
-                [
-                  { id: 'none', label: 'Gốc (None)', bg: '#334155' },
-                  { id: 'cinematic', label: 'Điện ảnh (Cinema)', bg: '#0F766E' },
-                  { id: 'vintage', label: 'Cổ điển (Vintage)', bg: '#B45309' },
-                  { id: 'cyberpunk', label: 'Cyberpunk', bg: '#7E22CE' },
-                  { id: 'bw', label: 'Đen trắng (B&W)', bg: '#18181B' },
-                  { id: 'warm', label: 'Ấm áp (Warm)', bg: '#C2410C' },
-                  { id: 'cool', label: 'Lạnh (Cool)', bg: '#1D4ED8' },
-                  { id: 'vibrant', label: 'Sống động', bg: '#BE185D' },
-                ] as const
-              ).map((f) => (
+            <div className="grid grid-cols-4 gap-2.5 pt-4 max-h-[55vh] overflow-y-auto">
+              {FILTER_CATALOG.map((f) => (
                 <button
-                  key={f.id}
+                  key={f.uid}
                   type="button"
                   onClick={() => {
                     onUpdateClipProp('filterPreset', f.id);
@@ -4628,10 +4660,9 @@ export const MobileWorkstation: React.FC<MobileWorkstationProps> = ({
                   }}
                   className="flex flex-col items-center gap-1.5 cursor-pointer active:scale-95 transition-transform"
                 >
-                  <div
-                    style={{ backgroundColor: f.bg }}
-                    className="w-full aspect-square rounded-xl shadow-sm border border-white/10"
-                  />
+                  <div className="w-full aspect-square rounded-xl overflow-hidden shadow-sm border border-white/10">
+                    <NyPreviewThumb spec={getFilterPreview(f.id)} />
+                  </div>
                   <span className="text-[10px] font-medium truncate w-full text-center">
                     {f.label}
                   </span>

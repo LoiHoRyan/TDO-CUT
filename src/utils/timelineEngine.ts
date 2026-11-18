@@ -1213,9 +1213,35 @@ export function computeCapCutDragInsertionPreview(
   const minDragOrigStart = Math.min(...draggedClips.map((c) => c.startTime));
   const maxDragOrigEnd = Math.max(...draggedClips.map((c) => c.startTime + c.duration));
   const dragSpanSec = Number(Math.max(0.1, maxDragOrigEnd - minDragOrigStart).toFixed(3));
-  const safeTargetTrack = lockedTracks[targetTrackIndex]
-    ? draggedClips[0].trackIndex
-    : targetTrackIndex;
+  const isTrackCompatible = (clip: TimelineClip, targetTrack: number): boolean => {
+    const isAudio =
+      clip.trackIndex === 1 ||
+      clip.trackIndex === 7 ||
+      clip.mediaKind === 'audio' ||
+      clip.name?.startsWith('TTS:') ||
+      clip.filePath?.toLowerCase().endsWith('.wav') ||
+      clip.filePath?.toLowerCase().endsWith('.mp3');
+    if (isAudio) return targetTrack === 1 || targetTrack === 7;
+
+    const isTextOrSticker =
+      clip.trackIndex === 2 ||
+      clip.trackIndex === 6 ||
+      Boolean(clip.subtitleText) ||
+      Boolean(clip.stickerEmoji);
+    if (isTextOrSticker) return targetTrack === 2 || targetTrack === 6;
+
+    if (clip.trackIndex === 4) return targetTrack === 4;
+    if (clip.trackIndex === 5) return targetTrack === 5;
+
+    // Video / Image / Overlay clips only belong on Main Video (0) or Overlay/PIP (3)
+    return targetTrack === 0 || targetTrack === 3;
+  };
+
+  const anchorClip = draggedClips[0];
+  const safeTargetTrack =
+    lockedTracks[targetTrackIndex] || !isTrackCompatible(anchorClip, targetTrackIndex)
+      ? anchorClip.trackIndex
+      : targetTrackIndex;
   const clampedHoverStart = Math.max(0, Number(tentativeStartSec.toFixed(3)));
 
   // Step 1: Separate static (non-dragged) clips and always pack Track 0 static clips contiguously if snapMainTrack is true
@@ -5492,6 +5518,41 @@ const RAW_TREND_EMOJI_AND_HANDS: Array<[StickerOverlayType, string, string, stri
   ['confetti', 'stk-lucky-clover', 'Cỏ 4 Lá May Mắn', '🍀'],
   ['fire_trend', 'stk-dragon-asia', 'Rồng Vàng Uy Nghi', '🐉'],
   ['confetti', 'stk-butterfly-blue', 'Cánh Bướm Xanh', '🦋'],
+  // Mũi tên, Chỉ dẫn & Khung nhấn (Arrows & Pointers)
+  ['fire_trend', 'stk-arrow-up', 'Mũi Tên Chỉ Lên', '⬆️'],
+  ['fire_trend', 'stk-arrow-down', 'Mũi Tên Chỉ Xuống', '⬇️'],
+  ['fire_trend', 'stk-arrow-right', 'Mũi Tên Sang Phải', '➡️'],
+  ['fire_trend', 'stk-arrow-left', 'Mũi Tên Sang Trái', '⬅️'],
+  ['fire_trend', 'stk-arrow-curved', 'Mũi Tên Nhấn Mạnh', '↪️'],
+  ['fire_trend', 'stk-point-down', 'Ngón Tay Chỉ Xuống', '👇'],
+  ['fire_trend', 'stk-point-up', 'Ngón Tay Chỉ Lên', '👆'],
+  ['fire_trend', 'stk-target-hit', 'Hồng Tâm Mục Tiêu', '🎯'],
+  ['fire_trend', 'stk-pin-red', 'Ghim Đỏ Quan Trọng', '📌'],
+  ['fire_trend', 'stk-bell-alert', 'Chuông Thông Báo Đỏ', '🔔'],
+  ['fire_trend', 'stk-megaphone', 'Loa Thông Báo Viral', '📣'],
+  ['fire_trend', 'stk-warning-sign', 'Cảnh Báo Chú Ý', '⚠️'],
+  ['fire_trend', 'stk-question-red', 'Dấu Hỏi Chấm Đỏ', '❓'],
+  ['fire_trend', 'stk-exclaim-red', 'Dấu Chấm Than Đỏ', '❗'],
+  ['fire_trend', 'stk-check-green', 'Tích Xanh Xác Nhận', '✅'],
+  ['fire_trend', 'stk-cross-red', 'Dấu X Đỏ Sai Rồi', '❌'],
+  // Meme, Hài Hước & Phản Ứng (Meme & Comedy)
+  ['fire_trend', 'stk-skull-dead', 'Đầu Lâu Cười Xỉu (Meme)', '💀'],
+  ['fire_trend', 'stk-clown-face', 'Mặt Hề Hài Hước', '🤡'],
+  ['fire_trend', 'stk-moai-stone', 'Tượng Đá Moai Sigma', '🗿'],
+  ['fire_trend', 'stk-ghost-boo', 'Con Ma Dễ Thương', '👻'],
+  ['fire_trend', 'stk-alien-ufo', 'Người Ngoài Hành Tinh', '👽'],
+  ['fire_trend', 'stk-robot-ai', 'Robot Công Nghệ AI', '🤖'],
+  ['fire_trend', 'stk-sweat-drops', 'Giọt Mồ Hôi Ngại Ngùng', '💦'],
+  ['fire_trend', 'stk-anger-vein', 'Tức Giận Anime', '💢'],
+  ['fire_trend', 'stk-zzz-sleep', 'Buồn Ngủ Zzz', '💤'],
+  ['fire_trend', 'stk-speech-thought', 'Bong Bóng Suy Nghĩ', '💭'],
+  ['fire_trend', 'stk-camera-flash', 'Máy Ảnh Chụp Hình', '📸'],
+  ['fire_trend', 'stk-shopping-bag', 'Túi Mua Sắm Sale', '🛍️'],
+  ['confetti', 'stk-sparkle-heart', 'Trái Tim Lấp Lánh', '💖'],
+  ['confetti', 'stk-heart-fire', 'Trái Tim Bốc Cháy', '❤️‍🔥'],
+  ['confetti', 'stk-broken-heart', 'Trái Tim Tan Vỡ', '💔'],
+  ['confetti', 'stk-sun-shine', 'Mặt Trời Tỏa Nắng', '☀️'],
+  ['confetti', 'stk-moon-night', 'Trăng Khuyết Đêm Khuya', '🌙'],
 ];
 
 export const TREND_EMOJI_STICKERS: StickerCatalogItem[] = RAW_TREND_EMOJI_AND_HANDS.map(

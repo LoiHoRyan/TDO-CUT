@@ -625,10 +625,30 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
 
     setDragCursorPos({ clientX, clientY });
 
-    const hoveredTrackId = getTrackIdAtClientY(clientY) ?? session.anchorInitialTrack;
-    setDragHoverTrackId(hoveredTrackId);
-
+    const rawHoveredTrackId = getTrackIdAtClientY(clientY) ?? session.anchorInitialTrack;
     const anchorOrig = session.initialClips.find((c) => c.id === session.anchorClipId);
+    const isCompatTrack = (() => {
+      if (!anchorOrig) return true;
+      const isAud =
+        anchorOrig.trackIndex === 1 ||
+        anchorOrig.trackIndex === 7 ||
+        anchorOrig.mediaKind === 'audio' ||
+        anchorOrig.name?.startsWith('TTS:') ||
+        anchorOrig.filePath?.toLowerCase().endsWith('.wav') ||
+        anchorOrig.filePath?.toLowerCase().endsWith('.mp3');
+      if (isAud) return rawHoveredTrackId === 1 || rawHoveredTrackId === 7;
+      const isTxt =
+        anchorOrig.trackIndex === 2 ||
+        anchorOrig.trackIndex === 6 ||
+        Boolean(anchorOrig.subtitleText) ||
+        Boolean(anchorOrig.stickerEmoji);
+      if (isTxt) return rawHoveredTrackId === 2 || rawHoveredTrackId === 6;
+      if (anchorOrig.trackIndex === 4) return rawHoveredTrackId === 4;
+      if (anchorOrig.trackIndex === 5) return rawHoveredTrackId === 5;
+      return rawHoveredTrackId === 0 || rawHoveredTrackId === 3;
+    })();
+    const hoveredTrackId = isCompatTrack ? rawHoveredTrackId : session.anchorInitialTrack;
+    setDragHoverTrackId(hoveredTrackId);
     let tentativeStartSec = Math.max(0, clientXToSeconds(clientX) - session.grabOffsetSec);
     let snappedAt: number | null = null;
 

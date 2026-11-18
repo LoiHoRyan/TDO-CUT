@@ -153,6 +153,15 @@ import {
   MatrixBatchGeneratorModal,
   AiSceneCutModal,
 } from './components/ExportVideoModal';
+import { NyPreviewThumb } from './components/NyPreviewThumb';
+import {
+  VISUAL_EFFECT_CATALOG,
+  TRANSITION_CATALOG,
+  FILTER_CATALOG,
+  getVisualEffectPreview,
+  getTransitionPreview,
+  getFilterPreview,
+} from './utils/visualCatalog';
 import {
   HomeLauncherView,
   ShortcutsWindowModal,
@@ -1052,6 +1061,7 @@ export default function App() {
     'video' | 'audio' | 'speed' | 'animation' | 'adjust'
   >('video');
   const [textSubTab, setTextSubTab] = useState<'basic' | 'bubble' | 'effects' | 'tts'>('basic');
+  const leftPanelScrollRef = useRef<HTMLDivElement | null>(null);
   const [videoSubTab, setVideoSubTab] = useState<'basic' | 'cutout' | 'mask' | 'enhance'>('basic');
   const [speedSubTab, setSpeedSubTab] = useState<'standard' | 'curve'>('standard');
   const [adjustSubTab, setAdjustSubTab] = useState<'basic' | 'hsl' | 'curves' | 'wheel'>('basic');
@@ -4084,101 +4094,41 @@ export default function App() {
 
   const VISUAL_EFFECT_CATALOG_ITEMS = useMemo(
     () =>
-      [
-        { id: 'none', uid: 'fx-none', label: 'Không hiệu ứng', cat: 'all', badge: 'Gốc', swatch: 'linear-gradient(135deg, #181920 0%, #252834 100%)' },
-        // Hiệu ứng Video / Máy ảnh & Chia khung (Image 3)
-        { id: 'split_screen_4', uid: 'fx-split-4', label: 'Bức tường ghép', cat: 'all', badge: 'Ghép ảnh', swatch: 'linear-gradient(135deg, #1E1B4B 0%, #3B82F6 40%, #EC4899 100%)' },
-        { id: 'glitch', uid: 'fx-glitch', label: 'Quét nhiễu', cat: 'all', badge: 'Nhiễu sóng', swatch: 'linear-gradient(135deg, #0F172A 0%, #06B6D4 50%, #3B82F6 100%)' },
-        { id: 'cyber_holo', uid: 'fx-cyber-holo', label: 'Khối rơi chồng', cat: 'all', badge: '3D Cube', swatch: 'linear-gradient(135deg, #020617 0%, #1E293B 50%, #0F172A 100%)' },
-        { id: 'ken_burns', uid: 'fx-ken-burns', label: 'Đứng hình', cat: 'all', badge: 'Pause', swatch: 'linear-gradient(135deg, #334155 0%, #475569 50%, #64748B 100%)' },
-        { id: 'dolly_zoom', uid: 'fx-dolly-zoom', label: 'Thu phóng méo mó', cat: 'all', badge: 'Warp', swatch: 'linear-gradient(135deg, #E2E8F0 0%, #CBD5E1 50%, #94A3B8 100%)' },
-        { id: 'vhs', uid: 'fx-vhs', label: 'Nhiễu tương phản', cat: 'all', badge: 'Retro', swatch: 'linear-gradient(135deg, #1E3A8A 0%, #2563EB 50%, #60A5FA 100%)' },
-        { id: 'laser_eyes', uid: 'fx-laser-eyes', label: 'Kinh dị đỏ', cat: 'all', badge: 'Horror', swatch: 'linear-gradient(135deg, #1E3A8A 0%, #3B82F6 40%, #EF4444 90%)' },
-        { id: 'matrix_rain', uid: 'fx-matrix-rain', label: 'Mã spam', cat: 'all', badge: 'Matrix', swatch: 'linear-gradient(135deg, #022C22 0%, #065F46 40%, #10B981 100%)' },
-        { id: 'shake', uid: 'fx-shake', label: 'Rung lắc máy ảnh', cat: 'all', badge: 'Shake', swatch: 'linear-gradient(135deg, #1E293B 0%, #334155 50%, #475569 100%)' },
-        { id: 'bass_impact', uid: 'fx-bass-impact', label: 'Rung nhịp Bass', cat: 'all', badge: 'Beat', swatch: 'linear-gradient(135deg, #4C0519 0%, #9F1239 50%, #E11D48 100%)' },
-        { id: 'split_screen_2', uid: 'fx-split-2', label: 'Chia đôi màn hình', cat: 'all', badge: 'Split', swatch: 'linear-gradient(135deg, #172554 0%, #1D4ED8 50%, #3B82F6 100%)' },
-        { id: 'kaleidoscope', uid: 'fx-kaleidoscope', label: 'Kính vạn hoa', cat: 'all', badge: 'Mirror', swatch: 'linear-gradient(135deg, #4A044E 0%, #86198F 50%, #D946EF 100%)' },
-        { id: 'speed_lines', uid: 'fx-speed-lines', label: 'Tia tốc độ Anime', cat: 'all', badge: 'Anime', swatch: 'linear-gradient(135deg, #451A03 0%, #92400E 50%, #F59E0B 100%)' },
-        { id: 'underwater', uid: 'fx-underwater', label: 'Sóng đại dương', cat: 'all', badge: 'Ocean', swatch: 'linear-gradient(135deg, #083344 0%, #0E7490 50%, #06B6D4 100%)' },
-        // Hiệu ứng Cơ thể (body)
-        { id: 'clone_trail', uid: 'fx-clone-trail', label: 'Phân thân chuyển động', cat: 'body', badge: 'Body FX', swatch: 'linear-gradient(135deg, #2E1065 0%, #581C87 50%, #9333EA 100%)' },
-        { id: 'soul_out', uid: 'fx-soul-out', label: 'Tách bóng xuất hồn', cat: 'body', badge: 'TikTok', swatch: 'linear-gradient(135deg, #111827 0%, #374151 50%, #6B7280 100%)' },
-        { id: 'dreamy_glow', uid: 'fx-dreamy-glow', label: 'Hào quang lấp lánh', cat: 'body', badge: 'Body FX', swatch: 'linear-gradient(135deg, #831843 0%, #BE185D 50%, #F472B6 100%)' },
-        { id: 'neon_outline', uid: 'fx-neon-outline', label: 'Viền điện tử cơ thể', cat: 'body', badge: 'Body FX', swatch: 'linear-gradient(135deg, #042F2E 0%, #0D9488 50%, #2DD4BF 100%)' },
-        { id: 'lightning_storm', uid: 'fx-lightning-storm', label: 'Tia sét siêu nhiên', cat: 'body', badge: 'Body FX', swatch: 'linear-gradient(135deg, #1E1B4B 0%, #4338CA 50%, #818CF8 100%)' },
-        { id: 'thermal_vision', uid: 'fx-thermal-vision', label: 'Camera tầm nhiệt', cat: 'body', badge: 'Sci-Fi', swatch: 'linear-gradient(135deg, #450A0A 0%, #DC2626 40%, #FBBF24 80%)' },
-        { id: 'spotlight_stage', uid: 'fx-spotlight-stage', label: 'Đèn rọi sân khấu', cat: 'body', badge: 'Stage', swatch: 'linear-gradient(135deg, #18181B 0%, #27272A 50%, #A1A1AA 100%)' },
-        // Cổ điển / VHS & Điện ảnh (retro)
-        { id: 'fade_black', uid: 'fx-fade-black', label: 'Mờ dần điện ảnh', cat: 'retro', badge: 'Cinema', swatch: 'linear-gradient(135deg, #000000 0%, #18181B 100%)' },
-        { id: 'super8_grain', uid: 'fx-super8-grain', label: 'Hạt phim 16mm', cat: 'retro', badge: '16mm', swatch: 'linear-gradient(135deg, #292524 0%, #57534E 50%, #A8A29E 100%)' },
-        { id: 'old_tv', uid: 'fx-old-tv', label: 'Tivi CRT cong', cat: 'retro', badge: 'CRT', swatch: 'linear-gradient(135deg, #1E293B 0%, #334155 50%, #64748B 100%)' },
-        { id: 'dv_cam', uid: 'fx-dv-cam', label: 'Máy quay DV 2000s', cat: 'retro', badge: 'Y2K', swatch: 'linear-gradient(135deg, #0F172A 0%, #1E3A8A 50%, #3B82F6 100%)' },
-        { id: 'cinema_bars', uid: 'fx-cinema-bars', label: 'Viền đen 2.35:1', cat: 'retro', badge: '2.35:1', swatch: 'linear-gradient(180deg, #000 20%, #1E293B 20%, #1E293B 80%, #000 80%)' },
-        { id: 'halftone_comic', uid: 'fx-halftone-comic', label: 'Chấm bi truyện tranh', cat: 'retro', badge: 'Comic', swatch: 'linear-gradient(135deg, #701A75 0%, #A21CAF 50%, #F472B6 100%)' },
-        { id: 'night_vision', uid: 'fx-night-vision', label: 'Ống nhòm đêm', cat: 'retro', badge: 'NVG', swatch: 'linear-gradient(135deg, #052E16 0%, #14532D 50%, #22C55E 100%)' },
-        // Ánh sáng Neon, Thời tiết & Hạt (glow)
-        { id: 'flash', uid: 'fx-flash', label: 'Nháy chớp trắng', cat: 'glow', badge: 'Flash', swatch: 'linear-gradient(135deg, #E2E8F0 0%, #FFFFFF 50%, #CBD5E1 100%)' },
-        { id: 'strobe_party', uid: 'fx-strobe-party', label: 'Đèn chớp vũ trường', cat: 'glow', badge: 'Club', swatch: 'linear-gradient(135deg, #4C1D95 0%, #8B5CF6 50%, #EC4899 100%)' },
-        { id: 'golden_rays', uid: 'fx-golden-rays', label: 'Tia nắng hoàng hôn', cat: 'glow', badge: 'Glow', swatch: 'linear-gradient(135deg, #78350F 0%, #D97706 50%, #F59E0B 100%)' },
-        { id: 'fire_sparks', uid: 'fx-fire-sparks', label: 'Đốm lửa rực cháy', cat: 'glow', badge: 'Fire', swatch: 'linear-gradient(135deg, #7C2D12 0%, #EA580C 50%, #F97316 100%)' },
-        { id: 'snowfall', uid: 'fx-snowfall', label: 'Tuyết rơi mùa đông', cat: 'glow', badge: 'Snow', swatch: 'linear-gradient(135deg, #1E293B 0%, #38BDF8 50%, #E0F2FE 100%)' },
-        { id: 'sakura_petals', uid: 'fx-sakura-petals', label: 'Hoa anh đào bay', cat: 'glow', badge: 'Sakura', swatch: 'linear-gradient(135deg, #831843 0%, #DB2777 50%, #F472B6 100%)' },
-        { id: 'confetti_party', uid: 'fx-confetti-party', label: 'Pháo giấy sinh nhật', cat: 'glow', badge: 'Party', swatch: 'linear-gradient(135deg, #854D0E 0%, #F59E0B 40%, #EC4899 80%)' },
-      ] as Array<{ id: VisualEffectType; uid: string; label: string; cat: string; badge: string; swatch: string }>,
+      VISUAL_EFFECT_CATALOG as Array<{
+        id: VisualEffectType;
+        uid: string;
+        label: string;
+        cat: string;
+        badge: string;
+        swatch: string;
+      }>,
     []
   );
 
   const TRANSITION_CATALOG_ITEMS = useMemo(
     () =>
-      [
-        { id: 'none', uid: 'tr-none', label: 'Không chuyển tiếp', cat: 'all', dur: 0.5, icon: '⊘', swatch: 'linear-gradient(135deg, #181920 0%, #252834 100%)' },
-        // Máy ảnh & Zoom (camera)
-        { id: 'zoom_in', uid: 'tr-zoom-in', label: 'Kéo gần (Zoom In)', cat: 'camera', dur: 0.6, icon: '🔍', swatch: 'linear-gradient(135deg, #1E1B4B 0%, #4338CA 50%, #6366F1 100%)' },
-        { id: 'spin', uid: 'tr-spin', label: 'Xoay vòng 360°', cat: 'camera', dur: 0.7, icon: '🔄', swatch: 'linear-gradient(135deg, #311042 0%, #7E22CE 50%, #C084FC 100%)' },
-        { id: 'whip_pan', uid: 'tr-whip-pan', label: 'Lia máy (Whip Pan)', cat: 'camera', dur: 0.4, icon: '💨', swatch: 'linear-gradient(135deg, #0C4A6E 0%, #0284C7 50%, #38BDF8 100%)' },
-        { id: 'roll_shutter', uid: 'tr-roll-shutter', label: 'Cuộn ống kính', cat: 'camera', dur: 0.6, icon: '🌀', swatch: 'linear-gradient(135deg, #134E4A 0%, #0D9488 50%, #2DD4BF 100%)' },
-        { id: 'pull_out', uid: 'tr-pull-out', label: 'Thu xa (Pull Out)', cat: 'camera', dur: 0.5, icon: '🔎', swatch: 'linear-gradient(135deg, #1F2937 0%, #374151 50%, #60A5FA 100%)' },
-        // Chuyển động MG (mg)
-        { id: 'cross_dissolve', uid: 'tr-cross-dissolve', label: 'Hòa tan (Dissolve)', cat: 'mg', dur: 0.8, icon: '⋈', swatch: 'linear-gradient(135deg, #14532D 0%, #16A34A 50%, #4ADE80 100%)' },
-        { id: 'slide_left', uid: 'tr-slide-left', label: 'Trượt ngang', cat: 'mg', dur: 0.6, icon: '◀', swatch: 'linear-gradient(135deg, #701A75 0%, #C026D3 50%, #F472B6 100%)' },
-        { id: 'wipe_split', uid: 'tr-wipe-split', label: 'Tách đôi (Split)', cat: 'mg', dur: 0.6, icon: '◫', swatch: 'linear-gradient(135deg, #831843 0%, #DB2777 50%, #F43F5E 100%)' },
-        { id: 'clock_sweep', uid: 'tr-clock-sweep', label: 'Quét kim đồng hồ', cat: 'mg', dur: 0.7, icon: '⏱', swatch: 'linear-gradient(135deg, #78350F 0%, #D97706 50%, #FBBF24 100%)' },
-        { id: 'push_up', uid: 'tr-push-up', label: 'Đẩy lên (Push Up)', cat: 'mg', dur: 0.5, icon: '▲', swatch: 'linear-gradient(135deg, #1E293B 0%, #2563EB 50%, #38BDF8 100%)' },
-        // Glitch & Flash (glitch)
-        { id: 'black_fade', uid: 'tr-black-fade', label: 'Chuyển đen (Fade Black)', cat: 'glitch', dur: 0.8, icon: '⬛', swatch: 'linear-gradient(135deg, #09090B 0%, #18181B 50%, #27272A 100%)' },
-        { id: 'white_flash', uid: 'tr-white-flash', label: 'Chớp trắng (Flash)', cat: 'glitch', dur: 0.4, icon: '⚡', swatch: 'linear-gradient(135deg, #52525B 0%, #A1A1AA 50%, #E4E4E7 100%)' },
-        { id: 'glitch_transition', uid: 'tr-glitch-cut', label: 'Nhiễu sóng (Glitch)', cat: 'glitch', dur: 0.5, icon: '⚡', swatch: 'linear-gradient(135deg, #0F172A 0%, #06B6D4 50%, #EC4899 100%)' },
-        { id: 'film_burn', uid: 'tr-film-burn', label: 'Cháy sáng phim', cat: 'glitch', dur: 0.7, icon: '🔥', swatch: 'linear-gradient(135deg, #7C2D12 0%, #EA580C 50%, #FDE047 100%)' },
-        { id: 'rgb_split', uid: 'tr-rgb-split', label: 'Tách kênh RGB', cat: 'glitch', dur: 0.5, icon: '📺', swatch: 'linear-gradient(135deg, #881337 0%, #4338CA 50%, #06B6D4 100%)' },
-      ] as Array<{ id: TransitionType; uid: string; label: string; cat: string; dur: number; icon: string; swatch: string }>,
+      TRANSITION_CATALOG as Array<{
+        id: TransitionType;
+        uid: string;
+        label: string;
+        cat: string;
+        dur: number;
+        icon: string;
+        swatch: string;
+      }>,
     []
   );
 
   const FILTER_CATALOG_ITEMS = useMemo(
     () =>
-      [
-        { id: 'none', uid: 'lut-none', label: 'Màu gốc (Original)', cat: 'all', swatch: 'linear-gradient(135deg,#334155,#64748B)' },
-        // Điện ảnh (LUT) (cinema)
-        { id: 'teal_orange', uid: 'lut-teal-orange', label: 'Điện ảnh (Teal & Orange)', cat: 'cinema', swatch: 'linear-gradient(135deg,#0D9488,#EA580C)' },
-        { id: 'cyberpunk', uid: 'lut-cyberpunk', label: 'Cyberpunk Neon 2077', cat: 'cinema', swatch: 'linear-gradient(135deg,#06B6D4,#D946EF)' },
-        { id: 'kodak_2383', uid: 'lut-kodak-2383', label: 'Kodak 2383 Film Print', cat: 'cinema', swatch: 'linear-gradient(135deg,#1E3A8A,#D97706)' },
-        { id: 'matrix_green', uid: 'lut-matrix-green', label: 'Sci-Fi Matrix Emerald', cat: 'cinema', swatch: 'linear-gradient(135deg,#064E3B,#10B981)' },
-        { id: 'anamorphic_blue', uid: 'lut-anamorphic-blue', label: 'Hollywood Anamorphic Cold', cat: 'cinema', swatch: 'linear-gradient(135deg,#0F172A,#38BDF8)' },
-        { id: 'imax_hdr', uid: 'lut-imax-hdr', label: 'IMAX Blockbuster HDR', cat: 'cinema', swatch: 'linear-gradient(135deg,#7C2D12,#F59E0B)' },
-        // Đời thường & Ẩm thực (life)
-        { id: 'vintage', uid: 'lut-vintage', label: 'Hoài cổ (Vintage Warm)', cat: 'life', swatch: 'linear-gradient(135deg,#78350F,#FBBF24)' },
-        { id: 'vivid', uid: 'lut-vivid', label: 'Rực rỡ Ẩm thực (Vivid Food)', cat: 'life', swatch: 'linear-gradient(135deg,#DC2626,#FACC15)' },
-        { id: 'fuji_velvia', uid: 'lut-fuji-velvia', label: 'Fujifilm Velvia Nhật Bản', cat: 'life', swatch: 'linear-gradient(135deg,#065F46,#6EE7B7)' },
-        { id: 'golden_hour', uid: 'lut-golden-hour', label: 'Nắng chiều Hoàng hôn (Golden Hour)', cat: 'life', swatch: 'linear-gradient(135deg,#9A3412,#FDE047)' },
-        { id: 'cafe_latte', uid: 'lut-cafe-latte', label: 'Tone Hàn Quốc (Creamy Latte)', cat: 'life', swatch: 'linear-gradient(135deg,#78716C,#F5F5F4)' },
-        { id: 'tropical_vibe', uid: 'lut-tropical-vibe', label: 'Biển xanh Nhiệt đới (Summer)', cat: 'life', swatch: 'linear-gradient(135deg,#0284C7,#2DD4BF)' },
-        // Đen trắng Noir (bw)
-        { id: 'noir_bw', uid: 'lut-noir-bw', label: 'Đen trắng Cổ điển (Noir B&W)', cat: 'bw', swatch: 'linear-gradient(135deg,#09090B,#71717A)' },
-        { id: 'leica_mono', uid: 'lut-leica-mono', label: 'Leica Monochrom Tương phản cao', cat: 'bw', swatch: 'linear-gradient(135deg,#000000,#D4D4D8)' },
-        { id: 'ilford_hp5', uid: 'lut-ilford-hp5', label: 'Phim Ilford HP5 400 (Soft B&W)', cat: 'bw', swatch: 'linear-gradient(135deg,#27272A,#A1A1AA)' },
-        { id: 'silver_selenium', uid: 'lut-silver-selenium', label: 'Tráng bạc Selenium (Silver Tone)', cat: 'bw', swatch: 'linear-gradient(135deg,#1E293B,#94A3B8)' },
-      ] as Array<{ id: FilterPresetType; uid: string; label: string; cat: string; swatch: string }>,
+      FILTER_CATALOG as Array<{
+        id: FilterPresetType;
+        uid: string;
+        label: string;
+        cat: string;
+        swatch: string;
+        cssFilter: string;
+      }>,
     []
   );
 
@@ -4189,6 +4139,12 @@ export default function App() {
     setResourceMarqueeBox(null);
     setResourceTimelineDragGhost(null);
   }, [topLeftCategory, sidebarFolder]);
+
+  useEffect(() => {
+    if (leftPanelScrollRef.current) {
+      leftPanelScrollRef.current.scrollTop = 0;
+    }
+  }, [topLeftCategory, sidebarFolder, subCategoryFilter]);
 
   // Select all visible items in the active Zone 1 resource pane
   const handleSelectAllCurrentResources = () => {
@@ -5365,6 +5321,14 @@ export default function App() {
             setHistoryFuture([]);
             setSelectedClipId(null);
             setSelectedClipIds([]);
+            setSelectedResourceIds([]);
+            setTopLeftCategory('media');
+            setSidebarFolder('all');
+            setSubCategoryFilter('all');
+            setSearchQuery('');
+            setInspectorMode('project_details');
+            setInspectorTab('video');
+            setTextSubTab('basic');
             setPlayheadSec(0);
             setSubProjects((prev) => [newProj, ...prev]);
             setActiveView('workstation');
@@ -5383,6 +5347,14 @@ export default function App() {
             setHistoryFuture([]);
             setSelectedClipId(null);
             setSelectedClipIds([]);
+            setSelectedResourceIds([]);
+            setTopLeftCategory('media');
+            setSidebarFolder('all');
+            setSubCategoryFilter('all');
+            setSearchQuery('');
+            setInspectorMode('project_details');
+            setInspectorTab('video');
+            setTextSubTab('basic');
             setPlayheadSec(0);
             setProjectName(sub.name);
             setAspectRatio((sub.aspectRatio as AspectRatioOption) || '16:9');
@@ -6159,7 +6131,9 @@ export default function App() {
                             { id: 'all', label: 'Âm nhạc & SFX' },
                             { id: 'bgm', label: 'Nhạc nền Studio' },
                             { id: 'sfx', label: 'Hiệu ứng tiếng động' },
-                            { id: 'tiktok', label: 'Nhạc xu hướng' },
+                            { id: 'tiktok', label: 'Sound Hook & TikTok' },
+                            { id: 'meme', label: 'Meme & Tiếng cười' },
+                            { id: 'youtube', label: 'YouTube / IG / FB' },
                             { id: 'extract', label: 'Đã trích xuất' },
                           ]
                         : topLeftCategory === 'text'
@@ -6202,7 +6176,7 @@ export default function App() {
                             { id: 'all', label: 'Tất cả Bộ lọc' },
                             { id: 'cinema', label: 'Điện ảnh (LUT)' },
                             { id: 'life', label: 'Đời thường & Ẩm thực' },
-                            { id: 'bw', label: 'Đen trắng Noir' },
+                            { id: 'retro', label: 'Retro & Đen trắng' },
                           ]
                         : [
                             { id: 'all', label: 'Lớp điều chỉnh' },
@@ -6997,8 +6971,12 @@ export default function App() {
                                 : subCategoryFilter === 'sfx'
                                 ? 'Hiệu Ứng Tiếng Động Chuyển Cảnh (SFX)'
                                 : subCategoryFilter === 'tiktok'
-                                ? 'Âm Thanh Xu Hướng Viral & Meme'
-                                : 'Kho Nhạc Nền & Hiệu Ứng Âm Thanh (24 mẫu)'}
+                                ? 'Sound Hook & Xu Hướng TikTok'
+                                : subCategoryFilter === 'meme'
+                                ? 'Meme, Tiếng Cười & Phản Ứng Hài'
+                                : subCategoryFilter === 'youtube'
+                                ? 'Âm Thanh YouTube, IG, Facebook'
+                                : `Kho Nhạc Nền & Hiệu Ứng Âm Thanh (${SFX_LIBRARY.length} mẫu)`}
                             </span>
                             <button
                               type="button"
@@ -7112,7 +7090,7 @@ export default function App() {
 
                   {/* TAB 3: TEXT, AUTO CAPTIONS & SUBTITLES (.SRT) (Supports 2D Marquee Selection) */}
                   {topLeftCategory === 'text' && (
-                    <div className="flex-1 overflow-y-auto p-3 space-y-3 text-xs">
+                    <div ref={leftPanelScrollRef} className="flex-1 overflow-y-auto p-3 space-y-3 text-xs">
                       <div data-no-marquee="true" className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
@@ -7800,11 +7778,10 @@ export default function App() {
                                     : 'border-[#2C2D35] bg-[#1C1D24] hover:border-[#00CAE0]/60'
                                 }`}
                               >
-                                {/* Effect Visual Texture Swatch */}
-                                <div
-                                  className="absolute inset-0 transition-transform duration-300 group-hover:scale-105"
-                                  style={{ background: fx.swatch }}
-                                />
+                                {/* New York Morning Cityscape Effect Preview */}
+                                <div className="absolute inset-0 transition-transform duration-300 group-hover:scale-105">
+                                  <NyPreviewThumb spec={getVisualEffectPreview(fx.id)} />
+                                </div>
 
                                 {/* Subtle Dark Vignette Overlay */}
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20" />
@@ -7944,11 +7921,10 @@ export default function App() {
                                     : 'border-[#2C2D35] bg-[#1C1D24] hover:border-[#00CAE0]/60 hover:bg-[#22232B]'
                                 }`}
                               >
-                                {/* Transition Visual Gradient Swatch */}
-                                <div
-                                  className="absolute inset-0 transition-transform duration-300 group-hover:scale-105"
-                                  style={{ background: tr.swatch }}
-                                />
+                                {/* New York Morning Cityscape Transition Preview */}
+                                <div className="absolute inset-0 transition-transform duration-300 group-hover:scale-105">
+                                  <NyPreviewThumb spec={getTransitionPreview(tr.id)} />
+                                </div>
 
                                 {/* Subtle Dark Vignette Overlay */}
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20" />
@@ -8373,10 +8349,9 @@ export default function App() {
                                   : 'bg-[#22222A] border-[#30303C] text-[#D4D4D8] hover:border-[#00CAE0]/50'
                               }`}
                             >
-                              <div
-                                style={{ background: lut.swatch }}
-                                className="h-5 w-full rounded-xs mb-1.5 border border-white/15"
-                              />
+                              <div className="aspect-square w-full rounded-lg overflow-hidden mb-1.5 border border-white/15">
+                                <NyPreviewThumb spec={getFilterPreview(lut.id)} />
+                              </div>
                               <div className="text-[11px] leading-snug line-clamp-2">
                                 🎨 {lut.label}
                               </div>

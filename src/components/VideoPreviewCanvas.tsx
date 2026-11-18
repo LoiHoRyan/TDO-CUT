@@ -2827,6 +2827,12 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
   };
 
   // Mobile Touch Gestures on Canvas: Pinch-to-zoom & pan video, 1-finger drag reposition, tap to play
+  const lastTextTapRef = useRef<{
+    clipId: string;
+    time: number;
+    x: number;
+    y: number;
+  } | null>(null);
   const canvasTouchStateRef = useRef<{
     isPinch: boolean;
     initialPinchDist: number;
@@ -2948,9 +2954,28 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
             onCanvasDragStart?.();
             onSelectClipFromCanvas?.(b.clipId);
             setShowCanvasBoundingBox(true);
-            // Requirement 1: Directly open bottom text editor drawer instead of floating black overlay
-            if (matchedClip && (matchedClip.subtitleText || matchedClip.stickerEmoji || matchedClip.trackIndex === 2)) {
-              onOpenTextEditor?.(matchedClip.id);
+            const isTextOrSticker = Boolean(
+              matchedClip &&
+                (matchedClip.subtitleText ||
+                  matchedClip.stickerEmoji ||
+                  matchedClip.trackIndex === 2 ||
+                  matchedClip.trackIndex === 6)
+            );
+            const nowTap = performance.now();
+            const prevTap = lastTextTapRef.current;
+            if (
+              isTextOrSticker &&
+              prevTap &&
+              prevTap.clipId === b.clipId &&
+              nowTap - prevTap.time <= 360 &&
+              Math.hypot(t0.clientX - prevTap.x, t0.clientY - prevTap.y) <= 30
+            ) {
+              lastTextTapRef.current = null;
+              onOpenTextEditor?.(b.clipId);
+            } else {
+              lastTextTapRef.current = isTextOrSticker
+                ? { clipId: b.clipId, time: nowTap, x: t0.clientX, y: t0.clientY }
+                : null;
             }
             setLiveDragTransform({
               clipId: b.clipId,
@@ -3150,9 +3175,6 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
           onCanvasDragStart?.();
           onSelectClipFromCanvas?.(b.clipId);
           setShowCanvasBoundingBox(true);
-          if (matchedClip && (matchedClip.subtitleText || matchedClip.stickerEmoji || matchedClip.trackIndex === 2)) {
-            onOpenTextEditor?.(b.clipId);
-          }
           setLiveDragTransform({
             clipId: b.clipId,
             posX: b.origPosX,
@@ -3906,7 +3928,13 @@ export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({
               onTouchCancel={handleCanvasTouchEnd}
               onDoubleClick={() => {
                 const target = getActiveSelectedCanvasClip();
-                if (target && (target.subtitleText || target.stickerEmoji || target.trackIndex === 2)) {
+                if (
+                  target &&
+                  (target.subtitleText ||
+                    target.stickerEmoji ||
+                    target.trackIndex === 2 ||
+                    target.trackIndex === 6)
+                ) {
                   onSelectClipFromCanvas?.(target.id);
                   onOpenTextEditor?.(target.id);
                 }

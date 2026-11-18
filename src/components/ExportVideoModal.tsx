@@ -615,7 +615,8 @@ async function selectSupportedVideoEncoderConfig(
   width: number,
   height: number,
   fps: number,
-  bitrate: number
+  bitrate: number,
+  preferSoftware: boolean = false
 ): Promise<VideoEncoderConfig | null> {
   if (typeof VideoEncoder === 'undefined') return null;
 
@@ -627,79 +628,61 @@ async function selectSupportedVideoEncoderConfig(
   const maxDim = Math.max(safeW, safeH);
   const pixelCount = safeW * safeH;
 
-  // Select candidate H.264 codecs tailored to resolution and FPS
+  // Select candidate H.264 codecs tailored to resolution and FPS (High -> Main -> Baseline)
   let candidateCodecs: string[];
   if (maxDim >= 3840 || pixelCount >= 3840 * 2160 * 0.85) {
     // 4K
     candidateCodecs =
       fps > 30
-        ? ['avc1.640034', 'avc1.640033', 'avc1.64002a', 'avc1.640029']
-        : ['avc1.640033', 'avc1.640032', 'avc1.64002a', 'avc1.640029'];
+        ? ['avc1.640034', 'avc1.640033', 'avc1.4d4033', 'avc1.64002a', 'avc1.4d402a']
+        : ['avc1.640033', 'avc1.640032', 'avc1.4d4033', 'avc1.64002a', 'avc1.4d402a'];
   } else if (maxDim >= 2560 || pixelCount >= 2560 * 1440 * 0.85) {
     // 2K / 1440p
-    candidateCodecs = ['avc1.640032', 'avc1.64002a', 'avc1.640029', 'avc1.640028'];
+    candidateCodecs = ['avc1.640032', 'avc1.4d4032', 'avc1.64002a', 'avc1.4d402a', 'avc1.640029'];
   } else if (maxDim >= 1920 || pixelCount >= 1920 * 1080 * 0.85) {
     // 1080p
     candidateCodecs =
       fps > 30
-        ? ['avc1.64002a', 'avc1.640029', 'avc1.640028', 'avc1.4d402a', 'avc1.4d4029']
-        : ['avc1.640029', 'avc1.640028', 'avc1.4d4029', 'avc1.4d4028', 'avc1.42e01f'];
+        ? ['avc1.64002a', 'avc1.4d402a', 'avc1.640029', 'avc1.4d4029', 'avc1.42e02a']
+        : ['avc1.640029', 'avc1.4d4029', 'avc1.640028', 'avc1.4d4028', 'avc1.42e01f'];
   } else {
-    // 720p or lower
+    // 720p / 480p
     candidateCodecs = [
-      'avc1.64001f',
-      'avc1.640020',
       'avc1.4d401f',
+      'avc1.64001f',
       'avc1.42e01f',
+      'avc1.640020',
       'avc1.640028',
     ];
   }
 
-  const bitrateModes: VideoEncoderBitrateMode[] = ['constant', 'variable'];
+  // Variable bitrate is far more reliable than constant across Android/iOS hardware encoders
+  const bitrateModes: VideoEncoderBitrateMode[] = ['variable', 'constant'];
+  const hwOrder: Array<HardwareAcceleration | undefined> = preferSoftware
+    ? ['prefer-software', undefined]
+    : ['prefer-hardware', undefined, 'prefer-software'];
 
-  // 1. Try with prefer-hardware and constant/variable bitrate modes
-  for (const bMode of bitrateModes) {
-    for (const codec of candidateCodecs) {
-      const config: VideoEncoderConfig = {
-        codec,
-        width: safeW,
-        height: safeH,
-        bitrate: safeBitrate,
-        framerate: fps,
-        bitrateMode: bMode,
-        hardwareAcceleration: 'prefer-hardware',
-        avc: { format: 'avc' },
-      };
-      try {
-        const res = await VideoEncoder.isConfigSupported(config);
-        if (res && res.supported && res.config) {
-          return res.config;
+  for (const hw of hwOrder) {
+    for (const bMode of bitrateModes) {
+      for (const codec of candidateCodecs) {
+        const config: VideoEncoderConfig = {
+          codec,
+          width: safeW,
+          height: safeH,
+          bitrate: safeBitrate,
+          framerate: fps,
+          bitrateMode: bMode,
+          ...(hw ? { hardwareAcceleration: hw } : {}),
+          avc: { format: 'avc' },
+        };
+        try {
+          const res = await VideoEncoder.isConfigSupported(config);
+          if (res && res.supported && res.config) {
+            return res.config;
+          }
+        } catch {
+          // continue
         }
-      } catch {
-        // continue
-      }
-    }
-  }
-
-  // 2. Fallback without hardware acceleration requirement
-  for (const bMode of bitrateModes) {
-    for (const codec of candidateCodecs) {
-      const config: VideoEncoderConfig = {
-        codec,
-        width: safeW,
-        height: safeH,
-        bitrate: safeBitrate,
-        framerate: fps,
-        bitrateMode: bMode,
-        avc: { format: 'avc' },
-      };
-      try {
-        const res = await VideoEncoder.isConfigSupported(config);
-        if (res && res.supported && res.config) {
-          return res.config;
-        }
-      } catch {
-        // continue
       }
     }
   }
@@ -1573,6 +1556,16 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
   const [exportedFiles, setExportedFiles] = useState<
     Array<{ name: string; url: string; qualitySummary?: string }>
   >([]);
+  const mobileDoneBoxRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (isMobile && exportedFiles.length > 0 && !isRendering) {
+      const t = window.setTimeout(() => {
+        mobileDoneBoxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 120);
+      return () => window.clearTimeout(t);
+    }
+  }, [isMobile, exportedFiles.length, isRendering]);
 
   const abortExportRef = useRef<boolean>(false);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -2933,40 +2926,40 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
       const fullTimelineSec = Math.max(0.1, totalDuration);
       const totalFrames = Math.max(1, Math.round(fullTimelineSec * targetFps));
 
-      // True CapCut target bitrate (12-16 Mbps for 1080p, 8-10 Mbps for 720p, 20-25 Mbps for 2K, 35-50 Mbps for 4K)
-      const mobileTargetBps =
+      // True CapCut target bitrate scaled accurately across 480p/720p/1080p/2K/4K, bitrateMode & high FPS
+      const mobileBaseBps =
         resolution === '4K'
-          ? bitrateMode === 'higher'
-            ? 48_000_000
-            : 38_000_000
+          ? 40_000_000
           : resolution === '2K'
-          ? bitrateMode === 'higher'
-            ? 25_000_000
-            : 22_000_000
+          ? 24_000_000
           : resolution === '720p'
-          ? bitrateMode === 'higher'
-            ? 10_000_000
-            : 8_500_000
-          : bitrateMode === 'higher'
-          ? 16_000_000
-          : 13_500_000;
+          ? 9_000_000
+          : resolution === '480p'
+          ? 5_500_000
+          : 15_000_000;
+      const mobileModeMult =
+        bitrateMode === 'higher' ? 1.35 : bitrateMode === 'lower' ? 0.7 : 1.0;
+      const mobileFpsMult = targetFps >= 50 ? 1.2 : 1.0;
+      const mobileTargetBps = Math.round(mobileBaseBps * mobileModeMult * mobileFpsMult);
 
       const effectiveTargetBps = isMobile
         ? mobileTargetBps
-        : Math.max(8_000_000, Math.min(85_000_000, exportSpec.videoBitsPerSecond || 24_000_000));
+        : Math.max(4_000_000, Math.min(95_000_000, exportSpec.videoBitsPerSecond || 24_000_000));
 
+      const wantsMp4Container = format === 'mp4' || format === 'mov';
       let activeEncodeW = renderExportW;
       let activeEncodeH = renderExportH;
       let activeEncodeFps = targetFps;
-      let chosenVideoConfig = isWebCodecsSupported
-        ? await selectSupportedVideoEncoderConfig(
-            activeEncodeW,
-            activeEncodeH,
-            activeEncodeFps,
-            effectiveTargetBps
-          )
-        : null;
-      if (isWebCodecsSupported && !chosenVideoConfig && activeEncodeFps > 30) {
+      let chosenVideoConfig =
+        isWebCodecsSupported && wantsMp4Container
+          ? await selectSupportedVideoEncoderConfig(
+              activeEncodeW,
+              activeEncodeH,
+              activeEncodeFps,
+              effectiveTargetBps
+            )
+          : null;
+      if (isWebCodecsSupported && wantsMp4Container && !chosenVideoConfig && activeEncodeFps > 30) {
         activeEncodeFps = 30;
         chosenVideoConfig = await selectSupportedVideoEncoderConfig(
           activeEncodeW,
@@ -2975,7 +2968,12 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           effectiveTargetBps
         );
       }
-      if (isWebCodecsSupported && !chosenVideoConfig && Math.max(activeEncodeW, activeEncodeH) > 1920) {
+      if (
+        isWebCodecsSupported &&
+        wantsMp4Container &&
+        !chosenVideoConfig &&
+        Math.max(activeEncodeW, activeEncodeH) > 1920
+      ) {
         const scaleDown = 1920 / Math.max(activeEncodeW, activeEncodeH);
         activeEncodeW = Math.max(2, Math.floor((activeEncodeW * scaleDown) / 2) * 2);
         activeEncodeH = Math.max(2, Math.floor((activeEncodeH * scaleDown) / 2) * 2);
@@ -2995,7 +2993,9 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
         activeAudioClips.length > 0;
 
       // Detect supported AudioEncoder config: AAC (48000Hz, 44100Hz) or Opus (48000Hz)
-      const supportedAudioConfig = await detectSupportedAudioEncoderConfig();
+      const supportedAudioConfig = wantsMp4Container
+        ? await detectSupportedAudioEncoderConfig()
+        : null;
 
       // If project has audio but neither AAC nor Opus is supported by AudioEncoder,
       // fall through to MediaRecorder branch which captures audio via Web Audio stream.
@@ -3004,7 +3004,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
         chosenVideoConfig = null;
       }
 
-      const canUseWebCodecs = Boolean(isWebCodecsSupported && chosenVideoConfig);
+      const canUseWebCodecs = Boolean(isWebCodecsSupported && wantsMp4Container && chosenVideoConfig);
 
       for (let vIdx = 1; vIdx <= totalVariants; vIdx++) {
         if (abortExportRef.current) break;
@@ -3014,15 +3014,15 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           await new Promise((r) => setTimeout(r, 60));
         }
 
+        let webCodecsVariantDone = false;
         if (canUseWebCodecs && chosenVideoConfig) {
           // =========================================================================
           // PATH 3 (Primary): CapCut-Grade Offline Frame-by-Frame WebCodecs Engine
           // (VideoEncoder + AudioEncoder + mp4-muxer + OfflineAudioContext)
-          // 100% Deterministic, Zero Real-time Loop, No frame drops, Bit-exact audio sync
+          // Automatic hardware -> software retry before MediaRecorder fallback
           // =========================================================================
           setProgress(20);
 
-          // Mix all project audio tracks and video clip audio via OfflineAudioContext (48kHz or 44.1kHz stereo)
           const allAudioClips = [...activeV1Clips, ...activeAudioClips];
           const audioSampleRate = supportedAudioConfig?.sampleRate || 48000;
           const renderedAudioBuffer = hasTimelineAudio
@@ -3036,66 +3036,91 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
 
           if (abortExportRef.current) break;
 
-          const muxerTarget = new ArrayBufferTarget();
-          const muxer = new Muxer({
-            target: muxerTarget,
-            video: {
-              codec: 'avc',
-              width: renderExportW,
-              height: renderExportH,
-              frameRate: targetFps,
-            },
-            audio:
-              supportedAudioConfig !== null && renderedAudioBuffer
-                ? {
-                    codec: supportedAudioConfig.muxerCodec,
-                    numberOfChannels: 2,
-                    sampleRate: renderedAudioBuffer.sampleRate,
-                  }
-                : undefined,
-            fastStart: 'in-memory',
-            firstTimestampBehavior: 'offset',
-          });
-
-          // Encode audio into muxer via AudioEncoder
-          if (supportedAudioConfig !== null && renderedAudioBuffer) {
-            await encodeAudioBufferToMuxer(
-              renderedAudioBuffer,
-              muxer,
-              abortExportRef,
-              activeAudioEncoderRef,
-              supportedAudioConfig
-            );
+          const encodeTotalFrames = Math.max(1, Math.round(fullTimelineSec * activeEncodeFps));
+          const candidateEncoderConfigs: VideoEncoderConfig[] = [chosenVideoConfig];
+          const swFallbackCfg = await selectSupportedVideoEncoderConfig(
+            activeEncodeW,
+            activeEncodeH,
+            activeEncodeFps,
+            effectiveTargetBps,
+            true
+          );
+          if (swFallbackCfg && swFallbackCfg.codec !== chosenVideoConfig.codec) {
+            candidateEncoderConfigs.push(swFallbackCfg);
+          } else if (swFallbackCfg && chosenVideoConfig.hardwareAcceleration !== 'prefer-software') {
+            candidateEncoderConfigs.push(swFallbackCfg);
           }
 
-          if (abortExportRef.current) break;
-          setProgress(25);
+          for (const encCfg of candidateEncoderConfigs) {
+            if (abortExportRef.current || webCodecsVariantDone) break;
 
-          // Configure VideoEncoder
-          let videoEncoderError: Error | null = null;
-          const videoEncoder = new VideoEncoder({
-            output: (chunk, meta) => {
+            const muxerTarget = new ArrayBufferTarget();
+            const muxer = new Muxer({
+              target: muxerTarget,
+              video: {
+                codec: 'avc',
+                width: activeEncodeW,
+                height: activeEncodeH,
+                frameRate: activeEncodeFps,
+              },
+              audio:
+                supportedAudioConfig !== null && renderedAudioBuffer
+                  ? {
+                      codec: supportedAudioConfig.muxerCodec,
+                      numberOfChannels: 2,
+                      sampleRate: renderedAudioBuffer.sampleRate,
+                    }
+                  : undefined,
+              fastStart: 'in-memory',
+              firstTimestampBehavior: 'offset',
+            });
+
+            if (supportedAudioConfig !== null && renderedAudioBuffer) {
+              await encodeAudioBufferToMuxer(
+                renderedAudioBuffer,
+                muxer,
+                abortExportRef,
+                activeAudioEncoderRef,
+                supportedAudioConfig
+              );
+            }
+
+            if (abortExportRef.current) break;
+            setProgress(25);
+
+            let videoEncoderError: Error | null = null;
+            const videoEncoder = new VideoEncoder({
+              output: (chunk, meta) => {
+                try {
+                  muxer.addVideoChunk(chunk, meta);
+                } catch (e) {
+                  console.error('[WebCodecs Muxer] addVideoChunk error:', e);
+                }
+              },
+              error: (err) => {
+                console.error('[WebCodecs VideoEncoder] error:', err);
+                videoEncoderError = err instanceof Error ? err : new Error(String(err));
+              },
+            });
+            activeVideoEncoderRef.current = videoEncoder;
+            try {
+              videoEncoder.configure(encCfg);
+            } catch (cfgErr) {
+              console.warn('[WebCodecs] configure failed, trying next fallback:', cfgErr);
               try {
-                muxer.addVideoChunk(chunk, meta);
-              } catch (e) {
-                console.error('[WebCodecs Muxer] addVideoChunk error:', e);
-              }
-            },
-            error: (err) => {
-              console.error('[WebCodecs VideoEncoder] error:', err);
-              videoEncoderError = err;
-            },
-          });
-          activeVideoEncoderRef.current = videoEncoder;
-          videoEncoder.configure(chosenVideoConfig);
+                if (videoEncoder.state !== 'closed') videoEncoder.close();
+              } catch {}
+              activeVideoEncoderRef.current = null;
+              continue;
+            }
 
-          // Deterministic frame-by-frame loop: frameIdx = 0 .. totalFrames - 1
-          for (let frameIdx = 0; frameIdx < totalFrames; frameIdx++) {
-            if (abortExportRef.current || videoEncoderError) break;
+            // Deterministic frame-by-frame loop: frameIdx = 0 .. encodeTotalFrames - 1
+            for (let frameIdx = 0; frameIdx < encodeTotalFrames; frameIdx++) {
+              if (abortExportRef.current || videoEncoderError) break;
 
-            const t = frameIdx / targetFps;
-            const timestampUs = Math.round(t * 1_000_000);
-            const durationUs = Math.round(1_000_000 / targetFps);
+              const t = frameIdx / activeEncodeFps;
+              const timestampUs = Math.round(t * 1_000_000);
+              const durationUs = Math.round(1_000_000 / activeEncodeFps);
 
             // Find active video clip at timeline second t
             const activeIdx = activeV1Clips.findIndex(
@@ -3225,15 +3250,15 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               duration: durationUs,
             });
             try {
-              // Keyframe every 2 seconds or first frame
-              const isKeyFrame = frameIdx === 0 || frameIdx % (targetFps * 2) === 0;
+              const isKeyFrame = frameIdx === 0 || frameIdx % (activeEncodeFps * 2) === 0;
               videoEncoder.encode(videoFrame, { keyFrame: isKeyFrame });
+            } catch (encErr) {
+              videoEncoderError = encErr instanceof Error ? encErr : new Error(String(encErr));
             } finally {
               videoFrame.close();
             }
 
-            // RAM backpressure guard: wait if encodeQueueSize is full to prevent mobile RAM overflow
-            if (videoEncoder.encodeQueueSize > 5) {
+            if (videoEncoder.encodeQueueSize > 5 && !videoEncoderError) {
               await new Promise<void>((resolve) => {
                 let resolved = false;
                 let timer: any = null;
@@ -3246,9 +3271,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                   }
                   try {
                     videoEncoder.removeEventListener('dequeue', onDequeue);
-                  } catch {
-                    // Ignore
-                  }
+                  } catch {}
                   resolve();
                 };
                 const onDequeue = () => {
@@ -3258,9 +3281,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                 };
                 try {
                   videoEncoder.addEventListener('dequeue', onDequeue);
-                } catch {
-                  // Fallback
-                }
+                } catch {}
                 const bpStartMs = performance.now();
                 timer = setInterval(() => {
                   if (
@@ -3275,14 +3296,13 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               });
             }
 
-            // Update UI progress smoothly
-            if (frameIdx % Math.max(1, Math.floor(targetFps / 2)) === 0 || frameIdx === totalFrames - 1) {
+            if (frameIdx % Math.max(1, Math.floor(activeEncodeFps / 2)) === 0 || frameIdx === encodeTotalFrames - 1) {
               const pct = Math.min(
                 96,
                 Math.round(
                   25 +
-                    (((vIdx - 1) * totalFrames + frameIdx) /
-                      (totalVariants * totalFrames)) *
+                    (((vIdx - 1) * encodeTotalFrames + frameIdx) /
+                      (totalVariants * encodeTotalFrames)) *
                       71
                 )
               );
@@ -3290,14 +3310,21 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             }
           }
 
-          if (abortExportRef.current || videoEncoderError) {
+          if (abortExportRef.current) {
             try {
               if (videoEncoder.state !== 'closed') videoEncoder.close();
-            } catch {
-              // Ignore
-            }
+            } catch {}
             activeVideoEncoderRef.current = null;
             break;
+          }
+
+          if (videoEncoderError) {
+            console.warn('[WebCodecs] Runtime VideoEncoder error, trying next fallback:', videoEncoderError);
+            try {
+              if (videoEncoder.state !== 'closed') videoEncoder.close();
+            } catch {}
+            activeVideoEncoderRef.current = null;
+            continue;
           }
 
           try {
@@ -3313,28 +3340,27 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           } finally {
             try {
               if (videoEncoder.state !== 'closed') videoEncoder.close();
-            } catch {
-              // Ignore
-            }
+            } catch {}
             activeVideoEncoderRef.current = null;
           }
 
-          if (abortExportRef.current) {
-            break;
-          }
+          if (abortExportRef.current) break;
           if (videoEncoderError) {
-            throw videoEncoderError;
+            continue;
           }
 
           muxer.finalize();
 
           const mp4Blob = new Blob([muxerTarget.buffer], { type: 'video/mp4' });
+          if (mp4Blob.size < 1024) {
+            continue;
+          }
           const url = URL.createObjectURL(mp4Blob);
           activeObjectUrlsRef.current.add(url);
 
           const suffix = totalVariants > 1 ? `_Var${String(vIdx).padStart(2, '0')}` : '';
           const ext = format === 'mov' ? 'mov' : 'mp4';
-          const outName = `${safeFileBaseTitle}${suffix}_${resolution}_${targetFps}fps.${ext}`;
+          const outName = `${safeFileBaseTitle}${suffix}_${resolution}_${activeEncodeFps}fps.${ext}`;
           const actualMb = Math.max(0.05, mp4Blob.size / (1024 * 1024)).toFixed(2);
           const actualMbps = (
             (mp4Blob.size * 8) /
@@ -3345,8 +3371,9 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
           generatedList.push({
             name: outName,
             url,
-            qualitySummary: `${renderExportW}×${renderExportH} · ${targetFps} FPS · ${actualMbps} Mbps · ${fullTimelineSec.toFixed(1)}s · ${actualMb} MB`,
+            qualitySummary: `${activeEncodeW}×${activeEncodeH} · ${activeEncodeFps} FPS · ${actualMbps} Mbps · ${fullTimelineSec.toFixed(1)}s · ${actualMb} MB`,
           });
+          webCodecsVariantDone = true;
 
           // Rewind preloaded videos for next variant
           preloadedVideos.forEach((entry) => {
@@ -3364,9 +3391,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               }
               entry.el.pause();
               entry.el.currentTime = 0;
-            } catch {
-              // Ignore
-            }
+            } catch {}
           });
 
           if (!isMobile) {
@@ -3375,7 +3400,10 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
             a.download = outName;
             a.click();
           }
-        } else {
+          } // end candidateEncoderConfigs loop
+        }
+
+        if (!abortExportRef.current && !webCodecsVariantDone) {
           // =========================================================================
           // Fallback: MediaRecorder for legacy browsers lacking VideoEncoder
           // =========================================================================
@@ -3779,6 +3807,13 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
       }
 
       if (!abortExportRef.current) {
+        if (generatedList.length === 0) {
+          throw new Error(
+            isEn
+              ? 'No video output produced by device encoder'
+              : 'Bộ mã hóa thiết bị không tạo được tệp đầu ra'
+          );
+        }
         setExportedFiles(generatedList);
         setProgress(100);
       }
@@ -3926,8 +3961,8 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               <span className="text-[11px] font-semibold text-[#D4D4D8]">
                 {isEn ? 'Resolution' : 'Độ phân giải'}
               </span>
-              <div className="grid grid-cols-4 gap-1.5">
-                {(['720p', '1080p', '2K', '4K'] as const).map((r) => {
+              <div className="grid grid-cols-5 gap-1.5">
+                {(['480p', '720p', '1080p', '2K', '4K'] as const).map((r) => {
                   const active = resolution === r;
                   return (
                     <button
@@ -3978,9 +4013,10 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               <span className="text-[11px] font-semibold text-[#D4D4D8]">
                 {isEn ? 'Bitrate / Quality' : 'Chất lượng / Tốc độ mã'}
               </span>
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="grid grid-cols-3 gap-1.5">
                 {[
-                  { id: 'recommended', label: isEn ? 'Standard' : 'Tiêu chuẩn (Chuẩn)' },
+                  { id: 'lower', label: isEn ? 'Compact' : 'Nhẹ máy' },
+                  { id: 'recommended', label: isEn ? 'Standard' : 'Tiêu chuẩn' },
                   { id: 'higher', label: isEn ? 'High Quality' : 'Chất lượng cao' },
                 ].map((b) => {
                   const active = bitrateMode === b.id;
@@ -3988,7 +4024,7 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
                     <button
                       key={b.id}
                       type="button"
-                      onClick={() => setBitrateMode(b.id as 'recommended' | 'higher')}
+                      onClick={() => setBitrateMode(b.id as 'lower' | 'recommended' | 'higher')}
                       className={`py-2 text-xs font-bold rounded-lg transition-all border ${
                         active
                           ? 'bg-[#00CAE0] text-black border-[#00CAE0] shadow-md shadow-[#00CAE0]/20'
@@ -4052,13 +4088,31 @@ export const ExportVideoModal: React.FC<ExportVideoModalProps> = ({
               </div>
             )}
 
+            {/* Cancel / Error Notice on Mobile */}
+            {cancelNotice && !isRendering && (
+              <div className="p-3 bg-[#2B171A] border border-[#EF4444]/60 rounded-xl flex items-start gap-2 text-xs text-[#FCA5A5]">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-[#EF4444] mt-0.5" />
+                <span>{cancelNotice}</span>
+              </div>
+            )}
+
             {/* Exported Video Done Box */}
             {exportedFiles.length > 0 && !isRendering && (
-              <div className="p-3 bg-[#1A2624] border border-[#00CAE0] rounded-xl space-y-2.5">
-                <div className="flex items-center gap-2 text-xs font-bold text-[#00CAE0]">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span>{isEn ? 'Video exported successfully!' : 'Đã xuất video thành công!'}</span>
+              <div
+                ref={mobileDoneBoxRef}
+                className="p-3 bg-[#1A2624] border border-[#00CAE0] rounded-xl space-y-2.5"
+              >
+                <div className="flex items-center justify-between gap-2 text-xs font-bold text-[#00CAE0]">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>{isEn ? 'Video exported successfully!' : 'Đã xuất video thành công!'}</span>
+                  </div>
                 </div>
+                {exportedFiles[0].qualitySummary && (
+                  <div className="text-[10px] font-mono text-[#A1A1AA]">
+                    {exportedFiles[0].qualitySummary}
+                  </div>
+                )}
                 <video
                   src={exportedFiles[0].url}
                   controls

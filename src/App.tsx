@@ -7402,6 +7402,7 @@ export default function App() {
                               );
                             }}
                             aria-label="Nội dung phụ đề"
+                            data-pc-text-editor="true"
                             className="w-full px-2.5 py-1.5 bg-[#121216] border border-[#343440] rounded text-white"
                           />
 
@@ -8641,6 +8642,15 @@ export default function App() {
                   setSelectedClipId(clipId);
                   setSelectedClipIds([clipId]);
                   setInspectorMode('clip');
+                  setTimeout(() => {
+                    const el = document.querySelector<HTMLInputElement>(
+                      'input[data-pc-text-editor="true"]'
+                    );
+                    if (el) {
+                      el.focus();
+                      el.select();
+                    }
+                  }, 60);
                 }}
                 onStepFrame={(delta) =>
                   setPlayheadSec((prev) => Math.max(0, Number((prev + delta / 30).toFixed(3))))

@@ -443,7 +443,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
                 {isEn ? '+ Blank Project' : '+ Dự án trống'}
               </button>
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
               {STUDIO_TEMPLATES.map((tpl) => (
                 <div
                   key={tpl.id}
@@ -616,7 +616,7 @@ export const HomeLauncherView: React.FC<HomeLauncherViewProps> = ({
               </button>
             </div>
 
-            <div className="col-span-7 flex items-center justify-center bg-[#0C0D12] border border-[#252834] rounded-xl p-6">
+            <div className="md:col-span-7 flex items-center justify-center bg-[#0C0D12] border border-[#252834] rounded-xl p-4 md:p-6">
               <div
                 style={{ background: posterGradient }}
                 className={`rounded-xl border-2 border-white/20 shadow-2xl flex flex-col items-center justify-center p-6 text-center ${

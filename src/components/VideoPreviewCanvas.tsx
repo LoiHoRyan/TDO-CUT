@@ -177,6 +177,13 @@ const FILTER_PRESET_CSS: Record<string, string> = {
   golden_hour: 'sepia(32%) saturate(150%) contrast(110%) brightness(105%)',
   cafe_latte: 'sepia(28%) saturate(78%) contrast(96%) brightness(106%)',
   tropical_vibe: 'saturate(158%) contrast(112%) hue-rotate(-14deg) brightness(104%)',
+  cinematic: 'contrast(122%) saturate(110%) brightness(95%)',
+  bw: 'grayscale(100%) contrast(135%)',
+  warm: 'sepia(28%) saturate(130%) brightness(104%)',
+  cool: 'saturate(110%) hue-rotate(14deg) brightness(102%)',
+  vibrant: 'contrast(115%) saturate(155%) brightness(105%)',
+  polaroid_90s: 'sepia(32%) contrast(95%) brightness(108%) saturate(90%)',
+  tokyo_night: 'contrast(128%) saturate(150%) hue-rotate(220deg) brightness(90%)',
 };
 
 export const VideoPreviewCanvas: React.FC<VideoPreviewCanvasProps> = ({

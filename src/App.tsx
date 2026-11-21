@@ -4914,7 +4914,7 @@ export default function App() {
                       clips: [],
                       version: 1,
                     };
-                    await saveProject(newProj).catch(() => {});
+                    saveProject(newProj).catch(() => {});
                     setActiveProjectId(newId);
                     setProjectName(newName);
                     setAspectRatio('16:9');
@@ -5311,7 +5311,7 @@ export default function App() {
               clips: [],
               version: 1,
             };
-            await saveProject(newProj);
+            saveProject(newProj).catch(() => {});
             setActiveProjectId(newId);
             setProjectName(newName);
             setAspectRatio('16:9');
@@ -5340,7 +5340,17 @@ export default function App() {
           }}
           onOpenProject={async (sub) => {
             setActiveProjectId(sub.id);
-            const restored = await restoreProjectMediaBlobs(sub.clips.map((c) => ({ ...c })));
+            let restored = sub.clips.map((c) => ({ ...c }));
+            try {
+              restored = await Promise.race([
+                restoreProjectMediaBlobs(restored),
+                new Promise<TimelineClip[]>((resolve) =>
+                  window.setTimeout(() => resolve(restored), 2500)
+                ),
+              ]);
+            } catch {
+              // Keep raw clip list if blob restore fails
+            }
             setClips(restored);
             setMediaCards([]);
             setHistoryPast([]);

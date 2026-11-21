@@ -39,6 +39,30 @@ const STORE_NAME = 'projects';
 const FALLBACK_KEY = 'tdo_cut_projects_backup_v1';
 
 let dbInstance: IDBDatabase | null = null;
+let postgresApiUnavailable = false;
+
+async function fetchApiWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs: number = 1200
+): Promise<Response | null> {
+  if (postgresApiUnavailable) return null;
+  const ctrl = new AbortController();
+  const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: ctrl.signal });
+    if (res.status === 404 || res.status === 405 || res.status === 501) {
+      postgresApiUnavailable = true;
+      return null;
+    }
+    return res;
+  } catch {
+    postgresApiUnavailable = true;
+    return null;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
 
 // ============================================================================
 // INDEXEDDB LOCAL CACHE & OFFLINE FALLBACK
@@ -51,28 +75,60 @@ async function getDB(): Promise<IDBDatabase> {
   }
 
   return new Promise((resolve, reject) => {
-    const request = window.indexedDB.open(DB_NAME, DB_VERSION);
-
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-        store.createIndex('updatedAt', 'updatedAt', { unique: false });
-        store.createIndex('isDeletedInTrash', 'isDeletedInTrash', { unique: false });
-      }
-      if (!db.objectStoreNames.contains(MEDIA_STORE_NAME)) {
-        db.createObjectStore(MEDIA_STORE_NAME, { keyPath: 'key' });
-      }
+    let settled = false;
+    const finishResolve = (db: IDBDatabase) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      db.onversionchange = () => {
+        try {
+          db.close();
+        } catch {}
+        if (dbInstance === db) dbInstance = null;
+      };
+      dbInstance = db;
+      resolve(db);
+    };
+    const finishReject = (err: unknown) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      reject(err);
     };
 
-    request.onsuccess = () => {
-      dbInstance = request.result;
-      resolve(request.result);
-    };
+    const timeoutId = window.setTimeout(() => {
+      finishReject(new Error('IndexedDB open timeout'));
+    }, 2000);
 
-    request.onerror = () => {
-      reject(request.error);
-    };
+    try {
+      const request = window.indexedDB.open(DB_NAME, DB_VERSION);
+
+      request.onupgradeneeded = (event) => {
+        const db = (event.target as IDBOpenDBRequest).result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+          store.createIndex('updatedAt', 'updatedAt', { unique: false });
+          store.createIndex('isDeletedInTrash', 'isDeletedInTrash', { unique: false });
+        }
+        if (!db.objectStoreNames.contains(MEDIA_STORE_NAME)) {
+          db.createObjectStore(MEDIA_STORE_NAME, { keyPath: 'key' });
+        }
+      };
+
+      request.onblocked = () => {
+        finishReject(new Error('IndexedDB upgrade blocked'));
+      };
+
+      request.onsuccess = () => {
+        finishResolve(request.result);
+      };
+
+      request.onerror = () => {
+        finishReject(request.error);
+      };
+    } catch (err) {
+      finishReject(err);
+    }
   });
 }
 
@@ -168,8 +224,8 @@ async function deleteFromIndexedDb(id: string): Promise<void> {
  */
 export async function getPostgresDbStatus(): Promise<DbStatusResponse> {
   try {
-    const res = await fetch('/api/db/status');
-    if (res.ok) {
+    const res = await fetchApiWithTimeout('/api/db/status');
+    if (res && res.ok) {
       const json = await res.json();
       return json;
     }
@@ -188,8 +244,8 @@ export async function getPostgresDbStatus(): Promise<DbStatusResponse> {
  */
 export async function getAllProjects(): Promise<StoredProject[]> {
   try {
-    const res = await fetch('/api/projects');
-    if (res.ok) {
+    const res = await fetchApiWithTimeout('/api/projects');
+    if (res && res.ok) {
       const json = await res.json();
       if (json.ok && Array.isArray(json.data)) {
         const list: StoredProject[] = json.data;
@@ -212,8 +268,8 @@ export async function getAllProjects(): Promise<StoredProject[]> {
  */
 export async function getProjectById(id: string): Promise<StoredProject | null> {
   try {
-    const res = await fetch(`/api/projects/${encodeURIComponent(id)}`);
-    if (res.ok) {
+    const res = await fetchApiWithTimeout(`/api/projects/${encodeURIComponent(id)}`);
+    if (res && res.ok) {
       const json = await res.json();
       if (json.ok && json.data) {
         const proj: StoredProject = json.data;
@@ -321,7 +377,7 @@ export async function saveProject(project: StoredProject): Promise<void> {
 
   // 2. Persist to PostgreSQL Database
   try {
-    await fetch('/api/projects', {
+    await fetchApiWithTimeout('/api/projects', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(projectToSave),
@@ -340,7 +396,7 @@ export async function deleteProjectPermanently(id: string): Promise<void> {
 
   // 2. Delete from PostgreSQL
   try {
-    await fetch(`/api/projects/${encodeURIComponent(id)}`, {
+    await fetchApiWithTimeout(`/api/projects/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
   } catch (err) {
@@ -385,7 +441,7 @@ export async function duplicateProject(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ newId, copyLabel }),
     });
-    if (res.ok) {
+    if (res && res.ok) {
       const json = await res.json();
       if (json.ok && json.data) {
         const duplicated: StoredProject = json.data;
